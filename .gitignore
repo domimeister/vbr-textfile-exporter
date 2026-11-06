@@ -1,0 +1,4 @@
+*.prom.tmp
+*.cred.xml
+testResults.xml
+coverage.xml

@@ -1,0 +1,33 @@
+{
+  "data": [
+    {
+      "id": "11111111-2222-4333-8444-555555555555",
+      "type": "VSphereBackup",
+      "name": "Backup \"Prod\" \\\\fs01\\daten",
+      "status": "Starting",
+      "lastRun": "2024-01-17T21:00:00Z",
+      "lastResult": "Success",
+      "nextRun": "2024-01-18T21:00:00Z",
+      "workload": "Vm",
+      "repositoryName": "Repo\nZeile 2",
+      "objectsCount": 1
+    },
+    {
+      "id": "66666666-7777-4888-9999-000000000000",
+      "type": "HyperVBackup",
+      "name": "Sicherung Büro",
+      "status": "Stopping",
+      "lastRun": "2024-01-17T20:00:00Z",
+      "lastResult": "SomethingNew",
+      "workload": "Vm",
+      "repositoryName": "Repo München",
+      "objectsCount": 3
+    }
+  ],
+  "pagination": {
+    "total": 2,
+    "count": 2,
+    "skip": 0,
+    "limit": 200
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "data": [
+    {
+      "id": "8e5d1ffc-1b0f-4a3b-9fd3-2ba0d4d4f6e2",
+      "type": "VSphereBackup",
+      "name": "Backup Job 1",
+      "description": "Created by VEEAM\\Administrator at 1/10/2024 9:51 AM.",
+      "status": "Inactive",
+      "lastRun": "2024-01-17T22:00:12.36+01:00",
+      "lastResult": "Success",
+      "nextRun": "2024-01-18T22:00:00+01:00",
+      "workload": "Vm",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "repositoryName": "Default Backup Repository",
+      "objectsCount": 2,
+      "sessionId": "c0bd9c3e-4c5b-4b47-9a5e-2f7e1b8d1a10",
+      "highPriority": false
+    },
+    {
+      "id": "3b8c2f40-5f0e-4b8a-9c11-1f0d7d4e0b21",
+      "type": "BackupCopy",
+      "name": "Backup Copy Job 1",
+      "description": "Created by VEEAM\\Administrator at 1/10/2024 10:02 AM.",
+      "status": "Running",
+      "lastRun": "2024-01-18T06:30:00Z",
+      "lastResult": "Warning",
+      "workload": "Vm",
+      "repositoryId": "a1f5e3c2-7d4b-4e8f-9b2a-6c3d1e0f9a87",
+      "repositoryName": "SOBR 1",
+      "objectsCount": 5,
+      "sessionId": "f4a2b6d8-1c3e-4f5a-8b7c-9d0e1f2a3b4c",
+      "highPriority": false
+    },
+    {
+      "id": "5d6e7f80-9a1b-4c2d-8e3f-4a5b6c7d8e9f",
+      "type": "WindowsAgentBackup",
+      "name": "Agent Backup Policy 1",
+      "description": "",
+      "status": "Disabled",
+      "lastRun": "2024-01-16T23:15:45.5+01:00",
+      "lastResult": "Failed",
+      "nextRun": null,
+      "workload": "Computer",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "repositoryName": "Default Backup Repository",
+      "objectsCount": 12,
+      "sessionId": "0a1b2c3d-4e5f-4a6b-8c7d-9e0f1a2b3c4d",
+      "highPriority": false
+    },
+    {
+      "id": "9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",
+      "type": "VSphereReplica",
+      "name": "Replica Job 1",
+      "description": "Created by VEEAM\\Administrator at 1/18/2024 8:00 AM.",
+      "status": "Inactive",
+      "lastRun": null,
+      "lastResult": "None",
+      "nextRun": "2024-01-19T01:00:00+01:00",
+      "workload": "Vm",
+      "repositoryId": null,
+      "repositoryName": null,
+      "objectsCount": 0,
+      "sessionId": null,
+      "highPriority": true
+    }
+  ],
+  "pagination": {
+    "total": 4,
+    "count": 4,
+    "skip": 0,
+    "limit": 200
+  }
+}
