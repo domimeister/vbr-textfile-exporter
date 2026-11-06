@@ -50,6 +50,34 @@ Describe 'Write-PromFile' {
         Test-Path -LiteralPath ($script:Target + '.tmp') | Should -BeFalse
     }
 
+    It 'schreibt nicht durch eine vorhandene .tmp-Datei als Link hindurch' {
+        $victim = Join-Path -Path $TestDrive -ChildPath ('opfer-' + [guid]::NewGuid().ToString('N') + '.txt')
+        [System.IO.File]::WriteAllText($victim, 'original')
+        try { $null = New-Item -ItemType SymbolicLink -Path ($script:Target + '.tmp') -Target $victim -ErrorAction Stop }
+        catch { Set-ItResult -Skipped -Because 'symbolische Links nicht erlaubt'; return }
+        Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n"
+        [System.IO.File]::ReadAllText($victim) | Should -BeExactly 'original'
+        Get-FileText -Path $script:Target | Should -BeExactly "a 1`n"
+        (Get-Item -LiteralPath $script:Target -Force).Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) | Should -BeFalse
+    }
+
+    It 'ersetzt eine liegengebliebene .tmp-Datei' {
+        [System.IO.File]::WriteAllText(($script:Target + '.tmp'), 'stale')
+        Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n"
+        Get-FileText -Path $script:Target | Should -BeExactly "a 1`n"
+        Test-Path -LiteralPath ($script:Target + '.tmp') | Should -BeFalse
+    }
+
+    It 'verweigert ein Verzeichnis anstelle der Zieldatei oder der .tmp-Datei' {
+        $null = New-Item -ItemType Directory -Path $script:Target
+        { Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*is a directory or junction*'
+        @(Get-ChildItem -LiteralPath $script:Target).Count | Should -Be 0
+        Remove-Item -LiteralPath $script:Target
+        $null = New-Item -ItemType Directory -Path ($script:Target + '.tmp')
+        { Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*is a directory or junction*'
+        Test-Path -LiteralPath $script:Target | Should -BeFalse
+    }
+
     It 'wirft, wenn das Verzeichnis fehlt' {
         { Write-PromFile -Directory (Join-Path $script:Dir 'fehlt') -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*does not exist*'
     }

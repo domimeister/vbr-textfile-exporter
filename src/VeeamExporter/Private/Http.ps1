@@ -24,12 +24,19 @@ function New-VeeamHttpContext {
         [AllowNull()][AllowEmptyString()][string]$CertificateThumbprint,
         [int]$TimeoutSec = 60
     )
+    # The password is sent to this URI: TLS only.
+    $parsed = $null
+    if (-not [uri]::TryCreate($BaseUri, [System.UriKind]::Absolute, [ref]$parsed) -or $parsed.Scheme -ne 'https') {
+        throw "BaseUri must be an absolute https:// URI, got '$BaseUri'."
+    }
     Initialize-VeeamTransportSecurity -CertificateThumbprint $CertificateThumbprint
 
     $client = $null
     if ($PSVersionTable.PSEdition -eq 'Core') {
         $handler = New-Object -TypeName System.Net.Http.HttpClientHandler
         $handler.SslProtocols = [System.Security.Authentication.SslProtocols]::Tls12 -bor [System.Security.Authentication.SslProtocols]::Tls13
+        # Never follow redirects: a 3xx answer counts as an error.
+        $handler.AllowAutoRedirect = $false
         if ($CertificateThumbprint) {
             Initialize-VeeamCertificatePinType
             $handler.ServerCertificateCustomValidationCallback = [VeeamExporter.CertificatePinHandler]::Create($CertificateThumbprint)
@@ -115,11 +122,13 @@ function Invoke-VeeamHttpRequest {
 
     # Windows PowerShell 5.1
     $params = @{
-        Uri             = $uri
-        Method          = $Method
-        UseBasicParsing = $true
-        TimeoutSec      = $Context.TimeoutSec
-        ErrorAction     = 'Stop'
+        Uri                = $uri
+        Method             = $Method
+        UseBasicParsing    = $true
+        TimeoutSec         = $Context.TimeoutSec
+        # Never follow redirects: a 3xx answer counts as an error.
+        MaximumRedirection = 0
+        ErrorAction        = 'Stop'
     }
     if ($Headers) {
         $h = @{}

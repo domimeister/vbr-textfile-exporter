@@ -7,7 +7,7 @@ Runs as a scheduled task on the VBR server, reads the local REST API
 the textfile directory. Exit code 0 when every collector succeeded, else 1.
 .PARAMETER CredentialPath
 Clixml file with the PSCredential of the Veeam user, created by the task
-account itself (DPAPI): Get-Credential | Export-Clixml -Path <file>
+account itself (DPAPI): Get-Credential | Export-Clixml -LiteralPath <file>
 .PARAMETER Collector
 Collectors to run, also as comma list ("jobs,objects") for powershell.exe -File.
 .PARAMETER LogPath

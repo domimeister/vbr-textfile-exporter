@@ -152,6 +152,17 @@ Describe 'Nur lesen' {
         }
     }
 
+    It 'verweigert eine BaseUri ohne https (<BaseUri>), bevor das Passwort gesendet wird' -TestCases @(
+        @{ BaseUri = 'http://localhost:9419' }
+        @{ BaseUri = 'localhost:9419' }
+        @{ BaseUri = '/api' }
+    ) {
+        param($BaseUri)
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content '{"access_token":"t"}' }
+        { Connect-VeeamServer -Credential (New-TestCredential) -BaseUri $BaseUri } | Should -Throw '*https://*'
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
+    }
+
     It 'Invoke-VeeamHttpRequest blockiert schreibende Aufrufe vor jedem Netzwerkzugriff' {
         InModuleScope VeeamExporter {
             $ctx = [pscustomobject]@{ BaseUri = 'https://127.0.0.1:1'; TimeoutSec = 1; HttpClient = $null }

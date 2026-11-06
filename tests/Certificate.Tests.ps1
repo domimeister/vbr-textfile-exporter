@@ -73,7 +73,7 @@ Describe 'Zertifikat-Pinning' {
         InModuleScope VeeamExporter {
             $ctx = New-VeeamHttpContext -BaseUri 'https://localhost:9419' -CertificateThumbprint 'AB CD EF'
             $ctx.HttpClient | Should -BeNullOrEmpty
-            ([System.Net.ServicePointManager]::SecurityProtocol -band [System.Net.SecurityProtocolType]::Tls12) | Should -Be ([System.Net.SecurityProtocolType]::Tls12)
+            [System.Net.ServicePointManager]::SecurityProtocol | Should -Be ([System.Net.SecurityProtocolType]::Tls12)
             [System.Net.ServicePointManager]::ServerCertificateValidationCallback | Should -Not -BeNullOrEmpty
             [VeeamExporter.CertificatePin]::PinnedThumbprint | Should -BeExactly 'ABCDEF'
         }

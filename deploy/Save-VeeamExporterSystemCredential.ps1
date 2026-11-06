@@ -18,7 +18,7 @@ try {
     Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporterDeploy.psm1') -Force
     if (-not (Test-VeeamExporterLocalSystem)) { throw 'This script must run as SYSTEM (it is started by Install-VeeamExporter.ps1).' }
     $credential = Read-VeeamExporterTransferFile -Path $TransferFile
-    Export-Clixml -InputObject $credential -Path $Path -Force
+    Export-Clixml -InputObject $credential -LiteralPath $Path -Force
     $exitCode = 0
 }
 catch {

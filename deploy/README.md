@@ -58,7 +58,21 @@ Ohne Änderung testen: `.\deploy\Install-VeeamExporter.ps1 -WhatIf`.
 | Task `\VeeamExporter\Veeam Exporter License` | täglich 06:17, SYSTEM, PowerShell 5.1 (VBR 12) oder 7 (VBR 13), Zeitlimit 30 Minuten |
 | Textfile-Verzeichnis des windows_exporter | `veeam_*.prom`, wird aus dem Dienst gelesen (`--collector.textfile.directories` oder Konfigurationsdatei) |
 
-`C:\ProgramData\VeeamExporter` ist nur für SYSTEM und Administratoren lesbar, ohne Vererbung. Die Tasks starten mit `-ExecutionPolicy RemoteSigned`.
+### Berechtigungen
+
+Die Tasks laufen als SYSTEM. Alles, was sie ausführen, lesen oder schreiben, muss deshalb vor normalen Konten geschützt sein. Sonst könnte ein lokaler Benutzer ein Skript austauschen oder über eine Junction SYSTEM beliebige Dateien schreiben lassen. Das Install-Script setzt und prüft:
+
+| Verzeichnis | Besitzer | Rechte (ohne Vererbung) |
+| --- | --- | --- |
+| Installation (`C:\Program Files\VeeamExporter`) | Administratoren | SYSTEM, Administratoren: Vollzugriff; Benutzer: Lesen und Ausführen |
+| Daten (`C:\ProgramData\VeeamExporter`) | Administratoren | nur SYSTEM und Administratoren |
+
+- **Vorhandene Verzeichnisse** übernimmt es nur, wenn sie und alles darin SYSTEM, den Administratoren, TrustedInstaller oder einem lokalen Administrator gehören und keine Junctions oder symbolischen Links enthalten. Sonst bricht es ab. Grund: Unter `C:\ProgramData` darf jeder Benutzer Ordner anlegen, und der Besitzer eines Ordners kann dessen Rechte jederzeit wieder ändern. In dem Fall den Ordner prüfen, löschen und die Installation neu starten.
+- **Nach dem Kopieren** prüft es noch einmal: Kein anderes Konto darf in die Installation schreiben oder das Datenverzeichnis überhaupt lesen.
+- **Textfile-Verzeichnis:** Es bricht ab, wenn andere Konten dort schreiben dürfen. Lesen ist erlaubt. Mit `-AllowUnsafeTextfileDirectory` gibt es stattdessen nur eine Warnung. Unabhängig davon schreibt der Exporter nie durch eine vorhandene `.tmp`-Datei hindurch und verweigert ein Verzeichnis anstelle einer `.prom`-Datei.
+- **Deinstallation:** Enthält die Installation oder das Datenverzeichnis eine Junction oder einen symbolischen Link, löscht das Script nichts. Windows PowerShell 5.1 kann beim rekursiven Löschen einer Junction folgen.
+
+Die Tasks starten mit `-ExecutionPolicy RemoteSigned`.
 
 ### Wie das Credential zu SYSTEM kommt
 
@@ -114,6 +128,7 @@ Es löscht nur Ordner, die nach einer Exporter-Installation aussehen.
 | `-ObjectLookbackDays` | `8` | Lookback des Objects-Collectors |
 | `-NoStart` | – | Tasks nach der Installation nicht starten |
 | `-Force` | – | Zertifikat ohne Rückfrage übernehmen |
+| `-AllowUnsafeTextfileDirectory` | – | nur warnen statt abbrechen, wenn andere Konten ins Textfile-Verzeichnis schreiben dürfen |
 | `-WhatIf` | – | nur anzeigen, was passieren würde |
 
 ## Im Lab prüfen
@@ -124,4 +139,5 @@ Die Deploy-Logik ist unter Linux mit Pester getestet; die Windows-Cmdlets (Sched
 - [ ] VBR 13: Wo liegt das Veeam-PowerShell-Modul, und findet `pwsh.exe` es unter SYSTEM? Annahme im Script: `C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1`; sonst `-VeeamModule` angeben.
 - [ ] Ist SYSTEM in VBR Backup Administrator, sodass `Get-VBRInstalledLicense` funktioniert (OP-3 in `docs/metrics.md`)?
 - [ ] Wiederholt der REST-Task auf der Ziel-Windows-Version unbegrenzt? Ohne `RepetitionDuration` ist das ab Windows Server 2016 der Fall.
+- [ ] Berechtigungen: Nach der Installation zeigen `Get-Acl 'C:\Program Files\VeeamExporter' | Format-List` und dasselbe für `C:\ProgramData\VeeamExporter` Besitzer *Administratoren* und die Rechte aus der Tabelle oben. Ein von einem normalen Benutzer vorab angelegtes `C:\ProgramData\VeeamExporter` führt zum Abbruch.
 - [ ] Erzwingt eine GPO `AllSigned`, laufen die unsignierten Skripte nicht. Dann die Skripte signieren oder eine Ausnahme einrichten.

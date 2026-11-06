@@ -41,7 +41,7 @@ Das Script liest den Thumbprint der REST-API (mit Rückfrage), fragt das Veeam-K
 .\src\Invoke-VeeamLicenseExporter.ps1 -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs'
 ```
 
-Das Credential ist für SYSTEM verschlüsselt; von Hand aufgerufen braucht `Invoke-VeeamExporter.ps1` deshalb ein eigenes, mit `Get-Credential | Export-Clixml -Path <datei>` im eigenen Konto erzeugtes Credential. Ohne `-CertificateThumbprint` gilt die normale .NET-Zertifikatsprüfung, und das selbstsignierte VBR-Zertifikat wird abgelehnt. Exit-Code 0, wenn alle Collectors erfolgreich waren, sonst 1.
+Das Credential ist für SYSTEM verschlüsselt; von Hand aufgerufen braucht `Invoke-VeeamExporter.ps1` deshalb ein eigenes, mit `Get-Credential | Export-Clixml -LiteralPath <datei>` im eigenen Konto erzeugtes Credential. Ohne `-CertificateThumbprint` gilt die normale .NET-Zertifikatsprüfung, und das selbstsignierte VBR-Zertifikat wird abgelehnt. Exit-Code 0, wenn alle Collectors erfolgreich waren, sonst 1.
 
 | Parameter | Standard | Bedeutung |
 | --- | --- | --- |

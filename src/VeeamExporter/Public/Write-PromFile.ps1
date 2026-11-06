@@ -5,6 +5,10 @@ function Write-PromFile {
     .DESCRIPTION
     Writes <Name>.tmp first and then replaces the target with Move-Item -Force,
     so the windows_exporter never reads a half-written file.
+    Runs as SYSTEM: an existing .tmp (possibly a link planted by another
+    account) is deleted, never written through, and the new .tmp is created
+    exclusively (CreateNew). A directory or junction in place of the target is
+    refused, so Move-Item cannot put the file somewhere else.
     #>
     [CmdletBinding()]
     param(
@@ -22,13 +26,25 @@ function Write-PromFile {
     $text = $Content.Replace("`r`n", "`n").Replace("`r", "`n")
     if ($text.Length -gt 0 -and -not $text.EndsWith("`n")) { $text += "`n" }
 
+    if ([System.IO.Directory]::Exists($target)) { throw "Refusing to write ${target}: it is a directory or junction." }
+    if ([System.IO.Directory]::Exists($tmp)) { throw "Refusing to write ${tmp}: it is a directory or junction." }
+
     $utf8NoBom = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
+    $bytes = $utf8NoBom.GetBytes($text)
+    $created = $false
     try {
-        [System.IO.File]::WriteAllText($tmp, $text, $utf8NoBom)
+        # Deletes a stale file or a symbolic link itself, not its target.
+        [System.IO.File]::Delete($tmp)
+        $stream = New-Object -TypeName System.IO.FileStream -ArgumentList $tmp, ([System.IO.FileMode]::CreateNew), ([System.IO.FileAccess]::Write), ([System.IO.FileShare]::None)
+        $created = $true
+        try { $stream.Write($bytes, 0, $bytes.Length) }
+        finally { $stream.Dispose() }
         Move-Item -LiteralPath $tmp -Destination $target -Force
     }
     catch {
-        if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+        if ($created) {
+            try { [System.IO.File]::Delete($tmp) } catch { Write-Verbose "Cannot remove $tmp." }
+        }
         throw
     }
 }

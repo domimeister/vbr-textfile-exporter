@@ -102,7 +102,7 @@ function Test-VeeamCertificateThumbprint {
 }
 
 function Initialize-VeeamTransportSecurity {
-    # Windows PowerShell 5.1: enable TLS 1.2 and register the pinning callback
+    # Windows PowerShell 5.1: TLS 1.2 only, and register the pinning callback
     # on the ServicePointManager. PowerShell 7 uses the HttpClientHandler
     # instead (see New-VeeamHttpContext).
     [CmdletBinding()]
@@ -111,7 +111,8 @@ function Initialize-VeeamTransportSecurity {
     )
     if ($PSVersionTable.PSEdition -eq 'Core') { return }
 
-    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+    # TLS 1.2 only: SSL 3, TLS 1.0 and 1.1 are not offered (own process only).
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
     if ($CertificateThumbprint) {
         Initialize-VeeamCertificatePinType
         [VeeamExporter.CertificatePin]::SetThumbprint($CertificateThumbprint)

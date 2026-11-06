@@ -11,6 +11,9 @@ See deploy\README.md.
 .PARAMETER CertificateThumbprint
 SHA-1 thumbprint of the VBR REST certificate. Without it, the certificate of
 localhost:9419 is read and shown for confirmation.
+.PARAMETER AllowUnsafeTextfileDirectory
+Only warn (instead of aborting) when other accounts may write to the
+textfile directory of the windows_exporter.
 .PARAMETER Credential
 Veeam account for the REST API (role Backup Viewer). Asked for when the
 credential file is missing or -UpdateCredential is set.
@@ -37,7 +40,8 @@ param(
     [string[]]$Collector = @('jobs', 'objects', 'repositories'),
     [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
     [switch]$NoStart,
-    [switch]$Force
+    [switch]$Force,
+    [switch]$AllowUnsafeTextfileDirectory
 )
 
 $ErrorActionPreference = 'Stop'

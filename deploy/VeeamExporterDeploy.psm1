@@ -14,6 +14,16 @@ $script:PromFiles = @(
 )
 $script:SidSystem = 'S-1-5-18'
 $script:SidAdministrators = 'S-1-5-32-544'
+$script:SidUsers = 'S-1-5-32-545'
+$script:SidTrustedInstaller = 'S-1-5-80-956008885-3418522649-1831038044-1853292631-2271478464'
+# CREATOR OWNER, OWNER RIGHTS: stand for the owner, which is checked on its own.
+$script:SidOwnerPlaceholders = @('S-1-3-0', 'S-1-3-4')
+# Rights that let an account change a directory or file: write/append data
+# (also: create files and subfolders), delete child, delete, change
+# permissions, take ownership, GENERIC_ALL, GENERIC_WRITE.
+$script:WriteRightsMask = [int64](0x2 -bor 0x4 -bor 0x40 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000)
+# Any access at all (data directory: credential and transfer file).
+$script:AnyRightsMask = [int64]4294967295
 
 # ---------------------------------------------------------------- accounts --
 
@@ -461,6 +471,9 @@ function Copy-VeeamExporterFile {
 
     $copied = New-Object -TypeName System.Collections.Generic.List[string]
     if (-not (Test-Path -LiteralPath $InstallPath)) { $null = New-Item -ItemType Directory -Path $InstallPath }
+    # Never delete or write through a junction or symbolic link.
+    $links = @(Get-VeeamExporterReparsePoint -Path $InstallPath)
+    if ($links.Count -gt 0) { throw ("Refusing to copy into {0}: it contains junctions or symbolic links: {1}" -f $InstallPath, ($links -join ', ')) }
     foreach ($name in @('Invoke-VeeamExporter.ps1', 'Invoke-VeeamLicenseExporter.ps1')) {
         Copy-Item -LiteralPath (Join-Path -Path $appRoot -ChildPath $name) -Destination (Join-Path -Path $InstallPath -ChildPath $name) -Force
         $copied.Add($name)
@@ -490,6 +503,252 @@ function Copy-VeeamExporterFile {
     return [string[]]$copied.ToArray()
 }
 
+# --------------------------------------------------------------- permissions --
+# The tasks run as SYSTEM. Every file they execute, read or write must be out
+# of reach of ordinary accounts, otherwise a local user gains SYSTEM rights
+# (replaced script, junction/symbolic link) or reads the Veeam password
+# (transfer file). C:\ProgramData lets every user create folders, so an
+# existing directory is only trusted when its owner is trusted.
+
+function Get-VeeamExporterTrustedSid {
+    # SYSTEM, Administrators, TrustedInstaller, the installing account and the
+    # direct members of the local Administrators group (an earlier
+    # installation by another administrator is owned by that account).
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param()
+    $sids = @($script:SidSystem, $script:SidAdministrators, $script:SidTrustedInstaller)
+    try { $sids += [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value }
+    catch { Write-Verbose 'Current user SID not available.' }
+    if (Get-Command -Name 'Get-LocalGroupMember' -ErrorAction SilentlyContinue) {
+        try { $sids += @(Get-LocalGroupMember -SID $script:SidAdministrators -ErrorAction Stop | ForEach-Object { $_.SID.Value }) }
+        catch { Write-Verbose ('Members of Administrators not available: {0}' -f $_.Exception.Message) }
+    }
+    return [string[]]@($sids | Where-Object { $_ } | Select-Object -Unique)
+}
+
+function Format-VeeamExporterSid {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Sid)
+    try {
+        $name = (New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $Sid).Translate([System.Security.Principal.NTAccount]).Value
+        return ('{0} ({1})' -f $name, $Sid)
+    }
+    catch { return $Sid }
+}
+
+function Test-VeeamExporterReparsePoint {
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory = $true)][System.IO.FileSystemInfo]$Item)
+    return (($Item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0)
+}
+
+function Get-VeeamExporterTreeItem {
+    # The item and everything below it. Never follows junctions or symbolic
+    # links (they are returned, but not entered).
+    [CmdletBinding()]
+    [OutputType([System.IO.FileSystemInfo[]])]
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $root = Get-Item -LiteralPath $Path -Force
+    $items = New-Object -TypeName System.Collections.Generic.List[System.IO.FileSystemInfo]
+    $items.Add($root)
+    $pending = New-Object -TypeName System.Collections.Generic.Stack[System.IO.FileSystemInfo]
+    if ($root.PSIsContainer -and -not (Test-VeeamExporterReparsePoint -Item $root)) { $pending.Push($root) }
+    while ($pending.Count -gt 0) {
+        $dir = $pending.Pop()
+        foreach ($child in @(Get-ChildItem -LiteralPath $dir.FullName -Force)) {
+            $items.Add($child)
+            if ($child.PSIsContainer -and -not (Test-VeeamExporterReparsePoint -Item $child)) { $pending.Push($child) }
+        }
+    }
+    return $items.ToArray()
+}
+
+function Get-VeeamExporterReparsePoint {
+    # Full paths of all junctions and symbolic links in a directory tree.
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return [string[]]@(Get-VeeamExporterTreeItem -Path $Path | Where-Object { Test-VeeamExporterReparsePoint -Item $_ } | ForEach-Object { $_.FullName })
+}
+
+function Get-VeeamExporterItemSecurity {
+    # Owner and access rules of a file or directory, as SIDs (Windows only,
+    # mocked in tests). Rights are the raw access mask (generic bits included).
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $sidType = [System.Security.Principal.SecurityIdentifier]
+    $acl = Get-Acl -LiteralPath $Path
+    $rules = foreach ($rule in $acl.GetAccessRules($true, $true, $sidType)) {
+        [pscustomobject]@{
+            Sid    = $rule.IdentityReference.Value
+            Rights = ([int64][int]$rule.FileSystemRights) -band [int64]4294967295
+            Allow  = ($rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow)
+        }
+    }
+    return [pscustomobject]@{ Owner = $acl.GetOwner($sidType).Value; Rules = @($rules) }
+}
+
+function Get-VeeamExporterAccessProblem {
+    <#
+    Problems of one item (pure function): the owner must be trusted, and no
+    allow rule of another account may contain a right from RightsMask
+    (0: rules are not checked). CREATOR OWNER and OWNER RIGHTS stand for the
+    owner, which is checked on its own. Deny rules are ignored (conservative).
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)][object]$Security,
+        [Parameter(Mandatory = $true)][string[]]$TrustedSid,
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int64]$RightsMask = 0
+    )
+    $problems = New-Object -TypeName System.Collections.Generic.List[string]
+    if ($TrustedSid -notcontains [string]$Security.Owner) {
+        $problems.Add(('{0}: owner is {1}' -f $Path, (Format-VeeamExporterSid -Sid ([string]$Security.Owner))))
+    }
+    if ($RightsMask -ne 0) {
+        $reported = @()
+        foreach ($rule in @($Security.Rules)) {
+            if (-not $rule.Allow) { continue }
+            $sid = [string]$rule.Sid
+            if ($TrustedSid -contains $sid -or $script:SidOwnerPlaceholders -contains $sid -or $reported -contains $sid) { continue }
+            if (([int64]$rule.Rights -band $RightsMask) -ne 0) {
+                $problems.Add(('{0}: {1} has access' -f $Path, (Format-VeeamExporterSid -Sid $sid)))
+                $reported += $sid
+            }
+        }
+    }
+    return [string[]]$problems.ToArray()
+}
+
+function Get-VeeamExporterPathProblem {
+    <#
+    Why a directory tree is not safe for SYSTEM: junctions or symbolic links,
+    an owner other than SYSTEM/Administrators/TrustedInstaller/the installing
+    account, or rights from RightsMask for any other account.
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [int64]$RightsMask = 0,
+        [switch]$NoRecurse
+    )
+    $trusted = Get-VeeamExporterTrustedSid
+    if ($NoRecurse) { $items = @(Get-Item -LiteralPath $Path -Force) }
+    else { $items = @(Get-VeeamExporterTreeItem -Path $Path) }
+    $problems = New-Object -TypeName System.Collections.Generic.List[string]
+    foreach ($item in $items) {
+        if (Test-VeeamExporterReparsePoint -Item $item) {
+            $problems.Add(('{0}: junction or symbolic link' -f $item.FullName))
+            continue
+        }
+        $security = Get-VeeamExporterItemSecurity -Path $item.FullName
+        foreach ($p in (Get-VeeamExporterAccessProblem -Security $security -TrustedSid $trusted -Path $item.FullName -RightsMask $RightsMask)) { $problems.Add($p) }
+    }
+    return [string[]]$problems.ToArray()
+}
+
+function Get-VeeamExporterTextfileProblem {
+    <#
+    The textfile directory and the exporter's own files in it must not be
+    writable by other accounts: SYSTEM writes there (link attacks) and
+    Prometheus trusts the content (fake metrics).
+    #>
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory = $true)][string]$Directory)
+    $problems = New-Object -TypeName System.Collections.Generic.List[string]
+    foreach ($p in (Get-VeeamExporterPathProblem -Path $Directory -RightsMask $script:WriteRightsMask -NoRecurse)) { $problems.Add($p) }
+    $names = @($script:PromFiles | ForEach-Object { $_; $_ + '.tmp' })
+    foreach ($item in @(Get-ChildItem -LiteralPath $Directory -Force | Where-Object { $names -contains $_.Name })) {
+        foreach ($p in (Get-VeeamExporterPathProblem -Path $item.FullName -RightsMask $script:WriteRightsMask -NoRecurse)) { $problems.Add($p) }
+    }
+    return [string[]]$problems.ToArray()
+}
+
+function Get-VeeamExporterDirectoryAclSpec {
+    <#
+    Target permissions (pure data): owner Administrators, no inheritance from
+    the parent, full control for SYSTEM and Administrators. The installation
+    is also readable for Users (like C:\Program Files), the data directory
+    (credential, transfer file, logs) is not.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind)
+    $rules = @(
+        [pscustomobject]@{ Sid = $script:SidSystem; Rights = 'FullControl' }
+        [pscustomobject]@{ Sid = $script:SidAdministrators; Rights = 'FullControl' }
+    )
+    if ($Kind -eq 'Install') { $rules += [pscustomobject]@{ Sid = $script:SidUsers; Rights = 'ReadAndExecute' } }
+    return [pscustomobject]@{ Owner = $script:SidAdministrators; Protected = $true; Rules = $rules }
+}
+
+function Set-VeeamExporterDirectoryAcl {
+    # Applies Get-VeeamExporterDirectoryAclSpec (Windows only, mocked in tests).
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind
+    )
+    $spec = Get-VeeamExporterDirectoryAclSpec -Kind $Kind
+    $acl = New-Object -TypeName System.Security.AccessControl.DirectorySecurity
+    $acl.SetOwner((New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $spec.Owner))
+    $acl.SetAccessRuleProtection($spec.Protected, $false)
+    foreach ($r in $spec.Rules) {
+        $identity = New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $r.Sid
+        $rule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList $identity,
+        ([System.Security.AccessControl.FileSystemRights]$r.Rights),
+        ([System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'),
+        ([System.Security.AccessControl.PropagationFlags]::None),
+        ([System.Security.AccessControl.AccessControlType]::Allow)
+        $acl.AddAccessRule($rule)
+    }
+    if ($PSCmdlet.ShouldProcess($Path, 'Set owner and ACL')) { Set-Acl -LiteralPath $Path -AclObject $acl }
+}
+
+function Initialize-VeeamExporterSecureDirectory {
+    <#
+    Creates the directory or takes over an existing one, but only when it and
+    everything in it is owned by a trusted account and contains no junction
+    or symbolic link. Then sets owner and ACL (Get-VeeamExporterDirectoryAclSpec).
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind
+    )
+    if (-not $PSCmdlet.ShouldProcess($Path, ('Create or secure directory ({0})' -f $Kind))) { return }
+    # New-Item fails if someone creates the directory in the meantime.
+    if (-not (Test-Path -LiteralPath $Path)) { $null = New-Item -ItemType Directory -Path $Path }
+    $problems = @(Get-VeeamExporterPathProblem -Path $Path)
+    if ($problems.Count -gt 0) {
+        throw ("Refusing to use {0}: it was not created by an administrator (or contains links). Check it, remove it and run the installation again.`n  {1}" -f $Path, ($problems -join "`n  "))
+    }
+    Set-VeeamExporterDirectoryAcl -Path $Path -Kind $Kind -Confirm:$false
+}
+
+function Assert-VeeamExporterDirectorySecure {
+    # Final check after setting the ACL and copying files: no other account
+    # may write to the installation or access the data directory at all.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind
+    )
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $mask = $script:WriteRightsMask
+    if ($Kind -eq 'Data') { $mask = $script:AnyRightsMask }
+    $problems = @(Get-VeeamExporterPathProblem -Path $Path -RightsMask $mask)
+    if ($problems.Count -gt 0) {
+        throw ("{0} is not protected:`n  {1}" -f $Path, ($problems -join "`n  "))
+    }
+}
+
 function Initialize-VeeamExporterDataDirectory {
     <#
     Data directory (credential, logs): access only for SYSTEM and
@@ -498,27 +757,10 @@ function Initialize-VeeamExporterDataDirectory {
     [CmdletBinding(SupportsShouldProcess = $true)]
     param([Parameter(Mandatory = $true)][string]$Path)
     if (-not $PSCmdlet.ShouldProcess($Path, 'Create data directory (SYSTEM and Administrators only)')) { return }
-    if (-not (Test-Path -LiteralPath $Path)) { $null = New-Item -ItemType Directory -Path $Path }
+    Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false
     $logs = Join-Path -Path $Path -ChildPath 'logs'
     if (-not (Test-Path -LiteralPath $logs)) { $null = New-Item -ItemType Directory -Path $logs }
-    Set-VeeamExporterDataAcl -Path $Path
-}
-
-function Set-VeeamExporterDataAcl {
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    param([Parameter(Mandatory = $true)][string]$Path)
-    $acl = New-Object -TypeName System.Security.AccessControl.DirectorySecurity
-    $acl.SetAccessRuleProtection($true, $false)
-    foreach ($sid in @($script:SidSystem, $script:SidAdministrators)) {
-        $identity = New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $sid
-        $rule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList $identity,
-        ([System.Security.AccessControl.FileSystemRights]::FullControl),
-        ([System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'),
-        ([System.Security.AccessControl.PropagationFlags]::None),
-        ([System.Security.AccessControl.AccessControlType]::Allow)
-        $acl.AddAccessRule($rule)
-    }
-    if ($PSCmdlet.ShouldProcess($Path, 'Set ACL')) { Set-Acl -LiteralPath $Path -AclObject $acl }
+    Assert-VeeamExporterDirectorySecure -Path $Path -Kind Data
 }
 
 # ---------------------------------------------------------------- credential --
@@ -639,6 +881,10 @@ function Remove-VeeamExporterPromFile {
     foreach ($name in $script:PromFiles) {
         foreach ($candidate in @($name, ($name + '.tmp'))) {
             $path = Join-Path -Path $TextfileDirectory -ChildPath $candidate
+            if (Test-Path -LiteralPath $path -PathType Container) {
+                Write-Warning "Not removing ${path}: it is a directory, not a .prom file."
+                continue
+            }
             if ((Test-Path -LiteralPath $path) -and $PSCmdlet.ShouldProcess($path, 'Remove')) {
                 Remove-Item -LiteralPath $path -Force
                 $removed.Add($candidate)
@@ -671,6 +917,15 @@ function Test-VeeamExporterDataDirectory {
     return $true
 }
 
+function Assert-VeeamExporterNoReparsePoint {
+    # Remove-Item -Recurse in Windows PowerShell 5.1 can follow a junction and
+    # delete the files behind it; refuse instead.
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $links = @(Get-VeeamExporterReparsePoint -Path $Path)
+    if ($links.Count -gt 0) { throw ("Refusing to delete {0}: it contains junctions or symbolic links: {1}" -f $Path, ($links -join ', ')) }
+}
+
 # ------------------------------------------------------------ orchestration --
 
 function Install-VeeamExporter {
@@ -678,10 +933,13 @@ function Install-VeeamExporter {
     .SYNOPSIS
     Installs or updates the exporter on this VBR server (manual, interactive).
     .DESCRIPTION
-    1. Checks: administrator, textfile directory, certificate of localhost:9419
-       (shown for confirmation unless -CertificateThumbprint or -Force).
-    2. Copies the exporter to InstallPath, creates DataPath (SYSTEM and
-       Administrators only).
+    1. Checks: administrator, textfile directory (not writable by other
+       accounts), certificate of localhost:9419 (shown for confirmation
+       unless -CertificateThumbprint or -Force).
+    2. Secures InstallPath (owner Administrators, write access only for
+       SYSTEM and Administrators) and copies the exporter there; creates
+       DataPath (SYSTEM and Administrators only). An existing directory owned
+       by another account, or one with junctions/symbolic links, is refused.
     3. Stores the Veeam credential for SYSTEM if missing or -UpdateCredential.
     4. Registers the REST task (every 15 min) and the license task (daily).
     5. Runs both tasks once and reports the result, unless -NoStart.
@@ -704,7 +962,8 @@ function Install-VeeamExporter {
         [string[]]$Collector = @('jobs', 'objects', 'repositories'),
         [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
         [switch]$NoStart,
-        [switch]$Force
+        [switch]$Force,
+        [switch]$AllowUnsafeTextfileDirectory
     )
     if (-not $InstallPath) { $InstallPath = Join-Path -Path $env:ProgramFiles -ChildPath 'VeeamExporter' }
     if (-not $DataPath) { $DataPath = Join-Path -Path $env:ProgramData -ChildPath 'VeeamExporter' }
@@ -720,6 +979,12 @@ function Install-VeeamExporter {
     }
     if (-not (Test-Path -LiteralPath $TextfileDirectory -PathType Container)) {
         throw "Textfile directory does not exist: $TextfileDirectory (pass -TextfileDirectory)."
+    }
+    $textfileProblems = @(Get-VeeamExporterTextfileProblem -Directory $TextfileDirectory)
+    if ($textfileProblems.Count -gt 0) {
+        $message = ("Textfile directory {0} is writable by other accounts. SYSTEM writes there, and Prometheus trusts the content. Restrict it to SYSTEM and Administrators (read access for others is fine).`n  {1}" -f $TextfileDirectory, ($textfileProblems -join "`n  "))
+        if ($AllowUnsafeTextfileDirectory) { Write-Warning $message }
+        else { throw ($message + "`nOverride with -AllowUnsafeTextfileDirectory.") }
     }
 
     # certificate of the local REST API
@@ -755,7 +1020,10 @@ function Install-VeeamExporter {
     }
 
     # files
+    # Installation and data directory: owner and ACL first, then the files.
+    Initialize-VeeamExporterSecureDirectory -Path $InstallPath -Kind Install
     $null = Copy-VeeamExporterFile -SourceRoot $SourceRoot -InstallPath $InstallPath
+    if (-not $WhatIfPreference) { Assert-VeeamExporterDirectorySecure -Path $InstallPath -Kind Install }
     Initialize-VeeamExporterDataDirectory -Path $DataPath
 
     # credential
@@ -853,10 +1121,12 @@ function Uninstall-VeeamExporter {
 
     if (Test-Path -LiteralPath $InstallPath) {
         if (-not (Test-VeeamExporterInstallDirectory -Path $InstallPath)) { throw "Refusing to delete ${InstallPath}: it does not look like an exporter installation." }
+        Assert-VeeamExporterNoReparsePoint -Path $InstallPath
         if ($PSCmdlet.ShouldProcess($InstallPath, 'Remove directory')) { Remove-Item -LiteralPath $InstallPath -Recurse -Force }
     }
     if (-not $KeepData -and (Test-Path -LiteralPath $DataPath)) {
         if (-not (Test-VeeamExporterDataDirectory -Path $DataPath)) { throw "Refusing to delete ${DataPath}: it contains unexpected files." }
+        Assert-VeeamExporterNoReparsePoint -Path $DataPath
         if ($PSCmdlet.ShouldProcess($DataPath, 'Remove directory (credential, logs)')) { Remove-Item -LiteralPath $DataPath -Recurse -Force }
     }
     return [pscustomobject]@{ RemovedPromFiles = $removedProm; InstallPath = $InstallPath; DataPath = $DataPath; KeptData = [bool]$KeepData }

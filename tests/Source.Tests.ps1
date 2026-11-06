@@ -64,6 +64,29 @@ Describe 'Quellcode-Regeln' {
         $text | Should -Not -Match 'Invoke-RestMethod'
     }
 
+    It 'folgt keinen HTTP-Weiterleitungen (5.1 und 7)' {
+        $text = [System.IO.File]::ReadAllText((Join-Path -Path $script:SrcRoot -ChildPath 'VeeamExporter/Private/Http.ps1'))
+        $text | Should -Match 'MaximumRedirection\s*=\s*0'
+        $text | Should -Match '\.AllowAutoRedirect\s*=\s*\$false'
+    }
+
+    It 'erlaubt unter 5.1 nur TLS 1.2 (kein -bor auf die alte Einstellung)' {
+        $text = [System.IO.File]::ReadAllText((Join-Path -Path $script:SrcRoot -ChildPath 'VeeamExporter/Private/Tls.ps1'))
+        $text | Should -Match 'SecurityProtocol\s*=\s*\[System\.Net\.SecurityProtocolType\]::Tls12\s'
+        $text | Should -Not -Match 'SecurityProtocol\s*=\s*\[System\.Net\.ServicePointManager\]::SecurityProtocol'
+    }
+
+    It 'nutzt -LiteralPath bei Import-/Export-Clixml' {
+        $files = @(Get-ChildItem -LiteralPath $script:SrcRoot -Recurse -Filter '*.ps1') + @(Get-ChildItem -LiteralPath (Join-Path -Path $script:RepoRoot -ChildPath 'deploy') -Filter '*.ps*1')
+        $bad = foreach ($f in $files) {
+            $lines = [System.IO.File]::ReadAllLines($f.FullName)
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+                if ($lines[$i] -match '(Import|Export)-Clixml\b' -and $lines[$i] -match '\s-Path\b') { '{0}:{1}' -f $f.Name, ($i + 1) }
+            }
+        }
+        @($bad) | Should -BeNullOrEmpty
+    }
+
     It 'ruft nur lesende Veeam-Cmdlets auf' {
         $allowed = @('Get-VBRServerSession', 'Connect-VBRServer', 'Disconnect-VBRServer', 'Get-VBRInstalledLicense')
         $bad = foreach ($f in $script:AllCodeFiles) {
