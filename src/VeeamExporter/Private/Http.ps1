@@ -24,7 +24,7 @@ function New-VeeamHttpContext {
         [AllowNull()][AllowEmptyString()][string]$CertificateThumbprint,
         [int]$TimeoutSec = 60
     )
-    Initialize-VeeamTls -CertificateThumbprint $CertificateThumbprint
+    Initialize-VeeamTransportSecurity -CertificateThumbprint $CertificateThumbprint
 
     $client = $null
     if ($PSVersionTable.PSEdition -eq 'Core') {

@@ -14,6 +14,7 @@ accepted. Without it the default certificate validation applies.
 .EXAMPLE
 .\Invoke-VeeamExporter.ps1 -CredentialPath C:\ProgramData\VeeamExporter\veeam.cred.xml -CertificateThumbprint 'AB12...'
 #>
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialPath', Justification = 'Path to a DPAPI-protected Clixml file, not a password.')]
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$CredentialPath,

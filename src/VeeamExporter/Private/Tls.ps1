@@ -101,7 +101,7 @@ function Test-VeeamCertificateThumbprint {
     return [VeeamExporter.CertificatePin]::Matches($Certificate, $Thumbprint)
 }
 
-function Initialize-VeeamTls {
+function Initialize-VeeamTransportSecurity {
     # Windows PowerShell 5.1: enable TLS 1.2 and register the pinning callback
     # on the ServicePointManager. PowerShell 7 uses the HttpClientHandler
     # instead (see New-VeeamHttpContext).

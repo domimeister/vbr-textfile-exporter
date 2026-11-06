@@ -41,4 +41,6 @@ Invoke-Pester -Path tests                      # Pester >= 5.2, unter powershell
 Invoke-ScriptAnalyzer -Path src -Recurse
 ```
 
+Liegt `promtool` im PATH, prüft `tests/Promtool.Tests.ps1` die erwarteten und die erzeugten `.prom`-Dateien zusätzlich mit `promtool check metrics`; sonst werden diese Tests übersprungen.
+
 Quell- und Testdateien sind reines ASCII (wird getestet), weil Windows PowerShell 5.1 Dateien ohne BOM als ANSI liest.

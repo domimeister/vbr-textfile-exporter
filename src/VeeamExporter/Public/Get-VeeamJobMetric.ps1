@@ -8,6 +8,7 @@ function Get-VeeamJobMetric {
     states (tests).
     #>
     [CmdletBinding(DefaultParameterSetName = 'Session')]
+    [OutputType([object[]])]
     param(
         [Parameter(Mandatory = $true, ParameterSetName = 'Session')][object]$Session,
         [Parameter(Mandatory = $true, ParameterSetName = 'State')][AllowEmptyCollection()][object[]]$JobState

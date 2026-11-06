@@ -53,7 +53,7 @@ Describe 'Invoke-VeeamExporterRun' {
         $lines[5] | Should -Match '^veeam_exporter_collector_duration_seconds\{collector="jobs"\} [0-9]+(\.[0-9]+)?$'
         $lines[6] | Should -BeExactly '# HELP veeam_exporter_info Exporter- und Server-Version (Wert immer 1)'
         $lines[7] | Should -BeExactly '# TYPE veeam_exporter_info gauge'
-        $lines[8] | Should -BeExactly ('veeam_exporter_info{script_version="{0}",api_version="1.3-rev2",vbr_version="13.0.1.180"} 1' -f $script:ScriptVersion)
+        $lines[8] | Should -BeExactly ('veeam_exporter_info{{script_version="{0}",api_version="1.3-rev2",vbr_version="13.0.1.180"}} 1' -f $script:ScriptVersion)
         $lines[9] | Should -BeExactly ''
     }
 

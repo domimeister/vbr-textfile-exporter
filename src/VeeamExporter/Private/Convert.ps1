@@ -15,6 +15,7 @@ function ConvertTo-UnixTimestamp {
     # Converts an API timestamp (ISO 8601 string, DateTime or DateTimeOffset)
     # to whole Unix seconds. Returns $null for empty input.
     [CmdletBinding()]
+    [OutputType([long])]
     param(
         [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$Value
     )
