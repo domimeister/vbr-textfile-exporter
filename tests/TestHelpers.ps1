@@ -176,6 +176,27 @@ function Read-PromFile {
     return [pscustomobject]@{ Help = $help; Type = $type; Samples = $samples.ToArray() }
 }
 
+function Export-GeneratedPromFile {
+    # CI sets VEEAM_TEST_PROM_OUTPUT. Tests that run the exporter call this
+    # after the run, so a later CI step can check the generated files with
+    # "promtool check metrics" (tests/Invoke-PromtoolCheck.ps1). Only call it
+    # where the directory holds exporter output alone: a file a test writes
+    # itself (e.g. an "old" file without HELP) would fail the lint.
+    # No-op when the variable is not set.
+    param(
+        [Parameter(Mandatory = $true)][string]$Directory,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+    if (-not $env:VEEAM_TEST_PROM_OUTPUT) { return }
+    $files = @(Get-ChildItem -LiteralPath $Directory -Filter '*.prom' -File -ErrorAction SilentlyContinue)
+    if ($files.Count -eq 0) { return }
+    $target = Join-Path -Path $env:VEEAM_TEST_PROM_OUTPUT -ChildPath $Name
+    New-Item -ItemType Directory -Path $target -Force | Out-Null
+    foreach ($file in $files) {
+        Copy-Item -LiteralPath $file.FullName -Destination (Join-Path -Path $target -ChildPath $file.Name) -Force
+    }
+}
+
 function Get-SortedFileName {
     # File names in ordinal order (Sort-Object depends on the culture).
     param([Parameter(Mandatory = $true)][string]$Directory, [string]$Filter = '*')

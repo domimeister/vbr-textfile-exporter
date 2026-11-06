@@ -86,6 +86,7 @@ Describe 'Invoke-VeeamLicenseExporterRun' {
     It 'writes veeam_license.prom and veeam_exporter_license.prom on success' {
         Set-LicenseMock
         $result = Invoke-VeeamLicenseExporterRun -TextfileDirectory $script:Dir -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'LicenseRun/success'
 
         $result.Success | Should -BeTrue
         Get-FileText -Path $script:LicenseFile | Should -BeExactly (Get-ExpectedText -Name 'license/veeam_license_rental.prom')
@@ -123,6 +124,7 @@ Describe 'Invoke-VeeamLicenseExporterRun' {
     It 'writes the health status even if the Veeam module is missing' {
         Set-LicenseMock -ImportFails
         $result = Invoke-VeeamLicenseExporterRun -TextfileDirectory $script:Dir -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'LicenseRun/module-missing'
         $result.Success | Should -BeFalse
         Test-Path -LiteralPath $script:LicenseFile | Should -BeFalse
         Get-FileText -Path $script:HealthFile | Should -Match 'veeam_exporter_collector_success\{collector="license"\} 0'

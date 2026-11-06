@@ -68,6 +68,7 @@ Describe 'promtool check metrics' {
         $dir = Join-Path -Path $TestDrive -ChildPath 'promtool'
         New-Item -ItemType Directory -Path $dir | Out-Null
         $null = Invoke-VeeamExporterRun -TextfileDirectory $dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $dir -Name 'Promtool/edge-cases'
 
         $files = @(Get-ChildItem -LiteralPath $dir -Filter '*.prom')
         $files.Count | Should -Be 4
