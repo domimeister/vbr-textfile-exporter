@@ -35,22 +35,22 @@ BeforeAll {
     }
 }
 
-Describe 'Objects-Collector: Ausgabe' {
-    It 'erzeugt veeam_objects.prom aus dem Doku-Beispiel <Version> zeilengenau' -TestCases @(
+Describe 'Objects collector: output' {
+    It 'generates veeam_objects.prom line by line from the doc example <Version>' -TestCases @(
         @{ Version = '1.2-rev1' }, @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
     ) {
         param($Version)
         Assert-PromText -Actual (Get-DocObjectText -Version $Version) -Expected (Get-ExpectedText -Name "doc/$Version/veeam_objects.prom")
     }
 
-    It 'deckt Retries, laufende Tasks, Escaping, Kuerzen und geloeschte Jobs ab' {
+    It 'covers retries, running tasks, escaping, truncation and deleted jobs' {
         $metrics = Get-VeeamObjectMetric -JobState (Get-FixtureData -Name 'objects-edge-jobs-states.json') `
             -JobSession (Get-FixtureData -Name 'objects-edge-sessions.json') `
             -TaskSession (Get-FixtureData -Name 'objects-edge-taskSessions.json')
         Assert-PromText -Actual (ConvertTo-PromText -Metric $metrics) -Expected (Get-ExpectedText -Name 'veeam_objects_edgecases.prom')
     }
 
-    It 'schreibt failure_info nur bei Warning und Failed' {
+    It 'writes failure_info only for Warning and Failed' {
         $text = Get-ExpectedText -Name 'veeam_objects_edgecases.prom'
         $metrics = Get-VeeamObjectMetric -JobState (Get-FixtureData -Name 'objects-edge-jobs-states.json') `
             -JobSession (Get-FixtureData -Name 'objects-edge-sessions.json') `
@@ -62,12 +62,12 @@ Describe 'Objects-Collector: Ausgabe' {
         $text | Should -Not -Match 'object="vm01",message='
     }
 
-    It 'liefert ohne Task-Sessions leeren Text' {
+    It 'returns empty text without task sessions' {
         $metrics = Get-VeeamObjectMetric -JobState @() -JobSession @() -TaskSession @()
         ConvertTo-PromText -Metric $metrics | Should -BeExactly ''
     }
 
-    It 'nimmt bei Zeitstempeln als String (Windows PowerShell 5.1) die Zeitzone des Servers' {
+    It 'uses the time zone of the server for timestamps as strings (Windows PowerShell 5.1)' {
         $sessions = @([pscustomobject]@{ id = 'S1'; jobId = 'J1'; name = 'Job A'; creationTime = '2024-11-13T21:59:00' })
         $tasks = @(
             [pscustomobject]@{ sessionId = 'S1'; name = 'vm1'; creationTime = '2024-11-13T22:00:00.5'; endTime = '2024-11-13T22:10:00'; result = [pscustomobject]@{ result = 'Failed'; message = 'x' } }
@@ -80,17 +80,17 @@ Describe 'Objects-Collector: Ausgabe' {
     }
 }
 
-Describe 'Objects-Collector: REST-Abfragen' {
+Describe 'Objects collector: REST queries' {
     BeforeEach { Set-ObjectApiMock }
 
-    It 'liest jobs/states, sessions und taskSessions und erzeugt dieselbe Ausgabe' {
+    It 'reads jobs/states, sessions and taskSessions and generates the same output' {
         $text = ConvertTo-PromText -Metric (Get-VeeamObjectMetric -Session (New-TestSession))
         Assert-PromText -Actual $text -Expected (Get-ExpectedText -Name 'doc/1.3-rev0/veeam_objects.prom')
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/jobs/states' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Method -ne 'GET' }
     }
 
-    It 'fragt pro Session-Typ einzeln ab (1.2-rev1 kennt nur einen Wert)' {
+    It 'queries each session type separately (1.2-rev1 accepts only one value)' {
         $null = Get-VeeamObjectMetric -Session (New-TestSession)
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
@@ -101,13 +101,13 @@ Describe 'Objects-Collector: REST-Abfragen' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Query -and $Query['typeFilter'] -like '*,*' }
     }
 
-    It 'nutzt nur die angegebenen Session-Typen' {
+    It 'uses only the given session types' {
         $null = Get-VeeamObjectMetric -Session (New-TestSession) -SessionType 'BackupJob'
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Query -and $Query['typeFilter'] -eq 'ReplicaJob' }
     }
 
-    It 'setzt createdAfterFilter in UTC: Tasks jetzt minus <Days> Tage, Sessions einen Tag frueher' -TestCases @(@{ Days = 8 }, @{ Days = 1 }) {
+    It 'sets createdAfterFilter in UTC: tasks now minus <Days> days, sessions one day earlier' -TestCases @(@{ Days = 8 }, @{ Days = 1 }) {
         param($Days)
         $script:Captured = New-Object System.Collections.Generic.List[object]
         $before = [System.DateTimeOffset]::UtcNow
@@ -129,27 +129,27 @@ Describe 'Objects-Collector: REST-Abfragen' {
         }
     }
 
-    It 'wirft, wenn ein Request fehlschlaegt' {
+    It 'throws if a request fails' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 403 -Content '{"errorCode":"AccessDenied","message":"no"}' } -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
         { Get-VeeamObjectMetric -Session (New-TestSession) } | Should -Throw '*taskSessions*HTTP 403*'
     }
 }
 
 Describe 'Format-VeeamResultMessage' {
-    It 'ersetzt Zeilenumbrueche und Tabs und fasst Leerzeichen zusammen' {
+    It 'replaces line breaks and tabs and collapses spaces' {
         InModuleScope VeeamExporter {
             Format-VeeamResultMessage -Message "  Error:`r`n  disk`tfull  " | Should -BeExactly 'Error: disk full'
         }
     }
 
-    It 'kuerzt auf 200 Zeichen' {
+    It 'truncates to 200 characters' {
         InModuleScope VeeamExporter {
             $result = Format-VeeamResultMessage -Message ('a' * 250)
             $result.Length | Should -Be 200
         }
     }
 
-    It 'trennt kein Surrogate-Paar' {
+    It 'does not split a surrogate pair' {
         InModuleScope VeeamExporter {
             $emoji = [char]::ConvertFromUtf32(0x1F4BE)
             $result = Format-VeeamResultMessage -Message (('a' * 199) + $emoji + 'b')
@@ -157,7 +157,7 @@ Describe 'Format-VeeamResultMessage' {
         }
     }
 
-    It 'macht aus $null einen leeren String' {
+    It 'turns $null into an empty string' {
         InModuleScope VeeamExporter { Format-VeeamResultMessage -Message $null | Should -BeExactly '' }
     }
 }

@@ -66,14 +66,14 @@ AfterAll {
     Remove-Module -Name VeeamExporterDeploy -ErrorAction SilentlyContinue
 }
 
-Describe 'windows_exporter: Textfile-Verzeichnis' {
-    It 'liest <Case>' -TestCases @(
-        @{ Case = 'Argument in Anfuehrungszeichen'; Image = '"C:\Program Files\windows_exporter\windows_exporter.exe" --log.file eventlog --collector.textfile.directories "D:\Monitoring\textfile"'; Config = $null; Dir = 'D:\Monitoring\textfile'; Source = 'argument' }
-        @{ Case = 'Argument mit = und Liste'; Image = 'C:\we\windows_exporter.exe --collector.textfile.directories=C:\tf1,C:\tf2'; Config = $null; Dir = 'C:\tf1'; Source = 'argument' }
-        @{ Case = 'alte Option directory mit Backslash am Ende'; Image = 'C:\we\windows_exporter.exe --collector.textfile.directory C:\old\'; Config = $null; Dir = 'C:\old'; Source = 'argument' }
-        @{ Case = 'Konfigurationsdatei'; Image = '"C:\we\windows_exporter.exe" --config.file "C:\we\config.yml"'; Config = "collectors:`n  enabled: cpu,textfile`ncollector:`n  textfile:`n    directories: `"D:\\tf`"`n"; Dir = 'D:\tf'; Source = 'config' }
-        @{ Case = 'MSI-Standard neben der Exe'; Image = '"C:\Program Files\windows_exporter\windows_exporter.exe" --log.file eventlog'; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
-        @{ Case = 'ohne Dienst'; Image = $null; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
+Describe 'windows_exporter: textfile directory' {
+    It 'reads <Case>' -TestCases @(
+        @{ Case = 'quoted argument'; Image = '"C:\Program Files\windows_exporter\windows_exporter.exe" --log.file eventlog --collector.textfile.directories "D:\Monitoring\textfile"'; Config = $null; Dir = 'D:\Monitoring\textfile'; Source = 'argument' }
+        @{ Case = 'argument with = and list'; Image = 'C:\we\windows_exporter.exe --collector.textfile.directories=C:\tf1,C:\tf2'; Config = $null; Dir = 'C:\tf1'; Source = 'argument' }
+        @{ Case = 'old option directory with trailing backslash'; Image = 'C:\we\windows_exporter.exe --collector.textfile.directory C:\old\'; Config = $null; Dir = 'C:\old'; Source = 'argument' }
+        @{ Case = 'config file'; Image = '"C:\we\windows_exporter.exe" --config.file "C:\we\config.yml"'; Config = "collectors:`n  enabled: cpu,textfile`ncollector:`n  textfile:`n    directories: `"D:\\tf`"`n"; Dir = 'D:\tf'; Source = 'config' }
+        @{ Case = 'MSI default next to the exe'; Image = '"C:\Program Files\windows_exporter\windows_exporter.exe" --log.file eventlog'; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
+        @{ Case = 'without service'; Image = $null; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
     ) {
         param($Image, $Config, $Dir, $Source)
         $result = InModuleScope VeeamExporterDeploy -Parameters @{ Image = $Image; Config = $Config } {
@@ -84,7 +84,7 @@ Describe 'windows_exporter: Textfile-Verzeichnis' {
         $result.Source | Should -BeExactly $Source
     }
 
-    It 'erkennt, ob der Textfile-Collector aktiv ist (<Enabled>)' -TestCases @(
+    It 'detects whether the textfile collector is enabled (<Enabled>)' -TestCases @(
         @{ Image = 'x.exe --collectors.enabled "cpu,cs,net"'; Enabled = $false }
         @{ Image = 'x.exe --collectors.enabled=[defaults],mssql'; Enabled = $true }
         @{ Image = 'x.exe --collectors.enabled cpu,textfile'; Enabled = $true }
@@ -98,8 +98,8 @@ Describe 'windows_exporter: Textfile-Verzeichnis' {
     }
 }
 
-Describe 'Task-Argumente' {
-    It 'quotet <In> als <Out>' -TestCases @(
+Describe 'Task arguments' {
+    It 'quotes <In> as <Out>' -TestCases @(
         @{ In = 'abc'; Out = 'abc' }
         @{ In = 'C:\Program Files\x.ps1'; Out = '"C:\Program Files\x.ps1"' }
         @{ In = 'C:\Program Files\dir\'; Out = '"C:\Program Files\dir\\"' }
@@ -115,7 +115,7 @@ Describe 'Task-Argumente' {
         } | Should -BeExactly $Out
     }
 
-    It 'kommt nach dem Quoten unveraendert im Skript an (echter Prozessstart)' {
+    It 'arrives unchanged in the script after quoting (real process start)' {
         $script:ArgScript = Join-Path -Path $TestDrive -ChildPath 'args.ps1'
         [System.IO.File]::WriteAllText($script:ArgScript, '$args | ConvertTo-Json -Compress')
         $values = @('C:\Program Files\dir\', 'a"b', 'with space', 'jobs,objects', 'x\\y')
@@ -135,7 +135,7 @@ Describe 'Task-Argumente' {
         ($received -join '|') | Should -BeExactly ($values -join '|')
     }
 
-    It 'baut den REST-Task' {
+    It 'builds the REST task' {
         $d = InModuleScope VeeamExporterDeploy -Parameters @{ WinPs = $script:WinPs } {
             param($WinPs)
             Get-VeeamExporterTaskDefinition -Kind Rest -HostPath $WinPs -InstallPath 'C:\Program Files\VeeamExporter' -DataPath 'C:\ProgramData\VeeamExporter' `
@@ -152,7 +152,7 @@ Describe 'Task-Argumente' {
         $d.ExecutionTimeLimit.TotalMinutes | Should -Be 10
     }
 
-    It 'baut den Lizenz-Task' {
+    It 'builds the license task' {
         $d = InModuleScope VeeamExporterDeploy -Parameters @{ Pwsh = $script:Pwsh } {
             param($Pwsh)
             Get-VeeamExporterTaskDefinition -Kind License -HostPath $Pwsh -InstallPath 'C:\Program Files\VeeamExporter' -DataPath 'C:\ProgramData\VeeamExporter' `
@@ -167,7 +167,7 @@ Describe 'Task-Argumente' {
         $d.Trigger.At | Should -BeExactly '05:43'
     }
 
-    It 'registriert Tasks als SYSTEM mit Wiederholung bzw. taeglichem Trigger' {
+    It 'registers tasks as SYSTEM with repetition or a daily trigger' {
         Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskAction { [pscustomobject]@{ Execute = $Execute; Argument = $Argument } }
         Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskPrincipal { [pscustomobject]@{ UserId = $UserId } }
         Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskSettingsSet { [pscustomobject]@{} }
@@ -188,8 +188,8 @@ Describe 'Task-Argumente' {
     }
 }
 
-Describe 'Host fuer den Lizenz-Task' {
-    It 'waehlt <Expected> fuer Modus <Mode> und Modulversion <Version>' -TestCases @(
+Describe 'Host for the license task' {
+    It 'chooses <Expected> for mode <Mode> and module version <Version>' -TestCases @(
         @{ Mode = 'Auto'; Version = '13.0.1.1'; Expected = 'pwsh' }
         @{ Mode = 'Auto'; Version = '12.3.1.1139'; Expected = 'winps' }
         @{ Mode = 'WindowsPowerShell'; Version = '13.0.0.0'; Expected = 'winps' }
@@ -203,21 +203,21 @@ Describe 'Host fuer den Lizenz-Task' {
         if ($Expected -eq 'pwsh') { $result | Should -BeExactly $script:Pwsh } else { $result | Should -BeExactly $script:WinPs }
     }
 
-    It 'wirft, wenn VBR 13 ohne PowerShell 7 installiert ist' {
+    It 'throws if VBR 13 is installed without PowerShell 7' {
         InModuleScope VeeamExporterDeploy {
             { Resolve-VeeamLicenseHost -Mode Auto -ModuleVersion ([version]'13.0') -WindowsPowerShellPath 'w.exe' -PwshPath $null } | Should -Throw '*PowerShell 7*'
         }
     }
 
-    It 'wirft, wenn das Veeam-Modul fehlt' {
+    It 'throws if the Veeam module is missing' {
         InModuleScope VeeamExporterDeploy {
             { Resolve-VeeamLicenseHost -Mode Auto -ModuleVersion $null -WindowsPowerShellPath 'w.exe' -PwshPath 'p.exe' } | Should -Throw '*-SkipLicenseTask*'
         }
     }
 }
 
-Describe 'Dateien kopieren' {
-    It 'kopiert Skripte, Modul und Deploy-Dateien, aber keine Tests' {
+Describe 'Copying files' {
+    It 'copies scripts, module and deploy files, but no tests' {
         $target = New-TestDirectory -Name 'install'
         $copied = InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
             param($Root, $Target)
@@ -233,7 +233,7 @@ Describe 'Dateien kopieren' {
         @($copied | Where-Object { $_ -like 'VeeamExporter\*' }).Count | Should -Be $moduleFiles
     }
 
-    It 'entfernt beim Update veraltete Moduldateien' {
+    It 'removes outdated module files on update' {
         $target = New-TestDirectory -Name 'install'
         InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
             param($Root, $Target)
@@ -244,7 +244,7 @@ Describe 'Dateien kopieren' {
         Test-Path -LiteralPath (Join-Path (Join-Path $target 'VeeamExporter') 'Old.ps1') | Should -BeFalse
     }
 
-    It 'kopiert nichts, wenn Quelle und Ziel die Installation selbst sind' {
+    It 'copies nothing if source and target are the installation itself' {
         $target = New-TestDirectory -Name 'install'
         $copied = InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
             param($Root, $Target)
@@ -254,7 +254,7 @@ Describe 'Dateien kopieren' {
         $copied.Count | Should -Be 0
     }
 
-    It 'aendert mit -WhatIf nichts' {
+    It 'changes nothing with -WhatIf' {
         $target = Join-Path -Path $TestDrive -ChildPath 'whatif-install'
         InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
             param($Root, $Target)
@@ -288,7 +288,7 @@ Describe 'Install-VeeamExporter' {
         $script:Cred = New-TestCredential
     }
 
-    It 'installiert Dateien, Credential und beide Tasks und startet sie einmal' {
+    It 'installs files, credential and both tasks and starts them once' {
         $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue
 
         Test-Path -LiteralPath (Join-Path $script:Install 'Invoke-VeeamExporter.ps1') | Should -BeTrue
@@ -306,13 +306,13 @@ Describe 'Install-VeeamExporter' {
         @($result.FirstRun | Where-Object Ok).Count | Should -Be 2
     }
 
-    It 'nutzt Windows PowerShell fuer den Lizenz-Task unter VBR 12' {
+    It 'uses Windows PowerShell for the license task under VBR 12' {
         $script:ModuleVersion = [version]'12.3.1.1139'
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
         $script:Registered[1].Execute | Should -BeExactly $script:WinPs
     }
 
-    It 'behaelt ein vorhandenes Credential und ersetzt es nur mit -UpdateCredential' {
+    It 'keeps an existing credential and replaces it only with -UpdateCredential' {
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Force -NoStart -InformationAction SilentlyContinue
         Should -Invoke -ModuleName VeeamExporterDeploy Save-VeeamExporterCredentialAsSystem -Times 1 -Exactly
@@ -320,19 +320,19 @@ Describe 'Install-VeeamExporter' {
         Should -Invoke -ModuleName VeeamExporterDeploy Save-VeeamExporterCredentialAsSystem -Times 2 -Exactly
     }
 
-    It 'uebernimmt einen angegebenen Thumbprint ohne TLS-Abfrage' {
+    It 'takes a given thumbprint without a TLS query' {
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -CertificateThumbprint 'ab cd:ef' -NoStart -InformationAction SilentlyContinue
         Should -Invoke -ModuleName VeeamExporterDeploy Get-TlsCertificateInfo -Times 0 -Exactly
         $script:Registered[0].Argument | Should -Match '-CertificateThumbprint ABCDEF$'
     }
 
-    It 'registriert mit -SkipLicenseTask nur den REST-Task' {
+    It 'registers only the REST task with -SkipLicenseTask' {
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -SkipLicenseTask -InformationAction SilentlyContinue
         ($script:Registered | ForEach-Object TaskName) -join ',' | Should -BeExactly 'Veeam Exporter REST'
         Should -Invoke -ModuleName VeeamExporterDeploy Find-VeeamPowerShellModule -Times 0 -Exactly
     }
 
-    It 'aendert mit -WhatIf nichts' {
+    It 'changes nothing with -WhatIf' {
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -WhatIf -InformationAction SilentlyContinue
         Test-Path -LiteralPath $script:Install | Should -BeFalse
         Test-Path -LiteralPath $script:Data | Should -BeFalse
@@ -340,17 +340,17 @@ Describe 'Install-VeeamExporter' {
         Should -Invoke -ModuleName VeeamExporterDeploy Start-ScheduledTask -Times 0 -Exactly
     }
 
-    It 'bricht ohne Administratorrechte ab' {
+    It 'aborts without administrator rights' {
         Mock -ModuleName VeeamExporterDeploy Test-VeeamExporterAdministrator { $false }
         { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Force } | Should -Throw '*Administrator*'
     }
 
-    It 'bricht ab, wenn das Textfile-Verzeichnis fehlt' {
-        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory (Join-Path $TestDrive 'fehlt') -Force -InformationAction SilentlyContinue } | Should -Throw '*does not exist*'
+    It 'aborts if the textfile directory is missing' {
+        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory (Join-Path $TestDrive 'missing') -Force -InformationAction SilentlyContinue } | Should -Throw '*does not exist*'
         Test-Path -LiteralPath $script:Install | Should -BeFalse
     }
 
-    It 'warnt, wenn ein Task beim ersten Lauf einen Fehler meldet' {
+    It 'warns if a task reports an error on its first run' {
         Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask { [pscustomobject]@{ LastTaskResult = 1 } }
         $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
         @($warnings).Count | Should -Be 1
@@ -358,7 +358,7 @@ Describe 'Install-VeeamExporter' {
     }
 }
 
-Describe 'Credential fuer SYSTEM' {
+Describe 'Credential for SYSTEM' {
     BeforeEach {
         $script:Data = New-TestDirectory -Name 'data'
         $script:Defs = New-Object System.Collections.Generic.List[object]
@@ -372,7 +372,7 @@ Describe 'Credential fuer SYSTEM' {
         }
     }
 
-    It 'startet einen einmaligen SYSTEM-Task und raeumt Task und Uebergabedatei ab' {
+    It 'starts a one-time SYSTEM task and cleans up task and handover file' {
         InModuleScope VeeamExporterDeploy -Parameters @{ Data = $script:Data; Cred = (New-TestCredential) } {
             param($Data, $Cred)
             Save-VeeamExporterCredentialAsSystem -Credential $Cred -DataPath $Data -WorkerScript 'C:\Program Files\VeeamExporter\deploy\Save-VeeamExporterSystemCredential.ps1' -HostPath 'p.exe' -Confirm:$false
@@ -386,7 +386,7 @@ Describe 'Credential fuer SYSTEM' {
         @(Get-ChildItem -LiteralPath $script:Data -Filter 'transfer-*').Count | Should -Be 0
     }
 
-    It 'raeumt auch bei einem Fehler auf und meldet ihn' {
+    It 'cleans up on failure too and reports it' {
         Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask { [pscustomobject]@{ LastTaskResult = 1 } }
         {
             InModuleScope VeeamExporterDeploy -Parameters @{ Data = $script:Data; Cred = (New-TestCredential) } {
@@ -398,7 +398,7 @@ Describe 'Credential fuer SYSTEM' {
         @(Get-ChildItem -LiteralPath $script:Data -Filter 'transfer-*').Count | Should -Be 0
     }
 
-    It 'Worker-Skript verweigert ausserhalb von SYSTEM und loescht die Uebergabedatei' {
+    It 'worker script refuses outside of SYSTEM and deletes the handover file' {
         $transfer = Join-Path -Path $script:Data -ChildPath 'transfer-test.bin'
         [System.IO.File]::WriteAllText($transfer, '{}')
         $worker = Join-Path -Path (Join-Path -Path $script:RepoRoot -ChildPath 'deploy') -ChildPath 'Save-VeeamExporterSystemCredential.ps1'
@@ -409,8 +409,8 @@ Describe 'Credential fuer SYSTEM' {
         Test-Path -LiteralPath (Join-Path $script:Data 'veeam.cred.xml') | Should -BeFalse
     }
 
-    It 'verschluesselt die Uebergabedatei mit DPAPI LocalMachine (nur Windows)' {
-        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'DPAPI nur unter Windows'; return }
+    It 'encrypts the handover file with DPAPI LocalMachine (Windows only)' {
+        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'DPAPI on Windows only'; return }
         $path = Join-Path -Path $script:Data -ChildPath 'transfer-roundtrip.bin'
         InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path; Cred = (New-TestCredential) } {
             param($Path, $Cred)
@@ -444,7 +444,7 @@ Describe 'Uninstall-VeeamExporter' {
         Mock -ModuleName VeeamExporterDeploy Unregister-ScheduledTask { }
     }
 
-    It 'entfernt Tasks, Installation, Daten und nur die eigenen .prom-Dateien' {
+    It 'removes tasks, installation, data and only its own .prom files' {
         $result = Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -Confirm:$false
         Should -Invoke -ModuleName VeeamExporterDeploy Unregister-ScheduledTask -Times 2 -Exactly
         Test-Path -LiteralPath $script:Install | Should -BeFalse
@@ -453,26 +453,26 @@ Describe 'Uninstall-VeeamExporter' {
         @($result.RemovedPromFiles).Count | Should -Be 4
     }
 
-    It 'behaelt mit -KeepData Credential und Logs' {
+    It 'keeps credential and logs with -KeepData' {
         $null = Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -KeepData -Confirm:$false
         Test-Path -LiteralPath (Join-Path $script:Data 'veeam.cred.xml') | Should -BeTrue
         Test-Path -LiteralPath $script:Install | Should -BeFalse
     }
 
-    It 'loescht kein Verzeichnis, das nicht nach Installation aussieht' {
+    It 'deletes no directory that does not look like an installation' {
         $foreign = New-TestDirectory -Name 'foreign'
-        [System.IO.File]::WriteAllText((Join-Path $foreign 'wichtig.txt'), 'x')
+        [System.IO.File]::WriteAllText((Join-Path $foreign 'important.txt'), 'x')
         { Uninstall-VeeamExporter -InstallPath $foreign -DataPath $script:Data -TextfileDirectory $script:Textfile -Confirm:$false } | Should -Throw '*does not look like*'
-        Test-Path -LiteralPath (Join-Path $foreign 'wichtig.txt') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $foreign 'important.txt') | Should -BeTrue
     }
 
-    It 'loescht kein Datenverzeichnis mit fremden Dateien' {
-        [System.IO.File]::WriteAllText((Join-Path $script:Data 'fremd.txt'), 'x')
+    It 'deletes no data directory with foreign files' {
+        [System.IO.File]::WriteAllText((Join-Path $script:Data 'foreign.txt'), 'x')
         { Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -Confirm:$false } | Should -Throw '*unexpected files*'
-        Test-Path -LiteralPath (Join-Path $script:Data 'fremd.txt') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path $script:Data 'foreign.txt') | Should -BeTrue
     }
 
-    It 'aendert mit -WhatIf nichts' {
+    It 'changes nothing with -WhatIf' {
         $null = Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -WhatIf
         Should -Invoke -ModuleName VeeamExporterDeploy Unregister-ScheduledTask -Times 0 -Exactly
         Test-Path -LiteralPath $script:Install | Should -BeTrue
@@ -480,15 +480,15 @@ Describe 'Uninstall-VeeamExporter' {
     }
 }
 
-Describe 'Berechtigungen: Regeln' {
-    It 'akzeptiert Besitzer Administratoren ohne fremde Rechte' {
+Describe 'Permissions: rules' {
+    It 'accepts owner Administrators without foreign permissions' {
         InModuleScope VeeamExporterDeploy -Parameters @{ Sec = (New-TestSecurity) } {
             param($Sec)
             @(Get-VeeamExporterAccessProblem -Security $Sec -TrustedSid @('S-1-5-18', 'S-1-5-32-544') -Path 'X' -RightsMask $script:AnyRightsMask)
         } | Should -BeNullOrEmpty
     }
 
-    It 'meldet einen fremden Besitzer' {
+    It 'reports a foreign owner' {
         $problems = @(InModuleScope VeeamExporterDeploy -Parameters @{ Sec = (New-TestSecurity -Owner $script:SidAttacker) } {
                 param($Sec)
                 Get-VeeamExporterAccessProblem -Security $Sec -TrustedSid @('S-1-5-18', 'S-1-5-32-544') -Path 'X'
@@ -497,13 +497,13 @@ Describe 'Berechtigungen: Regeln' {
         $problems[0] | Should -BeLike "X: owner is *$($script:SidAttacker)*"
     }
 
-    It 'bewertet <Case>' -TestCases @(
-        @{ Case = 'Users Lesen bei Schreibpruefung'; Rights = 1179817; Mask = 'Write'; Problem = $false }
-        @{ Case = 'Users Lesen bei Datenverzeichnis'; Rights = 1179817; Mask = 'Any'; Problem = $true }
-        @{ Case = 'Users Aendern'; Rights = 1245631; Mask = 'Write'; Problem = $true }
-        @{ Case = 'Users Ordner erstellen (ProgramData)'; Rights = 4; Mask = 'Write'; Problem = $true }
-        @{ Case = 'GENERIC_WRITE (vererbbare ACE)'; Rights = 0x40000000; Mask = 'Write'; Problem = $true }
-        @{ Case = 'nur Besitzer pruefen'; Rights = 1245631; Mask = 'None'; Problem = $false }
+    It 'evaluates <Case>' -TestCases @(
+        @{ Case = 'Users read on write check'; Rights = 1179817; Mask = 'Write'; Problem = $false }
+        @{ Case = 'Users read on data directory'; Rights = 1179817; Mask = 'Any'; Problem = $true }
+        @{ Case = 'Users modify'; Rights = 1245631; Mask = 'Write'; Problem = $true }
+        @{ Case = 'Users create folders (ProgramData)'; Rights = 4; Mask = 'Write'; Problem = $true }
+        @{ Case = 'GENERIC_WRITE (inheritable ACE)'; Rights = 0x40000000; Mask = 'Write'; Problem = $true }
+        @{ Case = 'check owner only'; Rights = 1245631; Mask = 'None'; Problem = $false }
     ) {
         param($Rights, $Mask, $Problem)
         $problems = InModuleScope VeeamExporterDeploy -Parameters @{ Sec = (New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $Rights)); Mask = $Mask } {
@@ -514,7 +514,7 @@ Describe 'Berechtigungen: Regeln' {
         (@($problems).Count -gt 0) | Should -Be $Problem
     }
 
-    It 'ignoriert CREATOR OWNER und Deny-Regeln' {
+    It 'ignores CREATOR OWNER and deny rules' {
         $rules = @(
             (New-TestRule -Sid 'S-1-3-0' -Rights 2032127)
             (New-TestRule -Sid $script:SidUsers -Rights 2032127 -Allow $false)
@@ -525,7 +525,7 @@ Describe 'Berechtigungen: Regeln' {
         } | Should -BeNullOrEmpty
     }
 
-    It 'Soll-ACL: Besitzer Administratoren, keine Vererbung, <Kind>' -TestCases @(
+    It 'target ACL: owner Administrators, no inheritance, <Kind>' -TestCases @(
         @{ Kind = 'Install'; Expected = 'S-1-5-18=FullControl,S-1-5-32-544=FullControl,S-1-5-32-545=ReadAndExecute' }
         @{ Kind = 'Data'; Expected = 'S-1-5-18=FullControl,S-1-5-32-544=FullControl' }
     ) {
@@ -537,7 +537,7 @@ Describe 'Berechtigungen: Regeln' {
     }
 }
 
-Describe 'Berechtigungen: Verzeichnisse' {
+Describe 'Permissions: directories' {
     BeforeAll {
         function New-TestLink {
             param([string]$Path, [string]$Target)
@@ -551,14 +551,14 @@ Describe 'Berechtigungen: Verzeichnisse' {
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
     }
 
-    It 'legt ein neues Verzeichnis an und setzt die ACL' {
-        $path = Join-Path -Path $TestDrive -ChildPath ('neu-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+    It 'creates a new directory and sets the ACL' {
+        $path = Join-Path -Path $TestDrive -ChildPath ('new-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
         InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false }
         Test-Path -LiteralPath $path | Should -BeTrue
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 1 -Exactly -ParameterFilter { $Kind -eq 'Data' }
     }
 
-    It 'legt ein neues <Kind>-Verzeichnis direkt mit der geschuetzten ACL an (kein New-Item)' -TestCases @(@{ Kind = 'Data' }, @{ Kind = 'Install' }) {
+    It 'creates a new <Kind> directory directly with the protected ACL (no New-Item)' -TestCases @(@{ Kind = 'Data' }, @{ Kind = 'Install' }) {
         param($Kind)
         $path = Join-Path -Path $TestDrive -ChildPath ('atomar-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
         Mock -ModuleName VeeamExporterDeploy New-Item { throw 'New-Item must not create the directory' } -ParameterFilter { $Path -eq $script:AtomicPath }
@@ -569,14 +569,14 @@ Describe 'Berechtigungen: Verzeichnisse' {
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 1 -Exactly -ParameterFilter { $Path -eq $script:AtomicPath }
     }
 
-    It 'legt ein vorhandenes Verzeichnis nicht neu an' {
-        $path = New-TestDirectory -Name 'vorhanden'
+    It 'does not recreate an existing directory' {
+        $path = New-TestDirectory -Name 'existing'
         InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false }
         Should -Invoke -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem -Times 0 -Exactly
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 1 -Exactly
     }
 
-    It 'lehnt ein Verzeichnis ab, das ein anderes Konto zwischen Pruefung und Anlegen erstellt hat' {
+    It 'rejects a directory that another account created between check and creation' {
         $path = Join-Path -Path $TestDrive -ChildPath ('race-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
         # CreateDirectory does nothing when the directory exists; here the attacker won the race.
         Mock -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem { $null = New-Item -ItemType Directory -Path $Path }
@@ -586,8 +586,8 @@ Describe 'Berechtigungen: Verzeichnisse' {
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 0 -Exactly
     }
 
-    It 'Windows: neues Verzeichnis hat von Anfang an nur SYSTEM und Administratoren, ohne Vererbung' {
-        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs nur unter Windows'; return }
+    It 'Windows: new directory has from the start only SYSTEM and Administrators, without inheritance' {
+        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs on Windows only'; return }
         $path = Join-Path -Path $TestDrive -ChildPath ('acl-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
         InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) New-VeeamExporterSecureDirectoryItem -Path $Path -Kind Data -Confirm:$false }
         $acl = Get-Acl -LiteralPath $path
@@ -597,8 +597,8 @@ Describe 'Berechtigungen: Verzeichnisse' {
         @($acl.GetAccessRules($false, $true, [System.Security.Principal.SecurityIdentifier])).Count | Should -Be 0
     }
 
-    It 'Windows: Soll-ACL mit Besitzer Administratoren nur auf Wunsch' {
-        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs nur unter Windows'; return }
+    It 'Windows: target ACL with owner Administrators only on request' {
+        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs on Windows only'; return }
         InModuleScope VeeamExporterDeploy {
             $withOwner = New-VeeamExporterDirectorySecurity -Kind Install -IncludeOwner
             $withOwner.GetOwner([System.Security.Principal.SecurityIdentifier]).Value | Should -BeExactly 'S-1-5-32-544'
@@ -609,16 +609,16 @@ Describe 'Berechtigungen: Verzeichnisse' {
         }
     }
 
-    It 'uebernimmt kein Verzeichnis, das ein anderes Konto angelegt hat' {
-        $path = New-TestDirectory -Name 'fremd'
+    It 'does not take over a directory created by another account' {
+        $path = New-TestDirectory -Name 'other'
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker }
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false } } |
             Should -Throw '*not created by an administrator*'
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 0 -Exactly
     }
 
-    It 'uebernimmt kein Verzeichnis mit einer Datei eines anderen Kontos' {
-        $path = New-TestDirectory -Name 'datei'
+    It 'does not take over a directory containing a file of another account' {
+        $path = New-TestDirectory -Name 'file'
         $file = Join-Path -Path $path -ChildPath 'veeam.cred.xml'
         [System.IO.File]::WriteAllText($file, '<Objs/>')
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker } -ParameterFilter { $Path -like '*veeam.cred.xml' }
@@ -627,32 +627,32 @@ Describe 'Berechtigungen: Verzeichnisse' {
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 0 -Exactly
     }
 
-    It 'uebernimmt kein Verzeichnis mit Junction oder symbolischem Link' {
+    It 'does not take over a directory with a junction or symbolic link' {
         $path = New-TestDirectory -Name 'link'
-        $outside = New-TestDirectory -Name 'ziel'
-        if (-not (New-TestLink -Path (Join-Path $path 'logs') -Target $outside)) { Set-ItResult -Skipped -Because 'symbolische Links nicht erlaubt'; return }
+        $outside = New-TestDirectory -Name 'target'
+        if (-not (New-TestLink -Path (Join-Path $path 'logs') -Target $outside)) { Set-ItResult -Skipped -Because 'symbolic links not permitted'; return }
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false } } |
             Should -Throw '*logs: junction or symbolic link*'
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 0 -Exactly
     }
 
-    It 'folgt Links beim Durchsuchen nicht' {
+    It 'does not follow links while walking the tree' {
         $path = New-TestDirectory -Name 'tree'
-        $outside = New-TestDirectory -Name 'aussen'
-        [System.IO.File]::WriteAllText((Join-Path $outside 'geheim.txt'), 'x')
-        if (-not (New-TestLink -Path (Join-Path $path 'l') -Target $outside)) { Set-ItResult -Skipped -Because 'symbolische Links nicht erlaubt'; return }
+        $outside = New-TestDirectory -Name 'outside'
+        [System.IO.File]::WriteAllText((Join-Path $outside 'secret.txt'), 'x')
+        if (-not (New-TestLink -Path (Join-Path $path 'l') -Target $outside)) { Set-ItResult -Skipped -Because 'symbolic links not permitted'; return }
         $items = InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Get-VeeamExporterTreeItem -Path $Path }
-        @($items | Where-Object { $_.Name -eq 'geheim.txt' }).Count | Should -Be 0
+        @($items | Where-Object { $_.Name -eq 'secret.txt' }).Count | Should -Be 0
     }
 
-    It 'Datenverzeichnis: meldet Lesezugriff fuer Users nach dem Setzen der ACL' {
-        $path = New-TestDirectory -Name 'lesbar'
+    It 'data directory: reports read access for Users after setting the ACL' {
+        $path = New-TestDirectory -Name 'readable'
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsReadExecute) }
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterDataDirectory -Path $Path -Confirm:$false } } |
             Should -Throw '*is not protected*'
     }
 
-    It 'Installation: Lesezugriff fuer Users ist erlaubt, Schreibzugriff nicht' {
+    It 'installation: read access for Users is allowed, write access is not' {
         $path = New-TestDirectory -Name 'install'
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsReadExecute) }
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Assert-VeeamExporterDirectorySecure -Path $Path -Kind Install } } | Should -Not -Throw
@@ -660,7 +660,7 @@ Describe 'Berechtigungen: Verzeichnisse' {
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Assert-VeeamExporterDirectorySecure -Path $Path -Kind Install } } | Should -Throw '*S-1-5-11 has access*'
     }
 
-    It 'Textfile-Verzeichnis: meldet Schreibrechte und Links bei den eigenen Dateien' {
+    It 'textfile directory: reports write permissions and links on its own files' {
         $dir = New-TestDirectory -Name 'textfile'
         [System.IO.File]::WriteAllText((Join-Path $dir 'node_custom.prom'), "x 1`n")
         InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) @(Get-VeeamExporterTextfileProblem -Directory $Dir) } | Should -BeNullOrEmpty
@@ -671,13 +671,13 @@ Describe 'Berechtigungen: Verzeichnisse' {
         $problems[0] | Should -BeLike '*S-1-5-32-545 has access'
 
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
-        if (-not (New-TestLink -Path (Join-Path $dir 'veeam_jobs.prom.tmp') -Target (Join-Path $dir 'node_custom.prom'))) { Set-ItResult -Skipped -Because 'symbolische Links nicht erlaubt'; return }
+        if (-not (New-TestLink -Path (Join-Path $dir 'veeam_jobs.prom.tmp') -Target (Join-Path $dir 'node_custom.prom'))) { Set-ItResult -Skipped -Because 'symbolic links not permitted'; return }
         $problems = InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) @(Get-VeeamExporterTextfileProblem -Directory $Dir) }
         $problems | Should -BeLike '*veeam_jobs.prom.tmp: junction or symbolic link'
     }
 }
 
-Describe 'Berechtigungen: Install und Uninstall' {
+Describe 'Permissions: install and uninstall' {
     BeforeEach {
         $script:Textfile = New-TestDirectory -Name 'textfile'
         $script:Install = Join-Path -Path $TestDrive -ChildPath ('install-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
@@ -697,7 +697,7 @@ Describe 'Berechtigungen: Install und Uninstall' {
         }
     }
 
-    It 'bricht ab, wenn ein anderes Konto das Datenverzeichnis vorab angelegt hat' {
+    It 'aborts if another account created the data directory beforehand' {
         $null = New-Item -ItemType Directory -Path $script:Data
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker } -ParameterFilter { $Path -like "$($script:Data)*" }
         { Install-VeeamExporter @script:InstallArgs } | Should -Throw '*not created by an administrator*'
@@ -705,7 +705,7 @@ Describe 'Berechtigungen: Install und Uninstall' {
         Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
     }
 
-    It 'bricht ab, wenn ein anderes Konto das Installationsverzeichnis vorab angelegt hat' {
+    It 'aborts if another account created the installation directory beforehand' {
         $null = New-Item -ItemType Directory -Path $script:Install
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker } -ParameterFilter { $Path -like "$($script:Install)*" }
         { Install-VeeamExporter @script:InstallArgs } | Should -Throw '*not created by an administrator*'
@@ -713,38 +713,38 @@ Describe 'Berechtigungen: Install und Uninstall' {
         Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
     }
 
-    It 'bricht ab, wenn andere Konten ins Textfile-Verzeichnis schreiben duerfen' {
+    It 'aborts if other accounts may write to the textfile directory' {
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsModify) } -ParameterFilter { $Path -eq $script:Textfile }
         { Install-VeeamExporter @script:InstallArgs } | Should -Throw '*writable by other accounts*AllowUnsafeTextfileDirectory*'
         Test-Path -LiteralPath $script:Install | Should -BeFalse
     }
 
-    It 'warnt nur, mit -AllowUnsafeTextfileDirectory' {
+    It 'only warns with -AllowUnsafeTextfileDirectory' {
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsModify) } -ParameterFilter { $Path -eq $script:Textfile }
         $null = Install-VeeamExporter @script:InstallArgs -AllowUnsafeTextfileDirectory -WarningVariable warnings -WarningAction SilentlyContinue
         @($warnings | Where-Object { "$_" -like '*writable by other accounts*' }).Count | Should -Be 1
         Test-Path -LiteralPath (Join-Path $script:Install 'Invoke-VeeamExporter.ps1') | Should -BeTrue
     }
 
-    It 'Uninstall loescht nicht durch einen Link im Datenverzeichnis' {
+    It 'uninstall does not delete through a link in the data directory' {
         $null = Install-VeeamExporter @script:InstallArgs
-        $outside = New-TestDirectory -Name 'opfer'
-        $victim = Join-Path -Path $outside -ChildPath 'wichtig.txt'
+        $outside = New-TestDirectory -Name 'victim'
+        $victim = Join-Path -Path $outside -ChildPath 'important.txt'
         [System.IO.File]::WriteAllText($victim, 'x')
         $logs = Join-Path -Path $script:Data -ChildPath 'logs'
         Remove-Item -LiteralPath $logs -Recurse -Force
         try { $null = New-Item -ItemType SymbolicLink -Path $logs -Target $outside -ErrorAction Stop }
-        catch { Set-ItResult -Skipped -Because 'symbolische Links nicht erlaubt'; return }
+        catch { Set-ItResult -Skipped -Because 'symbolic links not permitted'; return }
         { Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -Confirm:$false } | Should -Throw '*junctions or symbolic links*'
         Test-Path -LiteralPath $victim | Should -BeTrue
         Test-Path -LiteralPath $script:Data | Should -BeTrue
     }
 }
 
-Describe 'Zertifikat von localhost:9419 auslesen' {
-    It 'liest Thumbprint und Subject eines TLS-Dienstes (openssl s_server)' {
+Describe 'Reading the certificate from localhost:9419' {
+    It 'reads thumbprint and subject of a TLS service (openssl s_server)' {
         $openssl = Get-Command -Name 'openssl' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
-        if (-not $openssl) { Set-ItResult -Skipped -Because 'openssl nicht verfuegbar'; return }
+        if (-not $openssl) { Set-ItResult -Skipped -Because 'openssl not available'; return }
         $dir = New-TestDirectory -Name 'tls'
         $key = Join-Path $dir 'k.pem'
         $crt = Join-Path $dir 'c.pem'
@@ -766,7 +766,7 @@ Describe 'Zertifikat von localhost:9419 auslesen' {
         }
     }
 
-    It 'meldet einen geschlossenen Port mit Host und Port' {
+    It 'reports a closed port with host and port' {
         { Get-TlsCertificateInfo -HostName '127.0.0.1' -Port 9 -TimeoutSeconds 3 } | Should -Throw '*127.0.0.1:9*'
     }
 }

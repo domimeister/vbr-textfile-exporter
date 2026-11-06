@@ -12,8 +12,8 @@ function New-VeeamCollectorHealthMetric {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Result
     )
-    $success = New-PromMetric -Name 'veeam_exporter_collector_success' -Help '1 letzter Lauf des Collectors ok, 0 Fehler'
-    $duration = New-PromMetric -Name 'veeam_exporter_collector_duration_seconds' -Help 'Laufzeit des Collectors in Sekunden'
+    $success = New-PromMetric -Name 'veeam_exporter_collector_success' -Help '1 last collector run ok, 0 failure'
+    $duration = New-PromMetric -Name 'veeam_exporter_collector_duration_seconds' -Help 'Collector duration in seconds'
     foreach ($r in $Result) {
         Add-PromSample -Metric $success -Labels ([ordered]@{ collector = $r.Collector }) -Value ([int][bool]$r.Success)
         Add-PromSample -Metric $duration -Labels ([ordered]@{ collector = $r.Collector }) -Value ([double]$r.DurationSeconds)

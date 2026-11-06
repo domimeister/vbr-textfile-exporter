@@ -3,7 +3,7 @@ BeforeAll {
     Set-TestTimeZone
 }
 
-Describe 'Alle .prom-Dateien beider Tasks zusammen (windows_exporter-Regeln)' {
+Describe 'All .prom files of both tasks together (windows_exporter rules)' {
     BeforeAll {
         $script:Dir = Join-Path -Path $TestDrive -ChildPath 'textfile'
         New-Item -ItemType Directory -Path $script:Dir | Out-Null
@@ -15,17 +15,17 @@ Describe 'Alle .prom-Dateien beider Tasks zusammen (windows_exporter-Regeln)' {
         $script:AllSamples = @($script:Parsed | ForEach-Object { $_.Samples })
     }
 
-    It 'erzeugt alle sechs Dateien' {
+    It 'generates all six files' {
         Get-SortedFileName -Directory $script:Dir -Filter '*.prom' |
             Should -BeExactly 'veeam_exporter.prom,veeam_exporter_license.prom,veeam_jobs.prom,veeam_license.prom,veeam_objects.prom,veeam_repositories.prom'
     }
 
-    It 'enthaelt keine identische Serie in zwei Dateien (sonst verwirft der windows_exporter alles)' {
+    It 'contains no identical series in two files (otherwise the windows_exporter discards everything)' {
         $duplicates = @($script:AllSamples | Group-Object -Property Series -CaseSensitive | Where-Object Count -GT 1 | ForEach-Object Name)
         $duplicates | Should -BeNullOrEmpty
     }
 
-    It 'hat pro Metrik denselben HELP-Text und TYPE in allen Dateien' {
+    It 'has the same HELP text and TYPE per metric in all files' {
         $names = @($script:Parsed | ForEach-Object { $_.Help.Keys }) | Sort-Object -Unique
         foreach ($name in $names) {
             $helps = @($script:Parsed | Where-Object { $_.Help.ContainsKey($name) } | ForEach-Object { $_.Help[$name] } | Sort-Object -Unique)
@@ -35,13 +35,13 @@ Describe 'Alle .prom-Dateien beider Tasks zusammen (windows_exporter-Regeln)' {
         }
     }
 
-    It 'hat pro Metrik dieselben Label-Namen in allen Dateien' {
+    It 'has the same label names per metric in all files' {
         foreach ($group in ($script:AllSamples | Group-Object -Property Name)) {
             @($group.Group | ForEach-Object LabelNames | Sort-Object -Unique).Count | Should -Be 1 -Because $group.Name
         }
     }
 
-    It 'nutzt collector-Werte jobs, objects, repositories, license' {
+    It 'uses collector values jobs, objects, repositories, license' {
         $collectors = @($script:AllSamples | Where-Object Name -EQ 'veeam_exporter_collector_success' | ForEach-Object { $_.Series -replace '^.*collector="([^"]+)".*$', '$1' } | Sort-Object)
         ($collectors -join ',') | Should -BeExactly 'jobs,license,objects,repositories'
     }

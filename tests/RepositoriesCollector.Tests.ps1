@@ -3,8 +3,8 @@ BeforeAll {
     $script:DocSobr = Get-FixtureData -Name 'doc/1.3-rev2/scaleOutRepositories.json'
 }
 
-Describe 'Repositories-Collector: Ausgabe' {
-    It 'erzeugt veeam_repositories.prom aus dem Doku-Beispiel <Version> zeilengenau' -TestCases @(
+Describe 'Repositories collector: output' {
+    It 'generates veeam_repositories.prom line by line from the doc example <Version>' -TestCases @(
         @{ Version = '1.2-rev1' }, @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
     ) {
         param($Version)
@@ -12,41 +12,41 @@ Describe 'Repositories-Collector: Ausgabe' {
         Assert-PromText -Actual (ConvertTo-PromText -Metric $metrics) -Expected (Get-ExpectedText -Name "doc/$Version/veeam_repositories.prom")
     }
 
-    It 'setzt sobr fuer Performance-, Archive- und unbekannte Extents und behandelt Object Storage' {
+    It 'sets sobr for performance, archive and unknown extents and handles object storage' {
         $metrics = Get-VeeamRepositoryMetric -RepositoryState (Get-FixtureData -Name 'repositories-sobr-states.json') -ScaleOutRepository $script:DocSobr
         Assert-PromText -Actual (ConvertTo-PromText -Metric $metrics) -Expected (Get-ExpectedText -Name 'veeam_repositories_sobr.prom')
     }
 
-    It 'laesst out_of_date unter 1.2-rev1 weg (Feld fehlt im Modell)' {
+    It 'omits out_of_date under 1.2-rev1 (field missing in the model)' {
         $text = Get-ExpectedText -Name 'doc/1.2-rev1/veeam_repositories.prom'
         $text | Should -Not -Match 'veeam_repository_out_of_date'
         $metrics = Get-VeeamRepositoryMetric -RepositoryState (Get-FixtureData -Name 'doc/1.2-rev1/repositories-states.json') -ScaleOutRepository @()
         ($metrics | Where-Object Name -EQ 'veeam_repository_out_of_date').Samples.Count | Should -Be 0
     }
 
-    It 'liest isOutOfDate als String "false" nicht als wahr (1.3-rev0-Beispiel)' {
+    It 'does not read isOutOfDate as string "false" as true (1.3-rev0 example)' {
         $metrics = Get-VeeamRepositoryMetric -RepositoryState (Get-FixtureData -Name 'doc/1.3-rev0/repositories-states.json') -ScaleOutRepository @()
         $samples = ($metrics | Where-Object Name -EQ 'veeam_repository_out_of_date').Samples
         ($samples | Where-Object { $_.Labels['repository'] -eq 'Backup Repository 1' }).Value | Should -Be 0
         ($samples | Where-Object { $_.Labels['repository'] -eq 'Default Backup Repository' }).Value | Should -Be 1
     }
 
-    It 'rechnet den Fuellgrad aus free/capacity und nicht aus usedSpace' {
-        # Doku-Beispiel: 299.4 GB Kapazitaet, 217.8 GB frei, 173.4 GB Backups
+    It 'computes the fill level from free/capacity and not from usedSpace' {
+        # Doc example: 299.4 GB capacity, 217.8 GB free, 173.4 GB backups
         $metrics = Get-VeeamRepositoryMetric -RepositoryState (Get-FixtureData -Name 'doc/1.3-rev2/repositories-states.json') -ScaleOutRepository @()
         $get = { param($n) (($metrics | Where-Object Name -EQ $n).Samples | Where-Object { $_.Labels['repository'] -eq 'Backup Repository 1' }).Value }
         $fill = 1 - (& $get 'veeam_repository_free_bytes') / (& $get 'veeam_repository_capacity_bytes')
         [math]::Round($fill, 3) | Should -Be 0.273
-        # usedSpace/capacity waere 0.579 und damit falsch
+        # usedSpace/capacity would be 0.579 and therefore wrong
         [math]::Round((& $get 'veeam_repository_backup_bytes') / (& $get 'veeam_repository_capacity_bytes'), 3) | Should -Be 0.579
     }
 
-    It 'liefert ohne Repositories leeren Text' {
+    It 'returns empty text without repositories' {
         ConvertTo-PromText -Metric (Get-VeeamRepositoryMetric -RepositoryState @() -ScaleOutRepository @()) | Should -BeExactly ''
     }
 }
 
-Describe 'Repositories-Collector: REST-Abfragen' {
+Describe 'Repositories collector: REST queries' {
     BeforeEach {
         $script:States = Get-FixtureText -Name 'repositories-sobr-states.json'
         $script:Sobrs = Get-FixtureText -Name 'doc/1.3-rev2/scaleOutRepositories.json'
@@ -59,7 +59,7 @@ Describe 'Repositories-Collector: REST-Abfragen' {
         }
     }
 
-    It 'liest repositories/states und scaleOutRepositories per GET mit Paging' {
+    It 'reads repositories/states and scaleOutRepositories via GET with paging' {
         $text = ConvertTo-PromText -Metric (Get-VeeamRepositoryMetric -Session (New-TestSession))
         Assert-PromText -Actual $text -Expected (Get-ExpectedText -Name 'veeam_repositories_sobr.prom')
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter {
@@ -70,14 +70,14 @@ Describe 'Repositories-Collector: REST-Abfragen' {
         }
     }
 
-    It 'wirft, wenn scaleOutRepositories fehlschlaegt' {
+    It 'throws if scaleOutRepositories fails' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 403 -Content '{"errorCode":"AccessDenied","message":"no"}' } -ParameterFilter { $Path -eq '/api/v1/backupInfrastructure/scaleOutRepositories' }
         { Get-VeeamRepositoryMetric -Session (New-TestSession) } | Should -Throw '*scaleOutRepositories*HTTP 403*'
     }
 }
 
 Describe 'ConvertTo-VeeamBool' {
-    It 'wandelt <Label> in <Out>' -TestCases @(
+    It 'converts <Label> to <Out>' -TestCases @(
         @{ Label = '$true'; In = $true; Out = $true }
         @{ Label = '$false'; In = $false; Out = $false }
         @{ Label = '"true"'; In = 'true'; Out = $true }
@@ -94,7 +94,7 @@ Describe 'ConvertTo-VeeamBool' {
         } | Should -BeExactly $Out
     }
 
-    It 'liefert $null fuer $null und unlesbare Werte' {
+    It 'returns $null for $null and unreadable values' {
         InModuleScope VeeamExporter {
             ConvertTo-VeeamBool -Value $null | Should -BeNullOrEmpty
             ConvertTo-VeeamBool -Value 'unknown' | Should -BeNullOrEmpty
@@ -104,7 +104,7 @@ Describe 'ConvertTo-VeeamBool' {
 }
 
 Describe 'ConvertTo-VeeamByteCount' {
-    It 'rechnet <In> GB in <Out> Bytes (1024^3, ganze Bytes)' -TestCases @(
+    It 'converts <In> GB to <Out> bytes (1024^3, whole bytes)' -TestCases @(
         @{ In = 299.4; Out = 321478302106 }
         @{ In = 0.1; Out = 107374182 }
         @{ In = 1; Out = 1073741824 }
@@ -119,7 +119,7 @@ Describe 'ConvertTo-VeeamByteCount' {
         } | Should -Be $Out
     }
 
-    It 'liest Strings kulturunabhaengig' {
+    It 'reads strings independently of the culture' {
         $result = InModuleScope VeeamExporter {
             $old = [System.Threading.Thread]::CurrentThread.CurrentCulture
             try {
@@ -131,7 +131,7 @@ Describe 'ConvertTo-VeeamByteCount' {
         $result | Should -Be 1610612736
     }
 
-    It 'liefert $null fuer fehlende Werte' {
+    It 'returns $null for missing values' {
         InModuleScope VeeamExporter {
             ConvertTo-VeeamByteCount -GB $null | Should -BeNullOrEmpty
             ConvertTo-VeeamByteCount -GB '' | Should -BeNullOrEmpty

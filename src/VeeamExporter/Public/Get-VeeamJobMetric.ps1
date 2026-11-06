@@ -4,7 +4,7 @@ function Get-VeeamJobMetric {
     Jobs collector: GET /api/v1/jobs/states (all pages) -> metrics for veeam_jobs.prom.
     .DESCRIPTION
     Metric names, labels and value codes follow docs/metrics.md, section
-    "Jobs & Resultate". Pass -JobState to build metrics from already loaded
+    "Jobs & Results". Pass -JobState to build metrics from already loaded
     states (tests).
     #>
     [CmdletBinding(DefaultParameterSetName = 'Session')]
@@ -17,13 +17,13 @@ function Get-VeeamJobMetric {
         $JobState = @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/jobs/states')
     }
 
-    $info = New-PromMetric -Name 'veeam_job_info' -Help 'Veeam Job (Wert immer 1)'
-    $lastResult = New-PromMetric -Name 'veeam_job_last_result' -Help 'Resultat des letzten Laufs: 0 Success, 1 Warning, 2 Failed, -1 None'
-    $enabled = New-PromMetric -Name 'veeam_job_enabled' -Help '1 Job aktiv, 0 deaktiviert'
-    $running = New-PromMetric -Name 'veeam_job_running' -Help '1 wenn der Job gerade aktiv ist (running, starting, stopping)'
-    $lastRun = New-PromMetric -Name 'veeam_job_last_run_timestamp_seconds' -Help 'Start des letzten Laufs als Unix-Zeit'
-    $nextRun = New-PromMetric -Name 'veeam_job_next_run_timestamp_seconds' -Help 'Naechster geplanter Lauf als Unix-Zeit (fehlt bei verketteten Jobs)'
-    $objects = New-PromMetric -Name 'veeam_job_objects' -Help 'Anzahl Objekte im Job'
+    $info = New-PromMetric -Name 'veeam_job_info' -Help 'Veeam job (value always 1)'
+    $lastResult = New-PromMetric -Name 'veeam_job_last_result' -Help 'Result of the last run: 0 Success, 1 Warning, 2 Failed, -1 None'
+    $enabled = New-PromMetric -Name 'veeam_job_enabled' -Help '1 job enabled, 0 disabled'
+    $running = New-PromMetric -Name 'veeam_job_running' -Help '1 if the job is currently active (running, starting, stopping)'
+    $lastRun = New-PromMetric -Name 'veeam_job_last_run_timestamp_seconds' -Help 'Start of the last run as Unix time'
+    $nextRun = New-PromMetric -Name 'veeam_job_next_run_timestamp_seconds' -Help 'Next scheduled run as Unix time (missing for chained jobs)'
+    $objects = New-PromMetric -Name 'veeam_job_objects' -Help 'Number of objects in the job'
 
     foreach ($job in $JobState) {
         $name = [string](Get-VeeamField -InputObject $job -Name 'name')
@@ -49,7 +49,7 @@ function Get-VeeamJobMetric {
         if ($status -match '^(?i)(running|starting|stopping)$') { $isRunning = 1 }
         Add-PromSample -Metric $running -Labels ([ordered]@{ job_name = $name }) -Value $isRunning
 
-        # ANNAHME: no lastRun means the series is missing, see docs/metrics.md#OP-10
+        # ASSUMPTION: no lastRun means the series is missing, see docs/metrics.md#OP-10
         Add-PromSample -Metric $lastRun -Labels ([ordered]@{ job_name = $name }) `
             -Value (ConvertTo-UnixTimestamp -Value (Get-VeeamField -InputObject $job -Name 'lastRun'))
         Add-PromSample -Metric $nextRun -Labels ([ordered]@{ job_name = $name }) `

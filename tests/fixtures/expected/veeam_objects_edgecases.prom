@@ -1,4 +1,4 @@
-# HELP veeam_object_last_result Letzter Task-Lauf: 0 Success, 1 Warning, 2 Failed, -1 None
+# HELP veeam_object_last_result Last task run: 0 Success, 1 Warning, 2 Failed, -1 None
 # TYPE veeam_object_last_result gauge
 veeam_object_last_result{job_name="Alter Job neu",object="old01"} 1
 veeam_object_last_result{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share"} 1
@@ -9,7 +9,7 @@ veeam_object_last_result{job_name="Prod VMs",object="vm02"} 2
 veeam_object_last_result{job_name="Prod VMs",object="vm03"} -1
 veeam_object_last_result{job_name="Prod VMs",object="vm04"} 0
 veeam_object_last_result{job_name="Prod VMs",object="vm06"} 0
-# HELP veeam_object_last_run_timestamp_seconds Ende des letzten Task-Laufs als Unix-Zeit (Start, solange er laeuft)
+# HELP veeam_object_last_run_timestamp_seconds End of the last task run as Unix time (start while it is running)
 # TYPE veeam_object_last_run_timestamp_seconds gauge
 veeam_object_last_run_timestamp_seconds{job_name="Alter Job neu",object="old01"} 1705431660
 veeam_object_last_run_timestamp_seconds{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share"} 1705540800
@@ -20,7 +20,7 @@ veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm02"} 17055
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm03"} 1705611630
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm04"} 1705527780
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm06"} 1705527750
-# HELP veeam_object_last_processed_bytes Im letzten Task-Lauf verarbeitete Bytes
+# HELP veeam_object_last_processed_bytes Bytes processed in the last task run
 # TYPE veeam_object_last_processed_bytes gauge
 veeam_object_last_processed_bytes{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share"} 5368709120
 veeam_object_last_processed_bytes{job_name="Backup \"DC\" \\\\fs01",object="vm05"} 7
@@ -30,7 +30,7 @@ veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm02"} 0
 veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm03"} 1073741824
 veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm04"} 2
 veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm06"} 3
-# HELP veeam_object_last_failure_info Meldung des letzten Task-Laufs bei Warning oder Failed (Wert immer 1)
+# HELP veeam_object_last_failure_info Message of the last task run on Warning or Failed (value always 1)
 # TYPE veeam_object_last_failure_info gauge
 veeam_object_last_failure_info{job_name="Alter Job neu",object="old01",message="Low disk space"} 1
 veeam_object_last_failure_info{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share",message="Changed block tracking \"disabled\" for disk C:\\"} 1

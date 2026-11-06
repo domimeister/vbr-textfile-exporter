@@ -3,7 +3,7 @@ function Get-VeeamLicenseMetric {
     .SYNOPSIS
     License collector: VBRInstalledLicense object(s) -> metrics for veeam_license.prom.
     .DESCRIPTION
-    Follows docs/metrics.md, section "Lizenzablauf". Pure conversion; the
+    Follows docs/metrics.md, section "License Expiration". Pure conversion; the
     license itself comes from Get-VBRInstalledLicense (Invoke-VeeamLicenseExporterRun).
     #>
     [CmdletBinding()]
@@ -14,18 +14,18 @@ function Get-VeeamLicenseMetric {
     $items = @($License | Where-Object { $null -ne $_ })
     if ($items.Count -eq 0) { throw 'Get-VBRInstalledLicense returned no license.' }
     if ($items.Count -gt 1) {
-        # ANNAHME: one license object; with more, the first one counts, see docs/metrics.md#OP-3
+        # ASSUMPTION: one license object; with more, the first one counts, see docs/metrics.md#OP-3
         Write-Warning ('Get-VBRInstalledLicense returned {0} objects, using the first.' -f $items.Count)
     }
     $lic = $items[0]
     $status = [string](Get-VeeamField -InputObject $lic -Name 'Status')
 
-    $info = New-PromMetric -Name 'veeam_license_info' -Help 'Installierte Veeam-Lizenz (Wert immer 1)'
-    $valid = New-PromMetric -Name 'veeam_license_valid' -Help '1 wenn der Lizenzstatus Valid ist, sonst 0'
-    $expiration = New-PromMetric -Name 'veeam_license_expiration_timestamp_seconds' -Help 'Ablauf der Lizenz als Unix-Zeit (fehlt bei unbefristeter Lizenz)'
-    $support = New-PromMetric -Name 'veeam_license_support_expiration_timestamp_seconds' -Help 'Ablauf des Supports als Unix-Zeit'
-    $licensed = New-PromMetric -Name 'veeam_license_instances_licensed' -Help 'Lizenzierte Instanzen'
-    $used = New-PromMetric -Name 'veeam_license_instances_used' -Help 'Belegte Instanzen'
+    $info = New-PromMetric -Name 'veeam_license_info' -Help 'Installed Veeam license (value always 1)'
+    $valid = New-PromMetric -Name 'veeam_license_valid' -Help '1 if the license status is Valid, otherwise 0'
+    $expiration = New-PromMetric -Name 'veeam_license_expiration_timestamp_seconds' -Help 'License expiration as Unix time (missing for perpetual licenses)'
+    $support = New-PromMetric -Name 'veeam_license_support_expiration_timestamp_seconds' -Help 'Support expiration as Unix time'
+    $licensed = New-PromMetric -Name 'veeam_license_instances_licensed' -Help 'Licensed instances'
+    $used = New-PromMetric -Name 'veeam_license_instances_used' -Help 'Used instances'
 
     Add-PromSample -Metric $info -Value 1 -Labels ([ordered]@{
             edition      = [string](Get-VeeamField -InputObject $lic -Name 'Edition')

@@ -8,7 +8,7 @@ BeforeAll {
 }
 
 Describe 'Get-VeeamLicenseMetric' {
-    It 'erzeugt veeam_license.prom fuer <Name> zeilengenau' -TestCases @(
+    It 'generates veeam_license.prom line by line for <Name>' -TestCases @(
         @{ Name = 'rental' }, @{ Name = 'perpetual-socket' }, @{ Name = 'expired' }
     ) {
         param($Name)
@@ -17,7 +17,7 @@ Describe 'Get-VeeamLicenseMetric' {
         Assert-PromText -Actual $actual -Expected (Get-ExpectedText -Name "license/veeam_license_$Name.prom")
     }
 
-    It 'liest echte Objekte mit Enums und DateTime (Kind Local)' {
+    It 'reads real objects with enums and DateTime (Kind Local)' {
         $expiration = New-Object datetime -ArgumentList 2027, 3, 31, 12, 0, 0, ([System.DateTimeKind]::Local)
         $license = [pscustomobject]@{
             Status                 = [VeeamExporterTest.VBRLicenseStatus]::Valid
@@ -37,19 +37,19 @@ Describe 'Get-VeeamLicenseMetric' {
         $text | Should -Match "veeam_license_instances_used 99`n"
     }
 
-    It 'behandelt DateTime.MaxValue als nicht gesetzt' {
+    It 'treats DateTime.MaxValue as not set' {
         $license = [pscustomobject]@{ Status = 'Valid'; ExpirationDate = [datetime]::MaxValue; SupportExpirationDate = [datetime]::MaxValue }
         $text = ConvertTo-PromText -Metric (Get-VeeamLicenseMetric -License $license)
         $text | Should -Not -Match 'expiration_timestamp_seconds'
     }
 
-    It 'meldet <Status> als ungueltig' -TestCases @(@{ Status = 'Expired' }, @{ Status = 'Invalid' }, @{ Status = '' }) {
+    It 'reports <Status> as invalid' -TestCases @(@{ Status = 'Expired' }, @{ Status = 'Invalid' }, @{ Status = '' }) {
         param($Status)
         $text = ConvertTo-PromText -Metric (Get-VeeamLicenseMetric -License ([pscustomobject]@{ Status = $Status }))
         $text | Should -Match "veeam_license_valid 0`n"
     }
 
-    It 'nimmt bei mehreren Lizenzobjekten das erste und warnt' {
+    It 'takes the first of several license objects and warns' {
         $a = [pscustomobject]@{ Status = 'Valid'; LicensedTo = 'Erste' }
         $b = [pscustomobject]@{ Status = 'Expired'; LicensedTo = 'Zweite' }
         $text = ConvertTo-PromText -Metric (Get-VeeamLicenseMetric -License @($a, $b) -WarningVariable warnings -WarningAction SilentlyContinue)
@@ -58,7 +58,7 @@ Describe 'Get-VeeamLicenseMetric' {
         $text | Should -Not -Match 'Zweite'
     }
 
-    It 'summiert InstanceLicenseSummary, falls es ein Array ist' {
+    It 'sums InstanceLicenseSummary if it is an array' {
         $license = [pscustomobject]@{ Status = 'Valid'; InstanceLicenseSummary = @(
                 [pscustomobject]@{ LicensedInstancesNumber = 10; UsedInstancesNumber = 4 }
                 [pscustomobject]@{ LicensedInstancesNumber = 5; UsedInstancesNumber = 1.5 }
@@ -69,7 +69,7 @@ Describe 'Get-VeeamLicenseMetric' {
         $text | Should -Match "veeam_license_instances_used 5.5`n"
     }
 
-    It 'wirft ohne Lizenzobjekt' {
+    It 'throws without a license object' {
         { Get-VeeamLicenseMetric -License @() } | Should -Throw '*no license*'
         { Get-VeeamLicenseMetric -License $null } | Should -Throw '*no license*'
     }
@@ -83,7 +83,7 @@ Describe 'Invoke-VeeamLicenseExporterRun' {
         $script:HealthFile = Join-Path -Path $script:Dir -ChildPath 'veeam_exporter_license.prom'
     }
 
-    It 'schreibt veeam_license.prom und veeam_exporter_license.prom bei Erfolg' {
+    It 'writes veeam_license.prom and veeam_exporter_license.prom on success' {
         Set-LicenseMock
         $result = Invoke-VeeamLicenseExporterRun -TextfileDirectory $script:Dir -WarningAction SilentlyContinue
 
@@ -91,23 +91,23 @@ Describe 'Invoke-VeeamLicenseExporterRun' {
         Get-FileText -Path $script:LicenseFile | Should -BeExactly (Get-ExpectedText -Name 'license/veeam_license_rental.prom')
         $lines = (Get-FileText -Path $script:HealthFile) -split "`n"
         $lines.Count | Should -Be 7
-        $lines[0] | Should -BeExactly '# HELP veeam_exporter_collector_success 1 letzter Lauf des Collectors ok, 0 Fehler'
+        $lines[0] | Should -BeExactly '# HELP veeam_exporter_collector_success 1 last collector run ok, 0 failure'
         $lines[1] | Should -BeExactly '# TYPE veeam_exporter_collector_success gauge'
         $lines[2] | Should -BeExactly 'veeam_exporter_collector_success{collector="license"} 1'
-        $lines[3] | Should -BeExactly '# HELP veeam_exporter_collector_duration_seconds Laufzeit des Collectors in Sekunden'
+        $lines[3] | Should -BeExactly '# HELP veeam_exporter_collector_duration_seconds Collector duration in seconds'
         $lines[4] | Should -BeExactly '# TYPE veeam_exporter_collector_duration_seconds gauge'
         $lines[5] | Should -Match '^veeam_exporter_collector_duration_seconds\{collector="license"\} [0-9]+(\.[0-9]+)?$'
         $lines[6] | Should -BeExactly ''
     }
 
-    It 'trennt die Verbindung nur, wenn es sie selbst aufgebaut hat (<Connected>)' -TestCases @(@{ Connected = $true; Times = 1 }, @{ Connected = $false; Times = 0 }) {
+    It 'disconnects only if it opened the connection itself (<Connected>)' -TestCases @(@{ Connected = $true; Times = 1 }, @{ Connected = $false; Times = 0 }) {
         param($Connected, $Times)
         Set-LicenseMock -Connected $Connected
         $null = Invoke-VeeamLicenseExporterRun -TextfileDirectory $script:Dir -WarningAction SilentlyContinue
         Should -Invoke -ModuleName VeeamExporter Disconnect-VeeamLocalServer -Times $Times -Exactly
     }
 
-    It 'laesst die alte veeam_license.prom stehen, wenn Get-VBRInstalledLicense fehlschlaegt' {
+    It 'keeps the old veeam_license.prom if Get-VBRInstalledLicense fails' {
         [System.IO.File]::WriteAllText($script:LicenseFile, "veeam_license_valid 1`n")
         Set-LicenseMock -LicenseFails
 
@@ -120,7 +120,7 @@ Describe 'Invoke-VeeamLicenseExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Disconnect-VeeamLocalServer -Times 1 -Exactly
     }
 
-    It 'schreibt den Health-Status auch, wenn das Veeam-Modul fehlt' {
+    It 'writes the health status even if the Veeam module is missing' {
         Set-LicenseMock -ImportFails
         $result = Invoke-VeeamLicenseExporterRun -TextfileDirectory $script:Dir -WarningAction SilentlyContinue
         $result.Success | Should -BeFalse
@@ -129,7 +129,7 @@ Describe 'Invoke-VeeamLicenseExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Connect-VeeamLocalServer -Times 0 -Exactly
     }
 
-    It 'laesst veeam_exporter.prom des REST-Tasks unangetastet' {
+    It 'leaves veeam_exporter.prom of the REST task untouched' {
         $restHealth = Join-Path -Path $script:Dir -ChildPath 'veeam_exporter.prom'
         [System.IO.File]::WriteAllText($restHealth, "veeam_exporter_collector_success{collector=`"jobs`"} 1`n")
         Set-LicenseMock
@@ -139,7 +139,7 @@ Describe 'Invoke-VeeamLicenseExporterRun' {
     }
 }
 
-Describe 'Wrapper um das Veeam-PowerShell-Modul' {
+Describe 'Wrapper around the Veeam PowerShell module' {
     BeforeAll {
         # Stubs: the real cmdlets only exist on a VBR server.
         function global:Get-VBRServerSession { }
@@ -153,40 +153,40 @@ Describe 'Wrapper um das Veeam-PowerShell-Modul' {
         }
     }
 
-    It 'verbindet nicht neu, wenn schon eine Session besteht' {
+    It 'does not reconnect if a session already exists' {
         Mock -ModuleName VeeamExporter Get-VBRServerSession { [pscustomobject]@{ Server = 'localhost' } }
         Mock -ModuleName VeeamExporter Connect-VBRServer { }
         InModuleScope VeeamExporter { Connect-VeeamLocalServer } | Should -BeFalse
         Should -Invoke -ModuleName VeeamExporter Connect-VBRServer -Times 0 -Exactly
     }
 
-    It 'verbindet lokal ohne Parameter, wenn keine Session besteht' {
+    It 'connects locally without parameters if no session exists' {
         Mock -ModuleName VeeamExporter Get-VBRServerSession { $null }
         Mock -ModuleName VeeamExporter Connect-VBRServer { 'output that must not leak' }
         InModuleScope VeeamExporter { Connect-VeeamLocalServer } | Should -BeExactly $true
         Should -Invoke -ModuleName VeeamExporter Connect-VBRServer -Times 1 -Exactly
     }
 
-    It 'verbindet, wenn Get-VBRServerSession einen Fehler wirft' {
+    It 'connects if Get-VBRServerSession throws an error' {
         Mock -ModuleName VeeamExporter Get-VBRServerSession { throw 'no session' }
         Mock -ModuleName VeeamExporter Connect-VBRServer { }
         InModuleScope VeeamExporter { Connect-VeeamLocalServer } | Should -BeTrue
     }
 
-    It 'gibt die Lizenz als Array zurueck' {
+    It 'returns the license as an array' {
         Mock -ModuleName VeeamExporter Get-VBRInstalledLicense { [pscustomobject]@{ Status = 'Valid' } }
         $result = InModuleScope VeeamExporter { , (Get-VeeamInstalledLicense) }
         $result.Count | Should -Be 1
         $result[0].Status | Should -Be 'Valid'
     }
 
-    It 'importiert das Modul nicht, wenn die Cmdlets schon da sind' {
+    It 'does not import the module if the cmdlets are already present' {
         Mock -ModuleName VeeamExporter Import-Module { }
         InModuleScope VeeamExporter { Import-VeeamBackupModule }
         Should -Invoke -ModuleName VeeamExporter Import-Module -Times 0 -Exactly
     }
 
-    It 'meldet einen fehlgeschlagenen Import mit Modulname' {
+    It 'reports a failed import with the module name' {
         Remove-Item -Path 'Function:\Get-VBRInstalledLicense'
         try {
             Mock -ModuleName VeeamExporter Import-Module { throw 'The specified module was not loaded' }

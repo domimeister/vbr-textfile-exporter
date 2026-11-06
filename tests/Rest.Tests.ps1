@@ -2,12 +2,12 @@ BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
 }
 
-Describe 'Connect-VeeamServer (Auth und Versions-Probe)' {
+Describe 'Connect-VeeamServer (auth and version probe)' {
     BeforeEach {
         $script:TriedVersions = New-Object System.Collections.Generic.List[string]
     }
 
-    It 'nimmt die hoechste Revision, die der Server akzeptiert' {
+    It 'takes the highest revision the server accepts' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
             $script:TriedVersions.Add($Headers['x-api-version'])
             if ($Headers['x-api-version'] -in @('1.3-rev2', '1.3-rev1')) {
@@ -24,7 +24,7 @@ Describe 'Connect-VeeamServer (Auth und Versions-Probe)' {
         ($script:TriedVersions -join ',') | Should -BeExactly '1.3-rev2,1.3-rev1,1.3-rev0'
     }
 
-    It 'probiert als letzte Version 1.2-rev1 (VBR 12.3.1)' {
+    It 'tries 1.2-rev1 as the last version (VBR 12.3.1)' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
             if ($Headers['x-api-version'] -ne '1.2-rev1') {
                 return New-HttpResponse -StatusCode 400 -Content $script:UnsupportedVersionJson
@@ -34,7 +34,7 @@ Describe 'Connect-VeeamServer (Auth und Versions-Probe)' {
         (Connect-VeeamServer -Credential (New-TestCredential)).ApiVersion | Should -BeExactly '1.2-rev1'
     }
 
-    It 'sendet POST /api/oauth2/token als Password-Grant mit x-api-version' {
+    It 'sends POST /api/oauth2/token as password grant with x-api-version' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content $script:TokenJson }
 
         $null = Connect-VeeamServer -Credential (New-TestCredential) -BaseUri 'https://localhost:9419/'
@@ -50,14 +50,14 @@ Describe 'Connect-VeeamServer (Auth und Versions-Probe)' {
         }
     }
 
-    It 'bricht bei falschem Passwort sofort ab (keine weitere Version)' {
+    It 'aborts immediately on a wrong password (no further version)' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 400 -Content $script:InvalidGrantJson }
 
         { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*invalid_grant*'
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly
     }
 
-    It 'bricht bei HTTP <Code> sofort ab' -TestCases @(@{ Code = 401 }, @{ Code = 403 }, @{ Code = 500 }) {
+    It 'aborts immediately on HTTP <Code>' -TestCases @(@{ Code = 401 }, @{ Code = 403 }, @{ Code = 500 }) {
         param($Code)
         $script:Code = $Code
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode $script:Code -Content '{"message":"version"}' }
@@ -65,13 +65,13 @@ Describe 'Connect-VeeamServer (Auth und Versions-Probe)' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly
     }
 
-    It 'bricht bei HTTP 400 ohne Versionshinweis sofort ab' {
+    It 'aborts immediately on HTTP 400 without a version hint' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 400 -Content '{"errorCode":"BadRequest","message":"Something else"}' }
         { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*Something else*'
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly
     }
 
-    It 'nennt das Passwort nicht in der Fehlermeldung' {
+    It 'does not mention the password in the error message' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 400 -Content $script:InvalidGrantJson }
         $message = $null
         try { $null = Connect-VeeamServer -Credential (New-TestCredential) } catch { $message = $_.Exception.Message }
@@ -79,26 +79,26 @@ Describe 'Connect-VeeamServer (Auth und Versions-Probe)' {
         $message | Should -Not -Match ([regex]::Escape('S3cret!pw'))
     }
 
-    It 'wirft, wenn keine Version unterstuetzt wird' {
+    It 'throws if no version is supported' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 400 -Content $script:UnsupportedVersionJson }
         { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*none of the API versions*'
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 4 -Exactly
     }
 
-    It 'nutzt mit -ApiVersion nur diese Version' {
+    It 'uses only this version with -ApiVersion' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 400 -Content $script:UnsupportedVersionJson }
         { Connect-VeeamServer -Credential (New-TestCredential) -ApiVersion '1.2-rev1' } | Should -Throw
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Headers['x-api-version'] -eq '1.2-rev1' }
     }
 
-    It 'wirft, wenn die Token-Antwort kein access_token enthaelt' {
+    It 'throws if the token response contains no access_token' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content '{}' }
         { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*access_token*'
     }
 }
 
 Describe 'Disconnect-VeeamServer' {
-    It 'ruft POST /api/oauth2/logout mit Bearer und x-api-version auf und loescht die Tokens' {
+    It 'calls POST /api/oauth2/logout with bearer and x-api-version and clears the tokens' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 }
         $session = New-TestSession
 
@@ -112,7 +112,7 @@ Describe 'Disconnect-VeeamServer' {
         $session.RefreshToken | Should -BeNullOrEmpty
     }
 
-    It 'warnt nur, wenn das Logout fehlschlaegt' {
+    It 'only warns if the logout fails' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 500 -Content '{"message":"boom"}' }
         $session = New-TestSession
         { Disconnect-VeeamServer -Session $session -WarningAction SilentlyContinue } | Should -Not -Throw
@@ -120,8 +120,8 @@ Describe 'Disconnect-VeeamServer' {
     }
 }
 
-Describe 'Nur lesen' {
-    It 'erlaubt GET auf <Path>' -TestCases @(@{ Path = '/api/v1/jobs/states' }, @{ Path = '/api/v1/serverInfo' }) {
+Describe 'Read-only' {
+    It 'allows GET on <Path>' -TestCases @(@{ Path = '/api/v1/jobs/states' }, @{ Path = '/api/v1/serverInfo' }) {
         param($Path)
         InModuleScope VeeamExporter -Parameters @{ Path = $Path } {
             param($Path)
@@ -129,14 +129,14 @@ Describe 'Nur lesen' {
         }
     }
 
-    It 'erlaubt POST nur auf Token und Logout' {
+    It 'allows POST only on token and logout' {
         InModuleScope VeeamExporter {
             { Assert-VeeamReadOnlyRequest -Method 'POST' -Path '/api/oauth2/token' } | Should -Not -Throw
             { Assert-VeeamReadOnlyRequest -Method 'POST' -Path '/api/oauth2/logout' } | Should -Not -Throw
         }
     }
 
-    It 'blockiert <Method> <Path>' -TestCases @(
+    It 'blocks <Method> <Path>' -TestCases @(
         @{ Method = 'POST'; Path = '/api/v1/jobs/8e5d1ffc/start' }
         @{ Method = 'POST'; Path = '/api/v1/jobs/8e5d1ffc/stop' }
         @{ Method = 'POST'; Path = '/api/v1/license/install' }
@@ -152,7 +152,7 @@ Describe 'Nur lesen' {
         }
     }
 
-    It 'verweigert eine BaseUri ohne https (<BaseUri>), bevor das Passwort gesendet wird' -TestCases @(
+    It 'refuses a BaseUri without https (<BaseUri>) before the password is sent' -TestCases @(
         @{ BaseUri = 'http://localhost:9419' }
         @{ BaseUri = 'localhost:9419' }
         @{ BaseUri = '/api' }
@@ -163,7 +163,7 @@ Describe 'Nur lesen' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
     }
 
-    It 'Invoke-VeeamHttpRequest blockiert schreibende Aufrufe vor jedem Netzwerkzugriff' {
+    It 'Invoke-VeeamHttpRequest blocks writing calls before any network access' {
         InModuleScope VeeamExporter {
             $ctx = [pscustomobject]@{ BaseUri = 'https://127.0.0.1:1'; TimeoutSec = 1; HttpClient = $null }
             { Invoke-VeeamHttpRequest -Context $ctx -Method POST -Path '/api/v1/jobs/1/start' } | Should -Throw '*read-only*'
@@ -172,14 +172,14 @@ Describe 'Nur lesen' {
     }
 }
 
-Describe 'GET und Paging' {
+Describe 'GET and paging' {
     BeforeAll {
         $script:AllJobs = @(1..450 | ForEach-Object {
                 [pscustomobject]@{ id = "id-$_"; name = ('Job {0:D3}' -f $_); type = 'VSphereBackup'; status = 'Inactive'; lastResult = 'Success'; objectsCount = 1 }
             })
     }
 
-    It 'liest alle Seiten ueber skip/limit bis pagination.total' {
+    It 'reads all pages via skip/limit up to pagination.total' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
             $skip = [int]$Query['skip']
             $limit = [int]$Query['limit']
@@ -208,7 +208,7 @@ Describe 'GET und Paging' {
         }
     }
 
-    It 'setzt x-api-version und Bearer-Token in jedem GET' {
+    It 'sets x-api-version and bearer token in every GET' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'jobs-states.json') }
         $null = Get-VeeamJobMetric -Session (New-TestSession)
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter {
@@ -216,7 +216,7 @@ Describe 'GET und Paging' {
         }
     }
 
-    It 'liest ohne pagination.total weiter, bis eine Seite nicht voll ist' {
+    It 'keeps reading without pagination.total until a page is not full' {
         InModuleScope VeeamExporter {
             Mock Invoke-VeeamRestGet {
                 $skip = [int]$Query['skip']
@@ -232,7 +232,7 @@ Describe 'GET und Paging' {
         }
     }
 
-    It 'behaelt eigene Query-Parameter beim Paging' {
+    It 'keeps its own query parameters when paging' {
         InModuleScope VeeamExporter {
             Mock Invoke-VeeamRestGet { [pscustomobject]@{ data = @(); pagination = [pscustomobject]@{ total = 0 } } }
             $null = Get-VeeamPagedItem -Session ([pscustomobject]@{}) -Path '/api/v1/sessions' -Query ([ordered]@{ typeFilter = 'BackupJob' })
@@ -242,12 +242,12 @@ Describe 'GET und Paging' {
         }
     }
 
-    It 'wirft bei HTTP-Fehlern mit Status und Fehlertext' {
+    It 'throws on HTTP errors with status and error text' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 403 -Content '{"errorCode":"AccessDenied","message":"Access is denied."}' }
         { Get-VeeamJobMetric -Session (New-TestSession) } | Should -Throw '*HTTP 403*AccessDenied*'
     }
 
-    It 'baut die Query mit URL-Encoding' {
+    It 'builds the query with URL encoding' {
         InModuleScope VeeamExporter {
             ConvertTo-VeeamQueryString -Query ([ordered]@{ typeFilter = 'BackupJob,ReplicaJob'; createdAfterFilter = '2024-01-10T00:00:00+01:00'; skip = 0 }) |
                 Should -BeExactly 'typeFilter=BackupJob%2CReplicaJob&createdAfterFilter=2024-01-10T00%3A00%3A00%2B01%3A00&skip=0'

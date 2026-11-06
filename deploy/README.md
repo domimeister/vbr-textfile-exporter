@@ -1,42 +1,42 @@
-# Deploy (manuell pro VBR-Server)
+# Deploy (manually per VBR server)
 
-Das Install-Script richtet den Exporter auf einem VBR-Server ein: Dateien, verschlüsseltes Credential und zwei geplante Tasks. Es ändert nichts an VBR selbst.
+The install script sets up the exporter on a VBR server: files, encrypted credential and two scheduled tasks. It changes nothing in VBR itself.
 
-## Voraussetzungen
+## Prerequisites
 
-| Was | Details |
+| What | Details |
 | --- | --- |
-| VBR | 12.3.1 oder 13 (REST-API auf `localhost:9419`) |
-| windows_exporter | als Dienst installiert, Textfile-Collector aktiv (Standard) |
-| Veeam-Konto für REST | lokaler Windows-Benutzer, in VBR mit der Rolle **Backup Viewer** (Console: *Users and Roles*). Er braucht keine Windows-Adminrechte. |
-| Lizenz-Task | Das Veeam-PowerShell-Modul. Bei VBR 13 zusätzlich **PowerShell 7** und die installierte Veeam-Console. Der Task läuft als SYSTEM; SYSTEM muss in VBR Backup Administrator sein (Standard über die lokale Gruppe Administratoren). |
-| Ausführung | Windows PowerShell 5.1, **als Administrator** |
+| VBR | 12.3.1 or 13 (REST API on `localhost:9419`) |
+| windows_exporter | installed as a service, textfile collector enabled (default) |
+| Veeam account for REST | local Windows user with the VBR role **Backup Viewer** (console: *Users and Roles*). It needs no Windows admin rights. |
+| License task | The Veeam PowerShell module. With VBR 13 also **PowerShell 7** and the installed Veeam console. The task runs as SYSTEM; SYSTEM must be Backup Administrator in VBR (default via the local Administrators group). |
+| Execution | Windows PowerShell 5.1, **as Administrator** |
 
-Beispiel für das REST-Konto:
+Example for the REST account:
 
 ```powershell
-$pw = Read-Host -AsSecureString 'Passwort fuer veeam-exporter'
+$pw = Read-Host -AsSecureString 'Password for veeam-exporter'
 New-LocalUser -Name 'veeam-exporter' -Password $pw -PasswordNeverExpires -UserMayNotChangePassword -Description 'Veeam Exporter (REST, Backup Viewer)'
-# danach in der Veeam-Console: Menu > Users and Roles > Add > VBR01\veeam-exporter, Rolle Veeam Backup Viewer
+# then in the Veeam console: Menu > Users and Roles > Add > VBR01\veeam-exporter, role Veeam Backup Viewer
 ```
 
 ## Installation
 
-1. Repository bzw. Release-Ordner auf den Server kopieren, z. B. nach `C:\Install\vbr-textfile-exporter`.
-2. PowerShell **als Administrator** öffnen:
+1. Copy the repository or release folder to the server, e.g. to `C:\Install\vbr-textfile-exporter`.
+2. Open PowerShell **as Administrator**:
 
 ```powershell
 cd C:\Install\vbr-textfile-exporter
-Get-ChildItem -Recurse | Unblock-File      # nur nach Download als ZIP
+Get-ChildItem -Recurse | Unblock-File      # only after downloading as ZIP
 .\deploy\Install-VeeamExporter.ps1
 ```
 
-Das Script fragt zweimal nach:
+The script asks twice:
 
-- **Zertifikat:** Es liest das Zertifikat von `localhost:9419` und zeigt Subject, Ablaufdatum und Thumbprint. Mit *Ja* wird der Thumbprint gepinnt; der Exporter akzeptiert danach nur noch dieses Zertifikat. Wer den Thumbprint schon kennt, übergibt `-CertificateThumbprint`.
-- **Credential:** Benutzer und Passwort des REST-Kontos, z. B. `VBR01\veeam-exporter`.
+- **Certificate:** it reads the certificate from `localhost:9419` and shows subject, expiration date and thumbprint. Answering *Yes* pins the thumbprint; from then on the exporter accepts only this certificate. If you already know the thumbprint, pass `-CertificateThumbprint`.
+- **Credential:** user and password of the REST account, e.g. `VBR01\veeam-exporter`.
 
-Danach startet es beide Tasks einmal und zeigt das Ergebnis:
+It then starts both tasks once and shows the result:
 
 ```text
 veeam_exporter_collector_success{collector="jobs"} 1
@@ -45,101 +45,101 @@ veeam_exporter_collector_success{collector="repositories"} 1
 veeam_exporter_collector_success{collector="license"} 1
 ```
 
-Ohne Änderung testen: `.\deploy\Install-VeeamExporter.ps1 -WhatIf`.
+Test without changes: `.\deploy\Install-VeeamExporter.ps1 -WhatIf`.
 
-## Was installiert wird
+## What gets installed
 
-| Pfad / Objekt | Inhalt |
+| Path / object | Content |
 | --- | --- |
-| `C:\Program Files\VeeamExporter\` | Skripte, Modul `VeeamExporter`, `deploy\` (für Updates und Deinstallation) |
-| `C:\ProgramData\VeeamExporter\veeam.cred.xml` | Credential des REST-Kontos, DPAPI für SYSTEM |
-| `C:\ProgramData\VeeamExporter\logs\` | `rest.log`, `license.log`: Transcript des letzten Laufs |
-| Task `\VeeamExporter\Veeam Exporter REST` | alle 15 Minuten, SYSTEM, Windows PowerShell 5.1, Zeitlimit 10 Minuten |
-| Task `\VeeamExporter\Veeam Exporter License` | täglich 06:17, SYSTEM, PowerShell 5.1 (VBR 12) oder 7 (VBR 13), Zeitlimit 30 Minuten |
-| Textfile-Verzeichnis des windows_exporter | `veeam_*.prom`, wird aus dem Dienst gelesen (`--collector.textfile.directories` oder Konfigurationsdatei) |
+| `C:\Program Files\VeeamExporter\` | scripts, module `VeeamExporter`, `deploy\` (for updates and uninstallation) |
+| `C:\ProgramData\VeeamExporter\veeam.cred.xml` | credential of the REST account, DPAPI for SYSTEM |
+| `C:\ProgramData\VeeamExporter\logs\` | `rest.log`, `license.log`: transcript of the last run |
+| Task `\VeeamExporter\Veeam Exporter REST` | every 15 minutes, SYSTEM, Windows PowerShell 5.1, time limit 10 minutes |
+| Task `\VeeamExporter\Veeam Exporter License` | daily at 06:17, SYSTEM, PowerShell 5.1 (VBR 12) or 7 (VBR 13), time limit 30 minutes |
+| Textfile directory of the windows_exporter | `veeam_*.prom`, read from the service (`--collector.textfile.directories` or config file) |
 
-### Berechtigungen
+### Permissions
 
-Die Tasks laufen als SYSTEM. Alles, was sie ausführen, lesen oder schreiben, muss deshalb vor normalen Konten geschützt sein. Sonst könnte ein lokaler Benutzer ein Skript austauschen oder über eine Junction SYSTEM beliebige Dateien schreiben lassen. Das Install-Script setzt und prüft:
+The tasks run as SYSTEM. Everything they execute, read or write must therefore be protected from normal accounts. Otherwise a local user could swap a script or use a junction to make SYSTEM write arbitrary files. The install script sets and checks:
 
-| Verzeichnis | Besitzer | Rechte (ohne Vererbung) |
+| Directory | Owner | Permissions (no inheritance) |
 | --- | --- | --- |
-| Installation (`C:\Program Files\VeeamExporter`) | Administratoren | SYSTEM, Administratoren: Vollzugriff; Benutzer: Lesen und Ausführen |
-| Daten (`C:\ProgramData\VeeamExporter`) | Administratoren | nur SYSTEM und Administratoren |
+| Installation (`C:\Program Files\VeeamExporter`) | Administrators | SYSTEM, Administrators: full control; Users: read and execute |
+| Data (`C:\ProgramData\VeeamExporter`) | Administrators | SYSTEM and Administrators only |
 
-- **Neue Verzeichnisse** legt es direkt mit dieser ACL an (`CreateDirectory` mit Sicherheitsbeschreibung). Es gibt also keinen Moment, in dem ein neuer Ordner unter `C:\ProgramData` die geerbten Rechte hat, mit denen jeder Benutzer darin Dateien und Ordner anlegen darf. Den Besitzer setzt es direkt danach.
-- **Vorhandene Verzeichnisse** übernimmt es nur, wenn sie und alles darin SYSTEM, den Administratoren, TrustedInstaller oder einem lokalen Administrator gehören und keine Junctions oder symbolischen Links enthalten. Sonst bricht es ab. Grund: Unter `C:\ProgramData` darf jeder Benutzer Ordner anlegen, und der Besitzer eines Ordners kann dessen Rechte jederzeit wieder ändern. In dem Fall den Ordner prüfen, löschen und die Installation neu starten.
-- **Nach dem Kopieren** prüft es noch einmal: Kein anderes Konto darf in die Installation schreiben oder das Datenverzeichnis überhaupt lesen.
-- **Textfile-Verzeichnis:** Es bricht ab, wenn andere Konten dort schreiben dürfen. Lesen ist erlaubt. Mit `-AllowUnsafeTextfileDirectory` gibt es stattdessen nur eine Warnung. Unabhängig davon schreibt der Exporter nie durch eine vorhandene `.tmp`-Datei hindurch und verweigert ein Verzeichnis anstelle einer `.prom`-Datei.
-- **Deinstallation:** Enthält die Installation oder das Datenverzeichnis eine Junction oder einen symbolischen Link, löscht das Script nichts. Windows PowerShell 5.1 kann beim rekursiven Löschen einer Junction folgen.
+- **New directories** are created directly with this ACL (`CreateDirectory` with a security descriptor). There is thus no moment in which a new folder under `C:\ProgramData` has the inherited permissions that let any user create files and folders in it. The owner is set right afterwards.
+- **Existing directories** are taken over only if they and everything in them belong to SYSTEM, the Administrators, TrustedInstaller or a local administrator, and contain no junctions or symbolic links. Otherwise the script aborts. Reason: any user may create folders under `C:\ProgramData`, and the owner of a folder can change its permissions again at any time. In that case, inspect the folder, delete it and run the installation again.
+- **After copying** it checks once more: no other account may write to the installation or read the data directory at all.
+- **Textfile directory:** the script aborts if other accounts may write there. Reading is allowed. With `-AllowUnsafeTextfileDirectory` it only warns instead. Independently of that, the exporter never writes through an existing `.tmp` file and refuses a directory in place of a `.prom` file.
+- **Uninstallation:** if the installation or the data directory contains a junction or symbolic link, the script deletes nothing. Windows PowerShell 5.1 can follow a junction when deleting recursively.
 
-Die Tasks starten mit `-ExecutionPolicy RemoteSigned`.
+The tasks start with `-ExecutionPolicy RemoteSigned`.
 
-### Wie das Credential zu SYSTEM kommt
+### How the credential gets to SYSTEM
 
-DPAPI verschlüsselt pro Konto: Was ein Admin mit `Export-Clixml` speichert, kann SYSTEM nicht lesen. Das Install-Script macht deshalb Folgendes:
+DPAPI encrypts per account: what an admin stores with `Export-Clixml` cannot be read by SYSTEM. The install script therefore does the following:
 
-1. Es fragt das Credential in der Admin-Sitzung ab.
-2. Es schreibt das Passwort mit DPAPI (Bereich *LocalMachine*) in eine Übergabedatei unter `C:\ProgramData\VeeamExporter`. Diese Datei ist nur für SYSTEM und Administratoren lesbar.
-3. Es startet einen einmaligen Task als SYSTEM (`Save-VeeamExporterSystemCredential.ps1`), der das Credential mit `Export-Clixml` für SYSTEM speichert.
-4. Task und Übergabedatei werden danach in jedem Fall gelöscht, auch bei einem Fehler.
+1. It asks for the credential in the admin session.
+2. It writes the password with DPAPI (scope *LocalMachine*) to a handover file under `C:\ProgramData\VeeamExporter`. Only SYSTEM and Administrators can read this file.
+3. It starts a one-time task as SYSTEM (`Save-VeeamExporterSystemCredential.ps1`) that stores the credential for SYSTEM with `Export-Clixml`.
+4. Task and handover file are deleted afterwards in every case, including on failure.
 
-Das Passwort steht nie im Klartext auf der Platte, in einer Kommandozeile oder in einem Log.
+The password never appears in plain text on disk, on a command line or in a log.
 
-## Betrieb
+## Operation
 
-| Aufgabe | Befehl (als Administrator) |
+| Task | Command (as Administrator) |
 | --- | --- |
-| Update auf neue Version | im neuen Ordner `.\deploy\Install-VeeamExporter.ps1` (Credential bleibt erhalten) |
-| Passwort des REST-Kontos geändert | `.\deploy\Install-VeeamExporter.ps1 -UpdateCredential` |
-| VBR-Zertifikat erneuert | `.\deploy\Install-VeeamExporter.ps1` und den neuen Thumbprint bestätigen. Bis dahin meldet der REST-Task `collector_success 0`. |
-| Lauf von Hand | `Start-ScheduledTask -TaskPath '\VeeamExporter\' -TaskName 'Veeam Exporter REST'` |
-| Fehlersuche | `C:\ProgramData\VeeamExporter\logs\rest.log` bzw. `license.log` |
-| Prüfen, was Prometheus sieht | `(Invoke-WebRequest -UseBasicParsing http://localhost:9182/metrics).Content -split "`n" \| Select-String '^veeam_'` |
+| Update to a new version | in the new folder `.\deploy\Install-VeeamExporter.ps1` (the credential is kept) |
+| Password of the REST account changed | `.\deploy\Install-VeeamExporter.ps1 -UpdateCredential` |
+| VBR certificate renewed | `.\deploy\Install-VeeamExporter.ps1` and confirm the new thumbprint. Until then the REST task reports `collector_success 0`. |
+| Manual run | `Start-ScheduledTask -TaskPath '\VeeamExporter\' -TaskName 'Veeam Exporter REST'` |
+| Troubleshooting | `C:\ProgramData\VeeamExporter\logs\rest.log` or `license.log` |
+| Check what Prometheus sees | `(Invoke-WebRequest -UseBasicParsing http://localhost:9182/metrics).Content -split "`n" \| Select-String '^veeam_'` |
 
-## Deinstallation
+## Uninstallation
 
 ```powershell
 C:\Program Files\VeeamExporter\deploy\Uninstall-VeeamExporter.ps1
 ```
 
-Das Script entfernt Folgendes:
-- alle Tasks unter `\VeeamExporter\`,
-- die `veeam_*.prom`-Dateien im Textfile-Verzeichnis, damit Prometheus keine veralteten Werte mehr sieht,
-- die Installation,
-- Credential und Logs, ausser bei `-KeepData`.
+The script removes the following:
+- all tasks under `\VeeamExporter\`,
+- the `veeam_*.prom` files in the textfile directory, so Prometheus no longer sees stale values,
+- the installation,
+- credential and logs, unless `-KeepData` is given.
 
-Es löscht nur Ordner, die nach einer Exporter-Installation aussehen.
+It only deletes folders that look like an exporter installation.
 
-## Parameter von Install-VeeamExporter.ps1
+## Parameters of Install-VeeamExporter.ps1
 
-| Parameter | Standard | Bedeutung |
+| Parameter | Default | Meaning |
 | --- | --- | --- |
-| `-CertificateThumbprint` | aus `localhost:9419`, mit Rückfrage | Zertifikat der REST-API |
-| `-Credential` | Abfrage | REST-Konto, nur nötig bei erster Installation oder `-UpdateCredential` |
-| `-UpdateCredential` | – | Credential neu setzen |
-| `-TextfileDirectory` | aus dem windows_exporter-Dienst | Ziel der `.prom`-Dateien |
+| `-CertificateThumbprint` | from `localhost:9419`, with confirmation | certificate of the REST API |
+| `-Credential` | prompt | REST account, only needed on first installation or with `-UpdateCredential` |
+| `-UpdateCredential` | – | set the credential again |
+| `-TextfileDirectory` | from the windows_exporter service | target of the `.prom` files |
 | `-InstallPath` / `-DataPath` | `C:\Program Files\VeeamExporter` / `C:\ProgramData\VeeamExporter` | |
-| `-VeeamModule` | gesucht in PSModulePath und Console-Ordner | Name oder Pfad (`.psd1`) des Veeam-Moduls |
-| `-LicenseHost` | `Auto` | `WindowsPowerShell` oder `PowerShell7` erzwingen |
-| `-SkipLicenseTask` | – | nur den REST-Task einrichten |
-| `-RestIntervalMinutes` | `15` | Intervall des REST-Tasks |
-| `-LicenseTime` | `06:17` | Uhrzeit des Lizenz-Tasks |
-| `-Collector` | `jobs,objects,repositories` | REST-Collectors |
-| `-ObjectLookbackDays` | `8` | Lookback des Objects-Collectors |
-| `-NoStart` | – | Tasks nach der Installation nicht starten |
-| `-Force` | – | Zertifikat ohne Rückfrage übernehmen |
-| `-AllowUnsafeTextfileDirectory` | – | nur warnen statt abbrechen, wenn andere Konten ins Textfile-Verzeichnis schreiben dürfen |
-| `-WhatIf` | – | nur anzeigen, was passieren würde |
+| `-VeeamModule` | searched in PSModulePath and the console folder | name or path (`.psd1`) of the Veeam module |
+| `-LicenseHost` | `Auto` | force `WindowsPowerShell` or `PowerShell7` |
+| `-SkipLicenseTask` | – | set up only the REST task |
+| `-RestIntervalMinutes` | `15` | interval of the REST task |
+| `-LicenseTime` | `06:17` | time of day of the license task |
+| `-Collector` | `jobs,objects,repositories` | REST collectors |
+| `-ObjectLookbackDays` | `8` | lookback of the objects collector |
+| `-NoStart` | – | do not start the tasks after installation |
+| `-Force` | – | accept the certificate without confirmation |
+| `-AllowUnsafeTextfileDirectory` | – | only warn instead of aborting if other accounts may write to the textfile directory |
+| `-WhatIf` | – | only show what would happen |
 
-## Im Lab prüfen
+## To verify in the lab
 
-Die Deploy-Logik ist unter Linux mit Pester getestet; die Windows-Cmdlets (Scheduled Tasks, ACLs, DPAPI) sind dabei durch Mocks ersetzt. Auf einem echten Server zu prüfen:
+The deploy logic is tested under Linux with Pester; the Windows cmdlets (scheduled tasks, ACLs, DPAPI) are replaced by mocks there. To verify on a real server:
 
-- [ ] Installation unter Windows PowerShell 5.1 auf VBR 12.3.1 und VBR 13, inklusive Credential-Übergabe an SYSTEM.
-- [ ] VBR 13: Wo liegt das Veeam-PowerShell-Modul, und findet `pwsh.exe` es unter SYSTEM? Annahme im Script: `C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1`; sonst `-VeeamModule` angeben.
-- [ ] Ist SYSTEM in VBR Backup Administrator, sodass `Get-VBRInstalledLicense` funktioniert (OP-3 in `docs/metrics.md`)?
-- [ ] Wiederholt der REST-Task auf der Ziel-Windows-Version unbegrenzt? Ohne `RepetitionDuration` ist das ab Windows Server 2016 der Fall.
-- [ ] Berechtigungen beim Anlegen: Ein neu angelegtes `C:\ProgramData\VeeamExporter` hat sofort nur SYSTEM und Administratoren (Test `Windows: neues Verzeichnis hat von Anfang an ...` in `tests/Deploy.Tests.ps1` unter Windows ausführen).
-- [ ] Berechtigungen: Nach der Installation zeigen `Get-Acl 'C:\Program Files\VeeamExporter' | Format-List` und dasselbe für `C:\ProgramData\VeeamExporter` Besitzer *Administratoren* und die Rechte aus der Tabelle oben. Ein von einem normalen Benutzer vorab angelegtes `C:\ProgramData\VeeamExporter` führt zum Abbruch.
-- [ ] Erzwingt eine GPO `AllSigned`, laufen die unsignierten Skripte nicht. Dann die Skripte signieren oder eine Ausnahme einrichten.
+- [ ] Installation under Windows PowerShell 5.1 on VBR 12.3.1 and VBR 13, including the credential handover to SYSTEM.
+- [ ] VBR 13: where is the Veeam PowerShell module, and does `pwsh.exe` find it under SYSTEM? Assumption in the script: `C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1`; otherwise pass `-VeeamModule`.
+- [ ] Is SYSTEM Backup Administrator in VBR, so that `Get-VBRInstalledLicense` works (OP-3 in `docs/metrics.md`)?
+- [ ] Does the REST task repeat indefinitely on the target Windows version? Without `RepetitionDuration` this is the case from Windows Server 2016 on.
+- [ ] Permissions on creation: a newly created `C:\ProgramData\VeeamExporter` has only SYSTEM and Administrators from the start (run the test `Windows: new directory has from the start ...` in `tests/Deploy.Tests.ps1` under Windows).
+- [ ] Permissions: after installation, `Get-Acl 'C:\Program Files\VeeamExporter' | Format-List` and the same for `C:\ProgramData\VeeamExporter` show owner *Administrators* and the permissions from the table above. A `C:\ProgramData\VeeamExporter` created beforehand by a normal user leads to an abort.
+- [ ] If a GPO enforces `AllSigned`, the unsigned scripts do not run. In that case sign the scripts or set up an exception.

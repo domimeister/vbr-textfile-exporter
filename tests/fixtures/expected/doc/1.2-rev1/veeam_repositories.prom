@@ -1,16 +1,16 @@
-# HELP veeam_repository_capacity_bytes Kapazitaet des Repositories in Bytes (GB aus der API mal 1024^3)
+# HELP veeam_repository_capacity_bytes Repository capacity in bytes (GB from the API times 1024^3)
 # TYPE veeam_repository_capacity_bytes gauge
 veeam_repository_capacity_bytes{repository="Backup Repository 1",repository_type="WinLocal",host="enterprise03.tech.local",sobr=""} 321478302106
 veeam_repository_capacity_bytes{repository="Default Backup Repository",repository_type="WinLocal",host="enterprise06.tech.local",sobr=""} 106729937306
-# HELP veeam_repository_free_bytes Freier Platz im Repository in Bytes
+# HELP veeam_repository_free_bytes Free space in the repository in bytes
 # TYPE veeam_repository_free_bytes gauge
 veeam_repository_free_bytes{repository="Backup Repository 1",repository_type="WinLocal",host="enterprise03.tech.local",sobr=""} 233860969267
 veeam_repository_free_bytes{repository="Default Backup Repository",repository_type="WinLocal",host="enterprise06.tech.local",sobr=""} 17609365914
-# HELP veeam_repository_backup_bytes Von Backup-Dateien belegter Platz in Bytes (nicht fuer den Fuellgrad verwenden)
+# HELP veeam_repository_backup_bytes Space used by backup files in bytes (do not use for the fill level)
 # TYPE veeam_repository_backup_bytes gauge
 veeam_repository_backup_bytes{repository="Backup Repository 1",repository_type="WinLocal",host="enterprise03.tech.local",sobr=""} 186186832282
 veeam_repository_backup_bytes{repository="Default Backup Repository",repository_type="WinLocal",host="enterprise06.tech.local",sobr=""} 32641751450
-# HELP veeam_repository_online 1 Repository online, 0 offline
+# HELP veeam_repository_online 1 repository online, 0 offline
 # TYPE veeam_repository_online gauge
 veeam_repository_online{repository="Backup Repository 1"} 1
 veeam_repository_online{repository="Default Backup Repository"} 1

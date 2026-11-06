@@ -6,8 +6,8 @@ BeforeAll {
     $script:TestFiles = @(Get-ChildItem -LiteralPath $PSScriptRoot -File -Filter '*.ps1')
 }
 
-Describe 'Quellcode-Regeln' {
-    It 'Quell- und Testdateien sind reines ASCII (Windows PowerShell 5.1 liest ohne BOM als ANSI)' {
+Describe 'Source code rules' {
+    It 'source and test files are pure ASCII (Windows PowerShell 5.1 reads files without BOM as ANSI)' {
         $bad = foreach ($f in ($script:AllCodeFiles + $script:TestFiles)) {
             $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
             if (@($bytes | Where-Object { $_ -gt 0x7F }).Count -gt 0) { $f.Name }
@@ -15,7 +15,7 @@ Describe 'Quellcode-Regeln' {
         @($bad) | Should -BeNullOrEmpty
     }
 
-    It 'enthaelt keine PowerShell-7-only-Syntax' {
+    It 'contains no PowerShell-7-only syntax' {
         $forbiddenTokens = @('AndAnd', 'OrOr', 'QuestionQuestion', 'QuestionQuestionEquals', 'QuestionDot', 'QuestionLBracket', 'QuestionMark')
         $bad = foreach ($f in $script:AllCodeFiles) {
             $tokens = $null
@@ -29,7 +29,7 @@ Describe 'Quellcode-Regeln' {
         @($bad) | Should -BeNullOrEmpty
     }
 
-    It 'hat keine Parserfehler' {
+    It 'has no parser errors' {
         $bad = foreach ($f in $script:AllCodeFiles) {
             $tokens = $null
             $errors = $null
@@ -39,7 +39,7 @@ Describe 'Quellcode-Regeln' {
         @($bad) | Should -BeNullOrEmpty
     }
 
-    It 'nutzt weder Out-File noch Set-Content/Add-Content' {
+    It 'uses neither Out-File nor Set-Content/Add-Content' {
         $bad = foreach ($f in $script:AllCodeFiles) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
             $commands = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
@@ -50,7 +50,7 @@ Describe 'Quellcode-Regeln' {
         @($bad) | Should -BeNullOrEmpty
     }
 
-    It 'schaltet die Zertifikatspruefung nie pauschal ab' {
+    It 'never disables certificate validation wholesale' {
         $bad = foreach ($f in $script:SourceFiles) {
             $text = [System.IO.File]::ReadAllText($f.FullName)
             if ($text -match 'ValidationCallback\s*=\s*\{\s*\$true\s*\}' -or $text -match '=>\s*true\b' -or $text -match 'TrustAllCerts') { $f.Name }
@@ -58,25 +58,25 @@ Describe 'Quellcode-Regeln' {
         @($bad) | Should -BeNullOrEmpty
     }
 
-    It 'setzt -UseBasicParsing bei Invoke-WebRequest' {
+    It 'sets -UseBasicParsing on Invoke-WebRequest' {
         $text = ($script:SourceFiles | ForEach-Object { [System.IO.File]::ReadAllText($_.FullName) }) -join "`n"
         $text | Should -Match 'UseBasicParsing\s*=\s*\$true'
         $text | Should -Not -Match 'Invoke-RestMethod'
     }
 
-    It 'folgt keinen HTTP-Weiterleitungen (5.1 und 7)' {
+    It 'follows no HTTP redirects (5.1 and 7)' {
         $text = [System.IO.File]::ReadAllText((Join-Path -Path $script:SrcRoot -ChildPath 'VeeamExporter/Private/Http.ps1'))
         $text | Should -Match 'MaximumRedirection\s*=\s*0'
         $text | Should -Match '\.AllowAutoRedirect\s*=\s*\$false'
     }
 
-    It 'erlaubt unter 5.1 nur TLS 1.2 (kein -bor auf die alte Einstellung)' {
+    It 'allows only TLS 1.2 under 5.1 (no -bor onto the old setting)' {
         $text = [System.IO.File]::ReadAllText((Join-Path -Path $script:SrcRoot -ChildPath 'VeeamExporter/Private/Tls.ps1'))
         $text | Should -Match 'SecurityProtocol\s*=\s*\[System\.Net\.SecurityProtocolType\]::Tls12\s'
         $text | Should -Not -Match 'SecurityProtocol\s*=\s*\[System\.Net\.ServicePointManager\]::SecurityProtocol'
     }
 
-    It 'nutzt -LiteralPath bei Import-/Export-Clixml' {
+    It 'uses -LiteralPath with Import-/Export-Clixml' {
         $files = @(Get-ChildItem -LiteralPath $script:SrcRoot -Recurse -Filter '*.ps1') + @(Get-ChildItem -LiteralPath (Join-Path -Path $script:RepoRoot -ChildPath 'deploy') -Filter '*.ps*1')
         $bad = foreach ($f in $files) {
             $lines = [System.IO.File]::ReadAllLines($f.FullName)
@@ -87,7 +87,7 @@ Describe 'Quellcode-Regeln' {
         @($bad) | Should -BeNullOrEmpty
     }
 
-    It 'ruft nur lesende Veeam-Cmdlets auf' {
+    It 'calls only reading Veeam cmdlets' {
         $allowed = @('Get-VBRServerSession', 'Connect-VBRServer', 'Disconnect-VBRServer', 'Get-VBRInstalledLicense')
         $bad = foreach ($f in $script:AllCodeFiles) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
@@ -105,7 +105,7 @@ Describe 'Quellcode-Regeln' {
         @($bad) | Should -BeNullOrEmpty
     }
 
-    It 'Einstiegsskript nimmt Kommalisten von powershell.exe -File an' {
+    It 'entry script accepts comma-separated lists from powershell.exe -File' {
         $script = Join-Path -Path $script:SrcRoot -ChildPath 'Invoke-VeeamExporter.ps1'
         $missing = Join-Path -Path $TestDrive -ChildPath 'missing.cred.xml'
         $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $script -CredentialPath $missing -Collector 'jobs,objects' -ObjectSessionType 'BackupJob,ReplicaJob' 2>&1
@@ -114,7 +114,7 @@ Describe 'Quellcode-Regeln' {
         ($output -join ' ') | Should -Match 'missing.cred.xml'
     }
 
-    It 'exportiert die Funktionen aus dem Manifest' {
+    It 'exports the functions from the manifest' {
         $manifest = Import-PowerShellDataFile -Path $script:ModuleManifest
         $exported = @((Get-Command -Module VeeamExporter).Name | Sort-Object)
         ($exported -join ',') | Should -BeExactly ((@($manifest.FunctionsToExport) | Sort-Object) -join ',')

@@ -1,53 +1,53 @@
 # Veeam Prometheus Exporter (windows_exporter Textfile)
 
-PowerShell-Exporter für Veeam Backup & Replication (v12.3.1 und v13). Läuft als geplanter Task lokal auf dem VBR-Server, liest die REST API auf `localhost:9419` und schreibt `.prom`-Dateien ins Textfile-Verzeichnis des windows_exporter. Kein eigener Listener, kein neuer Port.
+PowerShell exporter for Veeam Backup & Replication (v12.3.1 and v13). Runs as a scheduled task locally on the VBR server, reads the REST API on `localhost:9419` and writes `.prom` files into the textfile directory of the windows_exporter. No listener of its own, no new port.
 
-**Die Spezifikation ist `docs/metrics.md`.** Metriknamen, Labels, Wertecodes und Alerts kommen von dort. Wenn sich etwas daran ändern muss: erst `docs/metrics.md` anpassen, dann den Code.
+**The specification is `docs/metrics.md`.** Metric names, labels, value codes and alerts come from there. If any of it has to change: update `docs/metrics.md` first, then the code.
 
-## Repo-Struktur (Ziel)
+## Repo structure (target)
 
 ```text
 src/
-  VeeamExporter/              # Modul: Public/ und Private/ Funktionen
-  Invoke-VeeamExporter.ps1    # REST-Collectors: jobs, objects, repositories
-  Invoke-VeeamLicenseExporter.ps1  # Lizenz via Get-VBRInstalledLicense (eigener Task)
-deploy/                       # Task-Definitionen, Install-Script, Credential-Setup
-rules/veeam.rules.yml         # Prometheus-Alerts
+  VeeamExporter/              # module: Public/ and Private/ functions
+  Invoke-VeeamExporter.ps1    # REST collectors: jobs, objects, repositories
+  Invoke-VeeamLicenseExporter.ps1  # license via Get-VBRInstalledLicense (separate task)
+deploy/                       # task definitions, install script, credential setup
+rules/veeam.rules.yml         # Prometheus alerts
 dashboards/                   # Grafana
 tests/                        # Pester 5
-  fixtures/                   # JSON-Responses aus der Veeam-REST-Doku
+  fixtures/                   # JSON responses from the Veeam REST docs
 docs/metrics.md
 ```
 
-## Harte Regeln
+## Hard rules
 
-- **Nur lesen.** Ausschliesslich GET-Requests, dazu `POST /api/oauth2/token` und `POST /api/oauth2/logout`. Niemals Endpoints aufrufen, die in VBR etwas ändern (Jobs starten/stoppen, Lizenz, Repositories, Credentials).
-- **PowerShell 5.1 und 7 kompatibel.** Keine PS7-only-Syntax (`?:`, `??`, `&&`, `||`, `ForEach-Object -Parallel`, `-SkipCertificateCheck`). In 5.1 `-UseBasicParsing` setzen und TLS 1.2 aktivieren.
-- **Zertifikat:** Kein pauschales Abschalten der Prüfung. Thumbprint des lokalen VBR-Zertifikats pinnen (Konfiguration), unter 5.1 über einen Validation-Callback, unter 7 über den Handler.
-- **REST:** `x-api-version` in jedem Request, auch beim Token. Höchste verfügbare Revision wählen: 1.3-rev2, 1.3-rev1, 1.3-rev0, 1.2-rev1. Paging über `skip`/`limit` immer bis zum Ende.
-- **Dateien schreiben:** UTF-8 ohne BOM, LF, Zeilenumbruch am Dateiende. Erst `<name>.prom.tmp` schreiben, dann `Move-Item -Force` (atomar). Nie `Out-File` oder `Set-Content` ohne explizites Encoding.
-- **Eine Datei pro Collector** (`veeam_jobs.prom`, `veeam_objects.prom`, `veeam_repositories.prom`, `veeam_license.prom`), nur bei Erfolg ersetzen. `veeam_exporter.prom` mit den Health-Metriken bei jedem Lauf schreiben.
-- **Fehler isolieren:** try/catch pro Collector. Ein fehlgeschlagener Collector darf die anderen nicht stoppen.
-- **Prometheus-Format:** `# HELP` und `# TYPE` genau einmal pro Metrik. Labelwerte escapen (`\` → `\\`, `"` → `\"`, Zeilenumbruch → `\n`). Keine Timestamps an Samples. snake_case mit Einheiten-Suffix (`_bytes`, `_seconds`, `_timestamp_seconds`).
-- **Labels:** `job_name`, nie `job` oder `instance` (setzt Prometheus selbst).
-- **Wertecodes:** Success 0, Warning 1, Failed 2, None -1.
-- **Einheiten:** GB aus der API mit 1073741824 multiplizieren (Annahme GiB, siehe offene Punkte).
-- **Secrets:** Passwort nur per DPAPI (`Export-Clixml`) für das Task-Konto. Keine Credentials im Repo, in Logs oder in `.prom`-Dateien.
+- **Read-only.** GET requests only, plus `POST /api/oauth2/token` and `POST /api/oauth2/logout`. Never call endpoints that change anything in VBR (start/stop jobs, license, repositories, credentials).
+- **Compatible with PowerShell 5.1 and 7.** No PS7-only syntax (`?:`, `??`, `&&`, `||`, `ForEach-Object -Parallel`, `-SkipCertificateCheck`). In 5.1 set `-UseBasicParsing` and enable TLS 1.2.
+- **Certificate:** never disable validation wholesale. Pin the thumbprint of the local VBR certificate (configuration), under 5.1 via a validation callback, under 7 via the handler.
+- **REST:** `x-api-version` in every request, including the token request. Pick the highest available revision: 1.3-rev2, 1.3-rev1, 1.3-rev0, 1.2-rev1. Always page via `skip`/`limit` to the end.
+- **Writing files:** UTF-8 without BOM, LF, newline at end of file. Write `<name>.prom.tmp` first, then `Move-Item -Force` (atomic). Never `Out-File` or `Set-Content` without an explicit encoding.
+- **One file per collector** (`veeam_jobs.prom`, `veeam_objects.prom`, `veeam_repositories.prom`, `veeam_license.prom`), replaced only on success. Write `veeam_exporter.prom` with the health metrics on every run.
+- **Isolate failures:** try/catch per collector. A failed collector must not stop the others.
+- **Prometheus format:** `# HELP` and `# TYPE` exactly once per metric. Escape label values (`\` → `\\`, `"` → `\"`, newline → `\n`). No timestamps on samples. snake_case with unit suffix (`_bytes`, `_seconds`, `_timestamp_seconds`).
+- **Labels:** `job_name`, never `job` or `instance` (Prometheus sets those itself).
+- **Value codes:** Success 0, Warning 1, Failed 2, None -1.
+- **Units:** multiply GB from the API by 1073741824 (assuming GiB, see open points).
+- **Secrets:** password only via DPAPI (`Export-Clixml`) for the task account. No credentials in the repo, in logs or in `.prom` files.
 
 ## Tests
 
-- Pester 5, lauffähig unter `powershell.exe` (5.1) und `pwsh` (7): `Invoke-Pester -Path tests`
+- Pester 5, runnable under `powershell.exe` (5.1) and `pwsh` (7): `Invoke-Pester -Path tests`
 - Lint: `Invoke-ScriptAnalyzer -Path src -Recurse`
-- REST-Aufrufe in Tests mocken. Fixtures in `tests/fixtures/` aus den Response-Beispielen der Veeam-Doku (jobs/states, sessions, taskSessions, repositories/states).
-- Tests prüfen die erzeugten `.prom`-Dateien zeilengenau, inklusive Escaping, Encoding (kein BOM) und Zeilenenden.
-- Falls `promtool` verfügbar ist: `Get-Content <datei> | promtool check metrics`.
+- Mock REST calls in tests. Fixtures in `tests/fixtures/` taken from the response examples of the Veeam docs (jobs/states, sessions, taskSessions, repositories/states).
+- Tests check the generated `.prom` files line by line, including escaping, encoding (no BOM) and line endings.
+- If `promtool` is available: `Get-Content <file> | promtool check metrics`.
 
-## Arbeitsweise
+## Way of working
 
-- Reihenfolge: Skelett (Auth, Versions-Probe, Writer) → Jobs → Objects → Repositories → Lizenz → Deploy.
-- Offene Punkte stehen am Ende von `docs/metrics.md`. Annahmen im Code mit `# ANNAHME:` markieren und dort verlinken, statt sie stillschweigend festzulegen.
+- Order: skeleton (auth, version probe, writer) → jobs → objects → repositories → license → deploy.
+- Open points are listed at the end of `docs/metrics.md`. Mark assumptions in the code with `# ASSUMPTION:` and link them there instead of settling them silently.
 
 ## Git-Workflow
 
-- Keine claude.ai-Session-Links in Commit-Messages oder PR-Beschreibungen.
-- Sprache: Anweisungen kommen auf Deutsch, aber alles, was ins Repo oder auf GitHub geht, ist Englisch: Code, Kommentare, Bezeichner, Log- und Fehlermeldungen, Doku, Commit-Messages, Branch-Namen, PR-Titel und -Beschreibungen, Issues und Review-Kommentare.
+- No claude.ai session links in commit messages or PR descriptions.
+- Language: instructions may be given in German, but everything that goes into the repo or onto GitHub is in English: code, comments, identifiers, log and error messages, docs, commit messages, branch names, PR titles and descriptions, issues and review comments.

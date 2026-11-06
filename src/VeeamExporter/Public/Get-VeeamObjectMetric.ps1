@@ -3,7 +3,7 @@ function Get-VeeamObjectMetric {
     .SYNOPSIS
     Objects collector: newest task session per job and object -> metrics for veeam_objects.prom.
     .DESCRIPTION
-    Follows docs/metrics.md, section "Nicht gesicherte VMs (pro Objekt)":
+    Follows docs/metrics.md, section "Unprotected VMs (per object)":
     jobs/states for the job names, sessions and taskSessions per session type
     (one request per type, 1.2-rev1 accepts a single value only), all pages.
     Pass -JobState, -JobSession and -TaskSession to build the metrics from
@@ -44,10 +44,10 @@ function Get-VeeamObjectMetric {
         $TaskSession = $tasks.ToArray()
     }
 
-    $lastResult = New-PromMetric -Name 'veeam_object_last_result' -Help 'Letzter Task-Lauf: 0 Success, 1 Warning, 2 Failed, -1 None'
-    $lastRun = New-PromMetric -Name 'veeam_object_last_run_timestamp_seconds' -Help 'Ende des letzten Task-Laufs als Unix-Zeit (Start, solange er laeuft)'
-    $processed = New-PromMetric -Name 'veeam_object_last_processed_bytes' -Help 'Im letzten Task-Lauf verarbeitete Bytes'
-    $failure = New-PromMetric -Name 'veeam_object_last_failure_info' -Help 'Meldung des letzten Task-Laufs bei Warning oder Failed (Wert immer 1)'
+    $lastResult = New-PromMetric -Name 'veeam_object_last_result' -Help 'Last task run: 0 Success, 1 Warning, 2 Failed, -1 None'
+    $lastRun = New-PromMetric -Name 'veeam_object_last_run_timestamp_seconds' -Help 'End of the last task run as Unix time (start while it is running)'
+    $processed = New-PromMetric -Name 'veeam_object_last_processed_bytes' -Help 'Bytes processed in the last task run'
+    $failure = New-PromMetric -Name 'veeam_object_last_failure_info' -Help 'Message of the last task run on Warning or Failed (value always 1)'
 
     $selected = @(Select-VeeamLatestObjectTask -JobState @($JobState) -JobSession @($JobSession) -TaskSession @($TaskSession))
     foreach ($entry in $selected) {

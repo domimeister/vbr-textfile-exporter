@@ -103,7 +103,7 @@ function Invoke-VeeamExporterRun {
         }
 
         $health = New-VeeamCollectorHealthMetric -Result $results.ToArray()
-        $info = New-PromMetric -Name 'veeam_exporter_info' -Help 'Exporter- und Server-Version (Wert immer 1)'
+        $info = New-PromMetric -Name 'veeam_exporter_info' -Help 'Exporter and server version (value always 1)'
         Add-PromSample -Metric $info -Value 1 -Labels ([ordered]@{
                 script_version = $scriptVersion
                 api_version    = $apiVersionUsed

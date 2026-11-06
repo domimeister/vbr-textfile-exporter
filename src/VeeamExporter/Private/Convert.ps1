@@ -54,7 +54,7 @@ function ConvertTo-VeeamDateTimeOffset {
     if ($dt.Kind -ne [System.DateTimeKind]::Unspecified) {
         return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt.ToUniversalTime())
     }
-    # ANNAHME: no offset means local time of the VBR server, see docs/metrics.md#OP-9
+    # ASSUMPTION: no offset means local time of the VBR server, see docs/metrics.md#OP-9
     $offset = $script:VeeamTimeZone.GetUtcOffset($dt)
     return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt, $offset)
 }
@@ -95,7 +95,7 @@ function ConvertTo-VeeamResultCode {
         '^(?i)failed$' { return 2 }
         '^(?i)none$' { return -1 }
     }
-    # ANNAHME: unknown result values count as None, see docs/metrics.md#OP-8
+    # ASSUMPTION: unknown result values count as None, see docs/metrics.md#OP-8
     return -1
 }
 
@@ -145,7 +145,7 @@ function ConvertTo-VeeamBool {
 
 function ConvertTo-VeeamByteCount {
     # GB value from the API -> whole bytes.
-    # ANNAHME: GB means GiB (1024^3), see docs/metrics.md#OP-5
+    # ASSUMPTION: GB means GiB (1024^3), see docs/metrics.md#OP-5
     [CmdletBinding()]
     [OutputType([long])]
     param(

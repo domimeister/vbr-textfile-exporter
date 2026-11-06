@@ -9,7 +9,7 @@ Describe 'Write-PromFile' {
         $script:Target = Join-Path -Path $script:Dir -ChildPath 'veeam_test.prom'
     }
 
-    It 'schreibt UTF-8 ohne BOM' {
+    It 'writes UTF-8 without BOM' {
         $u = [string][char]0x00FC
         Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content ("a{x=`"B" + $u + "ro`"} 1`n")
         $bytes = [System.IO.File]::ReadAllBytes($script:Target)
@@ -19,7 +19,7 @@ Describe 'Write-PromFile' {
         $hex | Should -Match 'C3BC'
     }
 
-    It 'schreibt nur LF und einen Zeilenumbruch am Ende' {
+    It 'writes only LF and one newline at the end' {
         Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`r`nb 2"
         $bytes = [System.IO.File]::ReadAllBytes($script:Target)
         ($bytes -contains 0x0D) | Should -BeFalse
@@ -27,12 +27,12 @@ Describe 'Write-PromFile' {
         Get-FileText -Path $script:Target | Should -BeExactly "a 1`nb 2`n"
     }
 
-    It 'haengt keinen zweiten Zeilenumbruch an' {
+    It 'does not append a second newline' {
         Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n"
         Get-FileText -Path $script:Target | Should -BeExactly "a 1`n"
     }
 
-    It 'ersetzt eine bestehende Datei und hinterlaesst keine .tmp-Datei' {
+    It 'replaces an existing file and leaves no .tmp file behind' {
         [System.IO.File]::WriteAllText($script:Target, "old 1`n")
         Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "new 1`n"
         Get-FileText -Path $script:Target | Should -BeExactly "new 1`n"
@@ -40,7 +40,7 @@ Describe 'Write-PromFile' {
         @(Get-ChildItem -LiteralPath $script:Dir).Count | Should -Be 1
     }
 
-    It 'schreibt erst <name>.prom.tmp und verschiebt dann' {
+    It 'writes <name>.prom.tmp first and then moves it' {
         Mock -ModuleName VeeamExporter Move-Item { throw 'move failed' }
         { Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*move failed*'
         Should -Invoke -ModuleName VeeamExporter Move-Item -Times 1 -Exactly -ParameterFilter {
@@ -50,25 +50,25 @@ Describe 'Write-PromFile' {
         Test-Path -LiteralPath ($script:Target + '.tmp') | Should -BeFalse
     }
 
-    It 'schreibt nicht durch eine vorhandene .tmp-Datei als Link hindurch' {
+    It 'does not write through an existing .tmp file that is a link' {
         $victim = Join-Path -Path $TestDrive -ChildPath ('opfer-' + [guid]::NewGuid().ToString('N') + '.txt')
         [System.IO.File]::WriteAllText($victim, 'original')
         try { $null = New-Item -ItemType SymbolicLink -Path ($script:Target + '.tmp') -Target $victim -ErrorAction Stop }
-        catch { Set-ItResult -Skipped -Because 'symbolische Links nicht erlaubt'; return }
+        catch { Set-ItResult -Skipped -Because 'symbolic links not permitted'; return }
         Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n"
         [System.IO.File]::ReadAllText($victim) | Should -BeExactly 'original'
         Get-FileText -Path $script:Target | Should -BeExactly "a 1`n"
         (Get-Item -LiteralPath $script:Target -Force).Attributes.HasFlag([System.IO.FileAttributes]::ReparsePoint) | Should -BeFalse
     }
 
-    It 'ersetzt eine liegengebliebene .tmp-Datei' {
+    It 'replaces a leftover .tmp file' {
         [System.IO.File]::WriteAllText(($script:Target + '.tmp'), 'stale')
         Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n"
         Get-FileText -Path $script:Target | Should -BeExactly "a 1`n"
         Test-Path -LiteralPath ($script:Target + '.tmp') | Should -BeFalse
     }
 
-    It 'verweigert ein Verzeichnis anstelle der Zieldatei oder der .tmp-Datei' {
+    It 'refuses a directory in place of the target file or the .tmp file' {
         $null = New-Item -ItemType Directory -Path $script:Target
         { Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*is a directory or junction*'
         @(Get-ChildItem -LiteralPath $script:Target).Count | Should -Be 0
@@ -78,11 +78,11 @@ Describe 'Write-PromFile' {
         Test-Path -LiteralPath $script:Target | Should -BeFalse
     }
 
-    It 'wirft, wenn das Verzeichnis fehlt' {
-        { Write-PromFile -Directory (Join-Path $script:Dir 'fehlt') -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*does not exist*'
+    It 'throws if the directory is missing' {
+        { Write-PromFile -Directory (Join-Path $script:Dir 'missing') -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*does not exist*'
     }
 
-    It 'akzeptiert nur Dateinamen auf .prom' {
+    It 'accepts only file names ending in .prom' {
         { Write-PromFile -Directory $script:Dir -Name '..\evil.prom' -Content "a 1`n" } | Should -Throw
         { Write-PromFile -Directory $script:Dir -Name 'veeam_test.txt' -Content "a 1`n" } | Should -Throw
     }
