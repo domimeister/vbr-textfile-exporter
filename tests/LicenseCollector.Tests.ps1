@@ -177,7 +177,9 @@ Describe 'Wrapper around the Veeam PowerShell module' {
 
     It 'returns the license as an array' {
         Mock -ModuleName VeeamExporter Get-VBRInstalledLicense { [pscustomobject]@{ Status = 'Valid' } }
-        $result = InModuleScope VeeamExporter { , (Get-VeeamInstalledLicense) }
+        # InModuleScope unrolls its output, and under Windows PowerShell 5.1 a
+        # single pscustomobject has no .Count, hence @() around the call.
+        $result = @(InModuleScope VeeamExporter { Get-VeeamInstalledLicense })
         $result.Count | Should -Be 1
         $result[0].Status | Should -Be 'Valid'
     }

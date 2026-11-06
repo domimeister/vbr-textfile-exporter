@@ -1,7 +1,9 @@
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
-    $script:SourceFiles = @(Get-ChildItem -LiteralPath $script:SrcRoot -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1')
-    $script:DeployFiles = @(Get-ChildItem -LiteralPath (Join-Path -Path $script:RepoRoot -ChildPath 'deploy') -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1')
+    # Not -Include: Windows PowerShell 5.1 ignores it together with -LiteralPath.
+    $codeExtensions = @('.ps1', '.psm1', '.psd1')
+    $script:SourceFiles = @(Get-ChildItem -LiteralPath $script:SrcRoot -Recurse -File | Where-Object { $codeExtensions -contains $_.Extension })
+    $script:DeployFiles = @(Get-ChildItem -LiteralPath (Join-Path -Path $script:RepoRoot -ChildPath 'deploy') -Recurse -File | Where-Object { $codeExtensions -contains $_.Extension })
     $script:AllCodeFiles = $script:SourceFiles + $script:DeployFiles
     $script:TestFiles = @(Get-ChildItem -LiteralPath $PSScriptRoot -File -Filter '*.ps1')
 }
@@ -106,6 +108,9 @@ Describe 'Source code rules' {
     }
 
     It 'entry script accepts comma-separated lists from powershell.exe -File' {
+        # Windows PowerShell 5.1 turns redirected stderr of a child process into a
+        # terminating error when $ErrorActionPreference is Stop (GitHub Actions sets it).
+        $ErrorActionPreference = 'Continue'
         $script = Join-Path -Path $script:SrcRoot -ChildPath 'Invoke-VeeamExporter.ps1'
         $missing = Join-Path -Path $TestDrive -ChildPath 'missing.cred.xml'
         $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $script -CredentialPath $missing -Collector 'jobs,objects' -ObjectSessionType 'BackupJob,ReplicaJob' 2>&1
