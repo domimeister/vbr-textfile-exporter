@@ -12,6 +12,7 @@
         'Get-VeeamServerInfo'
         'Get-VeeamJobMetric'
         'Get-VeeamObjectMetric'
+        'Get-VeeamRepositoryMetric'
         'Invoke-VeeamExporterRun'
         'New-PromMetric'
         'Add-PromSample'

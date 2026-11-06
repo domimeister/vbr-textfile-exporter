@@ -13,10 +13,13 @@ Spezifikation: [`docs/metrics.md`](docs/metrics.md). Regeln für die Entwicklung
 | Writer (atomar, UTF-8 ohne BOM, LF) | fertig |
 | Collector `jobs` → `veeam_jobs.prom` | fertig |
 | Collector `objects` → `veeam_objects.prom` | fertig |
+| Collector `repositories` → `veeam_repositories.prom` | fertig |
 | Health → `veeam_exporter.prom` | fertig |
-| Collectors `repositories`, Lizenz, Deploy | offen |
+| Lizenz, Deploy | offen |
 
 ## Aufruf
+
+Das Veeam-Konto braucht die Rolle **Backup Viewer**. `vbr_version` in `veeam_exporter_info` bleibt damit leer, weil `/api/v1/serverInfo` nur Backup Administrator lesen darf (OP-13 in `docs/metrics.md`).
 
 Credential einmalig **als Task-Konto** anlegen (DPAPI, nur dieses Konto auf diesem Server kann es lesen):
 
@@ -37,7 +40,7 @@ Ohne `-CertificateThumbprint` gilt die normale .NET-Zertifikatsprüfung; das sel
 
 | Parameter | Standard | Bedeutung |
 | --- | --- | --- |
-| `-Collector` | `jobs`, `objects` | Welche Collectors laufen. |
+| `-Collector` | `jobs`, `objects`, `repositories` | Welche Collectors laufen. |
 | `-ObjectLookbackDays` | `8` | Wie weit `objects` Task-Sessions zurückliest. |
 | `-ObjectSessionType` | `BackupJob`, `ReplicaJob` | Session-Typen für `objects` (siehe OP-11 in `docs/metrics.md`). |
 | `-TimeoutSec` | `60` | Timeout pro HTTP-Request. |

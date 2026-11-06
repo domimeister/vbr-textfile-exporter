@@ -26,7 +26,7 @@ param(
     [string]$BaseUri = 'https://localhost:9419',
     [string]$CertificateThumbprint,
     [string]$ApiVersion,
-    [ValidateSet('jobs', 'objects')][string[]]$Collector = @('jobs', 'objects'),
+    [ValidateSet('jobs', 'objects', 'repositories')][string[]]$Collector = @('jobs', 'objects', 'repositories'),
     [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
     [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
     [int]$TimeoutSec = 60

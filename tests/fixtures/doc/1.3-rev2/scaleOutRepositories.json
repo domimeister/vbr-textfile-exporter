@@ -1,0 +1,63 @@
+{
+  "data": [
+    {
+      "id": "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+      "name": "SOBR Production",
+      "description": "Scale-out backup repository for production workloads",
+      "uniqueId": "f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6",
+      "performanceTier": {
+        "performanceExtents": [
+          {
+            "id": "f0a1b2c3-4d5e-4f6a-9b7c-0d1e2f3a4b5c",
+            "name": "extent01"
+          }
+        ]
+      },
+      "placementPolicy": {
+        "type": "DataLocality",
+        "enforceStrictPlacementPolicy": false
+      },
+      "capacityTier": {
+        "isEnabled": false
+      },
+      "archiveTier": {
+        "isEnabled": false
+      }
+    },
+    {
+      "id": "1b2c3d4e-5f6a-4b7c-9d8e-9f0a1b2c3d4e",
+      "name": "SOBR Archive",
+      "description": "Scale-out backup repository for long-term archival",
+      "uniqueId": "a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7",
+      "performanceTier": {
+        "performanceExtents": [
+          {
+            "id": "a1b2c3d4-5e6f-4a7b-8c9d-1e2f3a4b5c6d",
+            "name": "extent02"
+          }
+        ]
+      },
+      "placementPolicy": {
+        "type": "Performance",
+        "enforceStrictPlacementPolicy": true
+      },
+      "capacityTier": {
+        "isEnabled": true,
+        "operationalRestorePeriodDays": 30,
+        "copyPolicyEnabled": true,
+        "movePolicyEnabled": false
+      },
+      "archiveTier": {
+        "isEnabled": true,
+        "extentId": "d4e5f6a7-8b9c-4d0e-9f1a-2b3c4d5e6f7a",
+        "archivePeriodDays": 180
+      }
+    }
+  ],
+  "pagination": {
+    "total": 2,
+    "count": 2,
+    "skip": 0,
+    "limit": 100
+  }
+}

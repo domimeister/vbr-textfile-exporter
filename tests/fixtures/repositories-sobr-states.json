@@ -1,0 +1,127 @@
+{
+  "data": [
+    {
+      "type": "WinLocal",
+      "description": "",
+      "hostId": null,
+      "hostName": "vbr-px01.tech.local",
+      "path": "E:\\Backups",
+      "id": "f0a1b2c3-4d5e-4f6a-9b7c-0d1e2f3a4b5c",
+      "name": "extent01",
+      "capacityGB": 1024.0,
+      "freeGB": 409.6,
+      "usedSpaceGB": 512.3,
+      "isOnline": true,
+      "isOutOfDate": false,
+      "scaleOutRepositoryDetails": {
+        "membership": "SOBR Production",
+        "scaleOutRepositoryId": "0a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d",
+        "extentType": "Performance"
+      }
+    },
+    {
+      "type": "LinuxHardened",
+      "description": "",
+      "hostId": null,
+      "hostName": "lhr01.tech.local",
+      "path": "/mnt/veeam",
+      "id": "A1B2C3D4-5E6F-4A7B-8C9D-1E2F3A4B5C6D",
+      "name": "extent02",
+      "capacityGB": 20480.0,
+      "freeGB": 1843.2,
+      "usedSpaceGB": 17900.8,
+      "isOnline": false,
+      "isOutOfDate": "true"
+    },
+    {
+      "type": "AmazonS3Glacier",
+      "description": "",
+      "hostId": null,
+      "hostName": null,
+      "path": null,
+      "id": "d4e5f6a7-8b9c-4d0e-9f1a-2b3c4d5e6f7a",
+      "name": "Glacier Archive",
+      "capacityGB": 0,
+      "freeGB": 0,
+      "usedSpaceGB": 12.5,
+      "isOnline": true,
+      "isOutOfDate": false
+    },
+    {
+      "type": "AmazonS3",
+      "description": "",
+      "hostId": null,
+      "hostName": null,
+      "path": null,
+      "id": "e5f6a7b8-9c0d-4e1f-8a2b-3c4d5e6f7a8b",
+      "name": "S3 Bucket Offsite",
+      "usedSpaceGB": 2048.7,
+      "isOnline": true
+    },
+    {
+      "type": "WinLocal",
+      "description": "",
+      "hostId": null,
+      "hostName": "enterprise06.tech.local",
+      "path": "C:\\Backup",
+      "id": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "name": "Default Backup Repository",
+      "capacityGB": 99.4,
+      "freeGB": 16.4,
+      "usedSpaceGB": 30.4,
+      "isOnline": true,
+      "isOutOfDate": true
+    },
+    {
+      "type": "Nfs",
+      "description": "",
+      "hostId": null,
+      "hostName": "nas02",
+      "path": null,
+      "id": "f6a7b8c9-0d1e-4f2a-9b3c-4d5e6f7a8b9c",
+      "name": "Neues Extent",
+      "capacityGB": 500.0,
+      "freeGB": 499.9,
+      "usedSpaceGB": 0.0,
+      "isOnline": true,
+      "isOutOfDate": false,
+      "scaleOutRepositoryDetails": {
+        "membership": "SOBR Neu",
+        "scaleOutRepositoryId": "99999999-9999-4999-8999-999999999999",
+        "extentType": "Performance"
+      }
+    },
+    {
+      "type": "Smb",
+      "description": "",
+      "hostId": null,
+      "hostName": "nas01",
+      "path": null,
+      "id": "a7b8c9d0-1e2f-4a3b-8c4d-5e6f7a8b9c0d",
+      "name": "NAS \"Keller\" \\\\nas01\\veeam",
+      "capacityGB": 0.1,
+      "freeGB": 0.05,
+      "usedSpaceGB": 0.0,
+      "isOnline": "TRUE",
+      "isOutOfDate": "unknown"
+    },
+    {
+      "type": "WinLocal",
+      "description": "",
+      "hostId": null,
+      "hostName": "srv9",
+      "path": null,
+      "id": "b8c9d0e1-2f3a-4b4c-9d5e-6f7a8b9c0d1e",
+      "name": "Ohne Status",
+      "capacityGB": 10.0,
+      "freeGB": 5.0,
+      "usedSpaceGB": 1.0
+    }
+  ],
+  "pagination": {
+    "total": 8,
+    "count": 8,
+    "skip": 0,
+    "limit": 200
+  }
+}

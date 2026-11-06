@@ -116,3 +116,40 @@ function Format-VeeamResultMessage {
     }
     return $text
 }
+
+function ConvertTo-VeeamBool {
+    # Boolean field that may also arrive as a string ("true"/"false"), as in
+    # the 1.3-rev0 doc example. [bool]'false' would be $true in PowerShell.
+    # Returns $true, $false or $null (missing / not readable).
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$Value
+    )
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [bool]) { return $Value }
+    if ($Value -is [string]) {
+        switch -Regex ($Value.Trim()) {
+            '^(?i)(true|1)$' { return $true }
+            '^(?i)(false|0)$' { return $false }
+        }
+        return $null
+    }
+    try { return ([System.Convert]::ToDouble($Value, [System.Globalization.CultureInfo]::InvariantCulture) -ne 0) }
+    catch { return $null }
+}
+
+function ConvertTo-VeeamByteCount {
+    # GB value from the API -> whole bytes.
+    # ANNAHME: GB means GiB (1024^3), see docs/metrics.md#OP-5
+    [CmdletBinding()]
+    [OutputType([long])]
+    param(
+        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$GB
+    )
+    if ($null -eq $GB) { return $null }
+    if ($GB -is [string] -and $GB.Trim().Length -eq 0) { return $null }
+    $value = [System.Convert]::ToDouble($GB, [System.Globalization.CultureInfo]::InvariantCulture)
+    if ([double]::IsNaN($value) -or [double]::IsInfinity($value)) { return $null }
+    return [int64][math]::Round($value * 1073741824.0, [System.MidpointRounding]::AwayFromZero)
+}

@@ -37,6 +37,9 @@ Describe 'promtool check metrics' {
         @{ Name = 'doc/1.2-rev1/veeam_objects.prom' }
         @{ Name = 'doc/1.3-rev2/veeam_jobs.prom' }
         @{ Name = 'doc/1.3-rev2/veeam_objects.prom' }
+        @{ Name = 'veeam_repositories_sobr.prom' }
+        @{ Name = 'doc/1.2-rev1/veeam_repositories.prom' }
+        @{ Name = 'doc/1.3-rev0/veeam_repositories.prom' }
     ) {
         param($Name)
         if (-not $script:Promtool) { Set-ItResult -Skipped -Because 'promtool nicht im PATH'; return }
@@ -54,6 +57,8 @@ Describe 'promtool check metrics' {
                 '/api/v1/jobs/states' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'jobs-states-escaping.json') }
                 '/api/v1/sessions' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'objects-edge-sessions.json') }
                 '/api/v1/taskSessions' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'objects-edge-taskSessions.json') }
+                '/api/v1/backupInfrastructure/repositories/states' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'repositories-sobr-states.json') }
+                '/api/v1/backupInfrastructure/scaleOutRepositories' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'doc/1.3-rev2/scaleOutRepositories.json') }
             }
             return New-HttpResponse -StatusCode 200
         }
@@ -62,7 +67,7 @@ Describe 'promtool check metrics' {
         $null = Invoke-VeeamExporterRun -TextfileDirectory $dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
 
         $files = @(Get-ChildItem -LiteralPath $dir -Filter '*.prom')
-        $files.Count | Should -Be 3
+        $files.Count | Should -Be 4
         foreach ($file in $files) {
             $result = Invoke-PromtoolCheck -Bytes ([System.IO.File]::ReadAllBytes($file.FullName))
             $result.Output | Should -BeNullOrEmpty -Because $file.Name

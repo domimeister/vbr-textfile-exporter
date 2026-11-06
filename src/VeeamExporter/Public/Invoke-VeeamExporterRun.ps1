@@ -14,18 +14,20 @@ function Invoke-VeeamExporterRun {
         [string]$BaseUri = 'https://localhost:9419',
         [AllowNull()][AllowEmptyString()][string]$CertificateThumbprint,
         [AllowNull()][AllowEmptyString()][string]$ApiVersion,
-        [ValidateSet('jobs', 'objects')][string[]]$Collector = @('jobs', 'objects'),
+        [ValidateSet('jobs', 'objects', 'repositories')][string[]]$Collector = @('jobs', 'objects', 'repositories'),
         [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
         [ValidateNotNullOrEmpty()][string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
         [int]$TimeoutSec = 60
     )
     $collectorCommands = @{
-        jobs    = 'Get-VeeamJobMetric'
-        objects = 'Get-VeeamObjectMetric'
+        jobs         = 'Get-VeeamJobMetric'
+        objects      = 'Get-VeeamObjectMetric'
+        repositories = 'Get-VeeamRepositoryMetric'
     }
     $collectorArguments = @{
-        jobs    = @{}
-        objects = @{ LookbackDays = $ObjectLookbackDays; SessionType = $ObjectSessionType }
+        jobs         = @{}
+        objects      = @{ LookbackDays = $ObjectLookbackDays; SessionType = $ObjectSessionType }
+        repositories = @{}
     }
 
     $results = New-Object -TypeName System.Collections.Generic.List[object]
@@ -47,7 +49,14 @@ function Invoke-VeeamExporterRun {
                 $vbrVersion = [string](Get-VeeamField -InputObject $serverInfo -Name 'buildVersion')
             }
             catch {
-                Write-Warning ('serverInfo failed: {0}' -f $_.Exception.Message)
+                # serverInfo is for Backup Administrator only (docs/metrics.md#OP-13):
+                # with the Viewer role a 403 is expected, vbr_version stays empty.
+                if ($_.Exception.Message -match 'HTTP 403') {
+                    Write-Verbose ('serverInfo not permitted for this account: {0}' -f $_.Exception.Message)
+                }
+                else {
+                    Write-Warning ('serverInfo failed: {0}' -f $_.Exception.Message)
+                }
             }
         }
 
