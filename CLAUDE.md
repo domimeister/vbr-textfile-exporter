@@ -50,3 +50,4 @@ docs/metrics.md
 ## Git-Workflow
 
 - Keine claude.ai-Session-Links in Commit-Messages oder PR-Beschreibungen.
+- Sprache: Anweisungen kommen auf Deutsch, aber alles, was ins Repo oder auf GitHub geht, ist Englisch: Code, Kommentare, Bezeichner, Log- und Fehlermeldungen, Doku, Commit-Messages, Branch-Namen, PR-Titel und -Beschreibungen, Issues und Review-Kommentare.
