@@ -169,14 +169,28 @@ Describe 'Task arguments' {
     }
 
     It 'registers tasks as SYSTEM with repetition or a daily trigger' {
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskAction { [pscustomobject]@{ Execute = $Execute; Argument = $Argument } }
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskPrincipal { [pscustomobject]@{ UserId = $UserId } }
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskSettingsSet { [pscustomobject]@{} }
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskTrigger { [pscustomobject]@{} }
-        # On Windows these mock the real ScheduledTasks cmdlets, which keep their
-        # CimInstance parameter types; the fake objects above would not bind.
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTask { [pscustomobject]@{} } -RemoveParameterType Action, Principal, Settings, Trigger
-        Mock -ModuleName VeeamExporterDeploy Register-ScheduledTask { } -RemoveParameterType InputObject
+        # On Windows these mocks replace the real ScheduledTasks cmdlets. Their
+        # parameters stay CimInstance-typed, and Pester also binds the dynamic
+        # parameters of the original, so the mocks hand out real task objects
+        # there (in memory, never registered; module-qualified calls bypass the
+        # mocks). The untyped Linux stubs take plain objects.
+        $script:RealTaskCmdlets = -not ($script:CreatedStubs -contains 'New-ScheduledTask')
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskAction {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskAction -Execute 'cmd.exe' } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskPrincipal {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskSettingsSet {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskSettingsSet } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskTrigger {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskTrigger -Once -At ([datetime]::Today) } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTask {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTask -Action (ScheduledTasks\New-ScheduledTaskAction -Execute 'cmd.exe') } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy Register-ScheduledTask { }
         InModuleScope VeeamExporterDeploy {
             foreach ($kind in 'Rest', 'License') {
                 $d = Get-VeeamExporterTaskDefinition -Kind $kind -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory 'C:\t' -CertificateThumbprint 'AA'
@@ -766,13 +780,17 @@ Describe 'Reading the certificate from localhost:9419' {
         & $openssl.Source req -x509 -newkey rsa:2048 -nodes -keyout $key -out $crt -days 1 -subj '/CN=vbr-test' 2>$null
         $fingerprint = ((& $openssl.Source x509 -in $crt -noout -fingerprint -sha1) -replace '^.*=', '' -replace ':', '')
         $port = Get-Random -Minimum 20000 -Maximum 40000
-        $server = Start-Process -FilePath $openssl.Source -ArgumentList @('s_server', '-accept', $port, '-cert', $crt, '-key', $key, '-quiet') -PassThru -RedirectStandardOutput (Join-Path $dir 'out.txt') -RedirectStandardError (Join-Path $dir 'err.txt')
+        # IPv4 explicitly: on Windows, s_server may listen on IPv6 only, and the
+        # TcpClient of .NET Framework (Windows PowerShell 5.1) connects via IPv4.
+        $server = Start-Process -FilePath $openssl.Source -ArgumentList @('s_server', '-accept', "127.0.0.1:$port", '-cert', $crt, '-key', $key, '-quiet') -PassThru -RedirectStandardOutput (Join-Path $dir 'out.txt') -RedirectStandardError (Join-Path $dir 'err.txt')
         try {
             $info = $null
+            $lastError = $null
             for ($i = 0; $i -lt 20 -and $null -eq $info; $i++) {
                 try { $info = Get-TlsCertificateInfo -HostName 'localhost' -Port $port -TimeoutSeconds 5 }
-                catch { Start-Sleep -Milliseconds 250 }
+                catch { $lastError = $_; Start-Sleep -Milliseconds 250 }
             }
+            $info | Should -Not -BeNullOrEmpty -Because "Get-TlsCertificateInfo failed: $lastError"
             $info.Thumbprint | Should -BeExactly $fingerprint.ToUpperInvariant()
             $info.Subject | Should -BeExactly 'CN=vbr-test'
         }
