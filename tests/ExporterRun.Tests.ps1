@@ -58,6 +58,19 @@ Describe 'Invoke-VeeamExporterRun' {
         @($warnings | Where-Object { "$_" -like '*serverInfo*' }).Count | Should -Be 1
     }
 
+    It 'akzeptiert Collectors als Kommaliste (powershell.exe -File)' {
+        Set-VeeamApiMock
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs, objects' -ObjectSessionType 'BackupJob,ReplicaJob' -WarningAction SilentlyContinue
+        ($result.Collectors | ForEach-Object Collector) -join ',' | Should -BeExactly 'jobs,objects'
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
+    }
+
+    It 'bricht bei unbekanntem Collector vor der Anmeldung ab' {
+        Set-VeeamApiMock
+        { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs,licence' } | Should -Throw "*Unknown collector 'licence'*"
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
+    }
+
     It 'laesst mit -Collector jobs nur den Jobs-Collector laufen' {
         Set-VeeamApiMock
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs' -WarningAction SilentlyContinue

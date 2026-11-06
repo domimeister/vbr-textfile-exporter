@@ -33,6 +33,7 @@ flowchart LR
 Beide Tasks laufen lokal auf dem Backupserver. Nach aussen geht nur der bestehende Scrape auf Port 9182.
 
 - **Intervall:** alle 15 Minuten (Vorschlag), Daten also höchstens 15 Minuten alt.
+- **Installation:** manuell pro Server mit `deploy/Install-VeeamExporter.ps1`; beide Tasks laufen als SYSTEM, das REST-Credential ist per DPAPI für SYSTEM verschlüsselt ([deploy/README.md](../deploy/README.md)).
 - **Runtime:** Windows PowerShell 5.1 und PowerShell 7, ohne Veeam-Console und ohne Veeam-PS-Modul.
 - **Auth:** OAuth2 Password-Grant auf `/api/oauth2/token`; Access-Token 15 Minuten, Refresh-Token 24 Stunden gültig. Pro Lauf anmelden, am Ende `/api/oauth2/logout` ([Veeam REST Overview](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview)).
 - **API-Version:** `x-api-version` in jedem Request. Das Script nimmt die höchste Revision, die der Server anbietet: 1.3-rev2 (13.1), 1.3-rev1 (13.0.1), 1.3-rev0 (13.0), 1.2-rev1 (12.3.1).
@@ -218,7 +219,7 @@ Diese Punkte sind nur im Lab zu klären; sie ändern Details, nicht die Architek
 1. Script-Skelett: Auth, Versions-Probe, atomares Schreiben, Jobs-Collector.
 2. Test gegen je einen v12- und v13-Server, Beispiel-.prom ablegen.
 3. Objekt-, Repository- und Lizenz-Collector ergänzen, Alerts in Prometheus laden.
-4. Rollout per N-central: Script, zwei Tasks, verschlüsseltes Credential.
+4. Rollout manuell pro Server: Install-Script, zwei Tasks, verschlüsseltes Credential (siehe `deploy/README.md`).
 
 ## Quellen
 

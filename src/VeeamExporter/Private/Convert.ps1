@@ -168,3 +168,22 @@ function ConvertTo-VeeamCount {
     if ([math]::Floor($d) -eq $d) { return [int64]$d }
     return $d
 }
+
+function Split-VeeamListParameter {
+    # "jobs,objects" -> @('jobs', 'objects'). A scheduled task calls the
+    # scripts with powershell.exe -File, which passes a comma list as ONE string.
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyCollection()][AllowNull()][string[]]$Value
+    )
+    $items = New-Object -TypeName System.Collections.Generic.List[string]
+    foreach ($v in @($Value)) {
+        if ($null -eq $v) { continue }
+        foreach ($part in ($v -split ',')) {
+            $t = $part.Trim()
+            if ($t.Length -gt 0 -and -not $items.Contains($t)) { $items.Add($t) }
+        }
+    }
+    return [string[]]$items.ToArray()
+}

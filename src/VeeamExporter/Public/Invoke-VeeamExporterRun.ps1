@@ -14,9 +14,10 @@ function Invoke-VeeamExporterRun {
         [string]$BaseUri = 'https://localhost:9419',
         [AllowNull()][AllowEmptyString()][string]$CertificateThumbprint,
         [AllowNull()][AllowEmptyString()][string]$ApiVersion,
-        [ValidateSet('jobs', 'objects', 'repositories')][string[]]$Collector = @('jobs', 'objects', 'repositories'),
+        # Comma lists ("jobs,objects") are accepted as well, see Split-VeeamListParameter.
+        [string[]]$Collector = @('jobs', 'objects', 'repositories'),
         [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
-        [ValidateNotNullOrEmpty()][string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
+        [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
         [int]$TimeoutSec = 60
     )
     $collectorCommands = @{
@@ -24,6 +25,15 @@ function Invoke-VeeamExporterRun {
         objects      = 'Get-VeeamObjectMetric'
         repositories = 'Get-VeeamRepositoryMetric'
     }
+    $Collector = @(Split-VeeamListParameter -Value $Collector)
+    $ObjectSessionType = @(Split-VeeamListParameter -Value $ObjectSessionType)
+    foreach ($name in $Collector) {
+        if (-not $collectorCommands.ContainsKey($name)) {
+            throw ("Unknown collector '{0}'. Valid: {1}" -f $name, (($collectorCommands.Keys | Sort-Object) -join ', '))
+        }
+    }
+    if ($Collector.Count -eq 0) { throw 'No collector selected.' }
+    if ($ObjectSessionType.Count -eq 0) { throw 'No session type for the objects collector.' }
     $collectorArguments = @{
         jobs         = @{}
         objects      = @{ LookbackDays = $ObjectLookbackDays; SessionType = $ObjectSessionType }

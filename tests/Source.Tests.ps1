@@ -1,12 +1,14 @@
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     $script:SourceFiles = @(Get-ChildItem -LiteralPath $script:SrcRoot -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1')
+    $script:DeployFiles = @(Get-ChildItem -LiteralPath (Join-Path -Path $script:RepoRoot -ChildPath 'deploy') -Recurse -File -Include '*.ps1', '*.psm1', '*.psd1')
+    $script:AllCodeFiles = $script:SourceFiles + $script:DeployFiles
     $script:TestFiles = @(Get-ChildItem -LiteralPath $PSScriptRoot -File -Filter '*.ps1')
 }
 
 Describe 'Quellcode-Regeln' {
     It 'Quell- und Testdateien sind reines ASCII (Windows PowerShell 5.1 liest ohne BOM als ANSI)' {
-        $bad = foreach ($f in ($script:SourceFiles + $script:TestFiles)) {
+        $bad = foreach ($f in ($script:AllCodeFiles + $script:TestFiles)) {
             $bytes = [System.IO.File]::ReadAllBytes($f.FullName)
             if (@($bytes | Where-Object { $_ -gt 0x7F }).Count -gt 0) { $f.Name }
         }
@@ -15,7 +17,7 @@ Describe 'Quellcode-Regeln' {
 
     It 'enthaelt keine PowerShell-7-only-Syntax' {
         $forbiddenTokens = @('AndAnd', 'OrOr', 'QuestionQuestion', 'QuestionQuestionEquals', 'QuestionDot', 'QuestionLBracket', 'QuestionMark')
-        $bad = foreach ($f in $script:SourceFiles) {
+        $bad = foreach ($f in $script:AllCodeFiles) {
             $tokens = $null
             $errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errors)
@@ -28,7 +30,7 @@ Describe 'Quellcode-Regeln' {
     }
 
     It 'hat keine Parserfehler' {
-        $bad = foreach ($f in $script:SourceFiles) {
+        $bad = foreach ($f in $script:AllCodeFiles) {
             $tokens = $null
             $errors = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$tokens, [ref]$errors)
@@ -38,7 +40,7 @@ Describe 'Quellcode-Regeln' {
     }
 
     It 'nutzt weder Out-File noch Set-Content/Add-Content' {
-        $bad = foreach ($f in $script:SourceFiles) {
+        $bad = foreach ($f in $script:AllCodeFiles) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
             $commands = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
             foreach ($c in $commands) {
@@ -64,7 +66,7 @@ Describe 'Quellcode-Regeln' {
 
     It 'ruft nur lesende Veeam-Cmdlets auf' {
         $allowed = @('Get-VBRServerSession', 'Connect-VBRServer', 'Disconnect-VBRServer', 'Get-VBRInstalledLicense')
-        $bad = foreach ($f in $script:SourceFiles) {
+        $bad = foreach ($f in $script:AllCodeFiles) {
             $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
             $commands = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
             foreach ($c in $commands) {
@@ -78,6 +80,15 @@ Describe 'Quellcode-Regeln' {
             }
         }
         @($bad) | Should -BeNullOrEmpty
+    }
+
+    It 'Einstiegsskript nimmt Kommalisten von powershell.exe -File an' {
+        $script = Join-Path -Path $script:SrcRoot -ChildPath 'Invoke-VeeamExporter.ps1'
+        $missing = Join-Path -Path $TestDrive -ChildPath 'missing.cred.xml'
+        $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $script -CredentialPath $missing -Collector 'jobs,objects' -ObjectSessionType 'BackupJob,ReplicaJob' 2>&1
+        $LASTEXITCODE | Should -Be 1
+        ($output -join ' ') | Should -Not -Match 'Cannot validate argument'
+        ($output -join ' ') | Should -Match 'missing.cred.xml'
     }
 
     It 'exportiert die Funktionen aus dem Manifest' {

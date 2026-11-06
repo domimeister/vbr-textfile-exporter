@@ -8,6 +8,10 @@ the textfile directory. Exit code 0 when every collector succeeded, else 1.
 .PARAMETER CredentialPath
 Clixml file with the PSCredential of the Veeam user, created by the task
 account itself (DPAPI): Get-Credential | Export-Clixml -Path <file>
+.PARAMETER Collector
+Collectors to run, also as comma list ("jobs,objects") for powershell.exe -File.
+.PARAMETER LogPath
+Optional: transcript of the last run (overwritten each run). Contains no secrets.
 .PARAMETER ObjectLookbackDays
 How far back the objects collector reads task sessions (default 8 days).
 .PARAMETER ObjectSessionType
@@ -26,13 +30,25 @@ param(
     [string]$BaseUri = 'https://localhost:9419',
     [string]$CertificateThumbprint,
     [string]$ApiVersion,
-    [ValidateSet('jobs', 'objects', 'repositories')][string[]]$Collector = @('jobs', 'objects', 'repositories'),
+    [string[]]$Collector = @('jobs', 'objects', 'repositories'),
     [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
     [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
-    [int]$TimeoutSec = 60
+    [int]$TimeoutSec = 60,
+    [string]$LogPath
 )
 
 $ErrorActionPreference = 'Stop'
+$exitCode = 1
+$transcript = $false
+if ($LogPath) {
+    try {
+        $logDir = Split-Path -Parent $LogPath
+        if ($logDir -and -not (Test-Path -LiteralPath $logDir)) { $null = New-Item -ItemType Directory -Path $logDir }
+        $null = Start-Transcript -LiteralPath $LogPath -Force
+        $transcript = $true
+    }
+    catch { Write-Warning ('Cannot start transcript {0}: {1}' -f $LogPath, $_.Exception.Message) }
+}
 
 try {
     Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporter\VeeamExporter.psd1') -Force
@@ -45,11 +61,11 @@ try {
         -BaseUri $BaseUri -CertificateThumbprint $CertificateThumbprint -ApiVersion $ApiVersion `
         -Collector $Collector -ObjectLookbackDays $ObjectLookbackDays -ObjectSessionType $ObjectSessionType `
         -TimeoutSec $TimeoutSec
+    if ($result.Success) { $exitCode = 0 }
 }
 catch {
     Write-Error -Message ('Veeam exporter aborted: {0}' -f $_.Exception.Message) -ErrorAction Continue
-    exit 1
 }
 
-if ($result.Success) { exit 0 }
-exit 1
+if ($transcript) { try { $null = Stop-Transcript } catch { Write-Verbose 'Stop-Transcript failed.' } }
+exit $exitCode
