@@ -67,6 +67,7 @@ Die Tasks laufen als SYSTEM. Alles, was sie ausführen, lesen oder schreiben, mu
 | Installation (`C:\Program Files\VeeamExporter`) | Administratoren | SYSTEM, Administratoren: Vollzugriff; Benutzer: Lesen und Ausführen |
 | Daten (`C:\ProgramData\VeeamExporter`) | Administratoren | nur SYSTEM und Administratoren |
 
+- **Neue Verzeichnisse** legt es direkt mit dieser ACL an (`CreateDirectory` mit Sicherheitsbeschreibung). Es gibt also keinen Moment, in dem ein neuer Ordner unter `C:\ProgramData` die geerbten Rechte hat, mit denen jeder Benutzer darin Dateien und Ordner anlegen darf. Den Besitzer setzt es direkt danach.
 - **Vorhandene Verzeichnisse** übernimmt es nur, wenn sie und alles darin SYSTEM, den Administratoren, TrustedInstaller oder einem lokalen Administrator gehören und keine Junctions oder symbolischen Links enthalten. Sonst bricht es ab. Grund: Unter `C:\ProgramData` darf jeder Benutzer Ordner anlegen, und der Besitzer eines Ordners kann dessen Rechte jederzeit wieder ändern. In dem Fall den Ordner prüfen, löschen und die Installation neu starten.
 - **Nach dem Kopieren** prüft es noch einmal: Kein anderes Konto darf in die Installation schreiben oder das Datenverzeichnis überhaupt lesen.
 - **Textfile-Verzeichnis:** Es bricht ab, wenn andere Konten dort schreiben dürfen. Lesen ist erlaubt. Mit `-AllowUnsafeTextfileDirectory` gibt es stattdessen nur eine Warnung. Unabhängig davon schreibt der Exporter nie durch eine vorhandene `.tmp`-Datei hindurch und verweigert ein Verzeichnis anstelle einer `.prom`-Datei.
@@ -139,5 +140,6 @@ Die Deploy-Logik ist unter Linux mit Pester getestet; die Windows-Cmdlets (Sched
 - [ ] VBR 13: Wo liegt das Veeam-PowerShell-Modul, und findet `pwsh.exe` es unter SYSTEM? Annahme im Script: `C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1`; sonst `-VeeamModule` angeben.
 - [ ] Ist SYSTEM in VBR Backup Administrator, sodass `Get-VBRInstalledLicense` funktioniert (OP-3 in `docs/metrics.md`)?
 - [ ] Wiederholt der REST-Task auf der Ziel-Windows-Version unbegrenzt? Ohne `RepetitionDuration` ist das ab Windows Server 2016 der Fall.
+- [ ] Berechtigungen beim Anlegen: Ein neu angelegtes `C:\ProgramData\VeeamExporter` hat sofort nur SYSTEM und Administratoren (Test `Windows: neues Verzeichnis hat von Anfang an ...` in `tests/Deploy.Tests.ps1` unter Windows ausführen).
 - [ ] Berechtigungen: Nach der Installation zeigen `Get-Acl 'C:\Program Files\VeeamExporter' | Format-List` und dasselbe für `C:\ProgramData\VeeamExporter` Besitzer *Administratoren* und die Rechte aus der Tabelle oben. Ein von einem normalen Benutzer vorab angelegtes `C:\ProgramData\VeeamExporter` führt zum Abbruch.
 - [ ] Erzwingt eine GPO `AllSigned`, laufen die unsignierten Skripte nicht. Dann die Skripte signieren oder eine Ausnahme einrichten.

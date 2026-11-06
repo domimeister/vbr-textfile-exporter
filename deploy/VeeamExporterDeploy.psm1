@@ -688,16 +688,22 @@ function Get-VeeamExporterDirectoryAclSpec {
     return [pscustomobject]@{ Owner = $script:SidAdministrators; Protected = $true; Rules = $rules }
 }
 
-function Set-VeeamExporterDirectoryAcl {
-    # Applies Get-VeeamExporterDirectoryAclSpec (Windows only, mocked in tests).
-    [CmdletBinding(SupportsShouldProcess = $true)]
+function New-VeeamExporterDirectorySecurity {
+    <#
+    DirectorySecurity from Get-VeeamExporterDirectoryAclSpec (Windows only).
+    -IncludeOwner also sets the owner (Administrators); without it the
+    descriptor only carries the protected DACL.
+    #>
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Creates an in-memory object only.')]
+    [CmdletBinding()]
+    [OutputType([System.Security.AccessControl.DirectorySecurity])]
     param(
-        [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind,
+        [switch]$IncludeOwner
     )
     $spec = Get-VeeamExporterDirectoryAclSpec -Kind $Kind
     $acl = New-Object -TypeName System.Security.AccessControl.DirectorySecurity
-    $acl.SetOwner((New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $spec.Owner))
+    if ($IncludeOwner) { $acl.SetOwner((New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $spec.Owner)) }
     $acl.SetAccessRuleProtection($spec.Protected, $false)
     foreach ($r in $spec.Rules) {
         $identity = New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $r.Sid
@@ -708,14 +714,54 @@ function Set-VeeamExporterDirectoryAcl {
         ([System.Security.AccessControl.AccessControlType]::Allow)
         $acl.AddAccessRule($rule)
     }
+    return $acl
+}
+
+function Set-VeeamExporterDirectoryAcl {
+    # Applies Get-VeeamExporterDirectoryAclSpec incl. owner (Windows only, mocked in tests).
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind
+    )
+    $acl = New-VeeamExporterDirectorySecurity -Kind $Kind -IncludeOwner
     if ($PSCmdlet.ShouldProcess($Path, 'Set owner and ACL')) { Set-Acl -LiteralPath $Path -AclObject $acl }
+}
+
+function New-VeeamExporterSecureDirectoryItem {
+    <#
+    Creates a directory directly with the protected target DACL, so it never
+    has the inherited permissions of its parent (C:\ProgramData lets every
+    user create files and folders in new subfolders). The owner is set
+    afterwards by Set-VeeamExporterDirectoryAcl. Windows only, mocked in tests.
+    If the directory exists already (created by someone in the meantime),
+    nothing happens; the owner check in Initialize-VeeamExporterSecureDirectory
+    then refuses it.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind
+    )
+    if (-not $PSCmdlet.ShouldProcess($Path, ('Create directory with protected ACL ({0})' -f $Kind))) { return }
+    $security = New-VeeamExporterDirectorySecurity -Kind $Kind
+    $overload = [System.IO.Directory].GetMethod('CreateDirectory', [type[]]@([string], [System.Security.AccessControl.DirectorySecurity]))
+    if ($null -ne $overload) {
+        # .NET Framework (Windows PowerShell 5.1)
+        $null = [System.IO.Directory]::CreateDirectory($Path, $security)
+    }
+    else {
+        # .NET (PowerShell 7)
+        $null = [System.IO.FileSystemAclExtensions]::Create((New-Object -TypeName System.IO.DirectoryInfo -ArgumentList $Path), $security)
+    }
 }
 
 function Initialize-VeeamExporterSecureDirectory {
     <#
-    Creates the directory or takes over an existing one, but only when it and
-    everything in it is owned by a trusted account and contains no junction
-    or symbolic link. Then sets owner and ACL (Get-VeeamExporterDirectoryAclSpec).
+    Creates the directory (with the protected DACL from the start) or takes
+    over an existing one, but only when it and everything in it is owned by a
+    trusted account and contains no junction or symbolic link. Then sets
+    owner and ACL (Get-VeeamExporterDirectoryAclSpec).
     #>
     [CmdletBinding(SupportsShouldProcess = $true)]
     param(
@@ -723,8 +769,10 @@ function Initialize-VeeamExporterSecureDirectory {
         [Parameter(Mandatory = $true)][ValidateSet('Install', 'Data')][string]$Kind
     )
     if (-not $PSCmdlet.ShouldProcess($Path, ('Create or secure directory ({0})' -f $Kind))) { return }
-    # New-Item fails if someone creates the directory in the meantime.
-    if (-not (Test-Path -LiteralPath $Path)) { $null = New-Item -ItemType Directory -Path $Path }
+    # New directories get the protected DACL at creation, no window with the
+    # parent's inherited permissions. A directory someone else creates in the
+    # meantime is caught by the owner check below.
+    if (-not (Test-Path -LiteralPath $Path)) { New-VeeamExporterSecureDirectoryItem -Path $Path -Kind $Kind -Confirm:$false }
     $problems = @(Get-VeeamExporterPathProblem -Path $Path)
     if ($problems.Count -gt 0) {
         throw ("Refusing to use {0}: it was not created by an administrator (or contains links). Check it, remove it and run the installation again.`n  {1}" -f $Path, ($problems -join "`n  "))

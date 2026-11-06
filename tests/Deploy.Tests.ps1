@@ -277,6 +277,7 @@ Describe 'Install-VeeamExporter' {
         Mock -ModuleName VeeamExporterDeploy Find-PowerShellHost { [pscustomobject]@{ WindowsPowerShell = $script:WinPs; Pwsh = $script:Pwsh } }
         Mock -ModuleName VeeamExporterDeploy Find-VeeamPowerShellModule { [pscustomobject]@{ Module = 'C:\Veeam\Veeam.Backup.PowerShell.psd1'; Version = $script:ModuleVersion } }
         Mock -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl { }
+        Mock -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem { $null = New-Item -ItemType Directory -Path $Path }
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
         Mock -ModuleName VeeamExporterDeploy Save-VeeamExporterCredentialAsSystem { [System.IO.File]::WriteAllText((Join-Path $DataPath 'veeam.cred.xml'), '<Objs/>') }
         Mock -ModuleName VeeamExporterDeploy Register-VeeamExporterTask { $script:Registered.Add($Definition) }
@@ -546,6 +547,7 @@ Describe 'Berechtigungen: Verzeichnisse' {
     }
     BeforeEach {
         Mock -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl { }
+        Mock -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem { $null = New-Item -ItemType Directory -Path $Path }
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
     }
 
@@ -554,6 +556,57 @@ Describe 'Berechtigungen: Verzeichnisse' {
         InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false }
         Test-Path -LiteralPath $path | Should -BeTrue
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 1 -Exactly -ParameterFilter { $Kind -eq 'Data' }
+    }
+
+    It 'legt ein neues <Kind>-Verzeichnis direkt mit der geschuetzten ACL an (kein New-Item)' -TestCases @(@{ Kind = 'Data' }, @{ Kind = 'Install' }) {
+        param($Kind)
+        $path = Join-Path -Path $TestDrive -ChildPath ('atomar-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        Mock -ModuleName VeeamExporterDeploy New-Item { throw 'New-Item must not create the directory' } -ParameterFilter { $Path -eq $script:AtomicPath }
+        $script:AtomicPath = $path
+        $script:AtomicKind = $Kind
+        InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path; Kind = $Kind } { param($Path, $Kind) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind $Kind -Confirm:$false }
+        Should -Invoke -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem -Times 1 -Exactly -ParameterFilter { $Path -eq $script:AtomicPath -and $Kind -eq $script:AtomicKind }
+        Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 1 -Exactly -ParameterFilter { $Path -eq $script:AtomicPath }
+    }
+
+    It 'legt ein vorhandenes Verzeichnis nicht neu an' {
+        $path = New-TestDirectory -Name 'vorhanden'
+        InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false }
+        Should -Invoke -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem -Times 0 -Exactly
+        Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 1 -Exactly
+    }
+
+    It 'lehnt ein Verzeichnis ab, das ein anderes Konto zwischen Pruefung und Anlegen erstellt hat' {
+        $path = Join-Path -Path $TestDrive -ChildPath ('race-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        # CreateDirectory does nothing when the directory exists; here the attacker won the race.
+        Mock -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem { $null = New-Item -ItemType Directory -Path $Path }
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker }
+        { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false } } |
+            Should -Throw '*not created by an administrator*'
+        Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 0 -Exactly
+    }
+
+    It 'Windows: neues Verzeichnis hat von Anfang an nur SYSTEM und Administratoren, ohne Vererbung' {
+        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs nur unter Windows'; return }
+        $path = Join-Path -Path $TestDrive -ChildPath ('acl-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) New-VeeamExporterSecureDirectoryItem -Path $Path -Kind Data -Confirm:$false }
+        $acl = Get-Acl -LiteralPath $path
+        $acl.AreAccessRulesProtected | Should -BeTrue
+        $sids = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
+        ($sids -join ',') | Should -BeExactly 'S-1-5-18,S-1-5-32-544'
+        @($acl.GetAccessRules($false, $true, [System.Security.Principal.SecurityIdentifier])).Count | Should -Be 0
+    }
+
+    It 'Windows: Soll-ACL mit Besitzer Administratoren nur auf Wunsch' {
+        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs nur unter Windows'; return }
+        InModuleScope VeeamExporterDeploy {
+            $withOwner = New-VeeamExporterDirectorySecurity -Kind Install -IncludeOwner
+            $withOwner.GetOwner([System.Security.Principal.SecurityIdentifier]).Value | Should -BeExactly 'S-1-5-32-544'
+            $withoutOwner = New-VeeamExporterDirectorySecurity -Kind Install
+            $withoutOwner.GetOwner([System.Security.Principal.SecurityIdentifier]) | Should -BeNullOrEmpty
+            @($withoutOwner.GetAccessRules($true, $false, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object { $_.IdentityReference.Value }) -join ',' |
+                Should -BeExactly 'S-1-5-18,S-1-5-32-544,S-1-5-32-545'
+        }
     }
 
     It 'uebernimmt kein Verzeichnis, das ein anderes Konto angelegt hat' {
@@ -632,6 +685,7 @@ Describe 'Berechtigungen: Install und Uninstall' {
         Mock -ModuleName VeeamExporterDeploy Test-VeeamExporterAdministrator { $true }
         Mock -ModuleName VeeamExporterDeploy Find-PowerShellHost { [pscustomobject]@{ WindowsPowerShell = $script:WinPs; Pwsh = $script:Pwsh } }
         Mock -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl { }
+        Mock -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem { $null = New-Item -ItemType Directory -Path $Path }
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
         Mock -ModuleName VeeamExporterDeploy Save-VeeamExporterCredentialAsSystem { }
         Mock -ModuleName VeeamExporterDeploy Register-VeeamExporterTask { }
