@@ -1,0 +1,15 @@
+# HELP veeam_object_last_result Letzter Task-Lauf: 0 Success, 1 Warning, 2 Failed, -1 None
+# TYPE veeam_object_last_result gauge
+veeam_object_last_result{job_name="Backup Job 1",object="linbase01"} 0
+veeam_object_last_result{job_name="Fileserver Backup",object="winsrv88"} 0
+veeam_object_last_result{job_name="NFS Share Backup",object="winsrv88:/C:\\shares\\nfs_share"} 0
+# HELP veeam_object_last_run_timestamp_seconds Ende des letzten Task-Laufs als Unix-Zeit (Start, solange er laeuft)
+# TYPE veeam_object_last_run_timestamp_seconds gauge
+veeam_object_last_run_timestamp_seconds{job_name="Backup Job 1",object="linbase01"} 1731517322
+veeam_object_last_run_timestamp_seconds{job_name="Fileserver Backup",object="winsrv88"} 1731510179
+veeam_object_last_run_timestamp_seconds{job_name="NFS Share Backup",object="winsrv88:/C:\\shares\\nfs_share"} 1731531673
+# HELP veeam_object_last_processed_bytes Im letzten Task-Lauf verarbeitete Bytes
+# TYPE veeam_object_last_processed_bytes gauge
+veeam_object_last_processed_bytes{job_name="Backup Job 1",object="linbase01"} 21474836480
+veeam_object_last_processed_bytes{job_name="Fileserver Backup",object="winsrv88"} 150323855360
+veeam_object_last_processed_bytes{job_name="NFS Share Backup",object="winsrv88:/C:\\shares\\nfs_share"} 9578192

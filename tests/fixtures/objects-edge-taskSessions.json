@@ -1,0 +1,362 @@
+{
+  "data": [
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000001",
+      "sessionId": "5e55e550-0000-4000-8000-000000000001",
+      "name": "vm01",
+      "creationTime": "2024-01-17T22:00:10+01:00",
+      "endTime": "2024-01-17T22:05:00+01:00",
+      "state": "Stopped",
+      "usn": 1,
+      "result": {
+        "result": "Failed",
+        "message": "Error: Snapshot failed\r\nretrying",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 10737418240,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000002",
+      "sessionId": "5e55e550-0000-4000-8000-000000000002",
+      "name": "vm01",
+      "creationTime": "2024-01-17T22:40:10+01:00",
+      "endTime": "2024-01-17T22:45:00+01:00",
+      "state": "Stopped",
+      "usn": 2,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 10737418240,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000003",
+      "sessionId": "5e55e550-0000-4000-8000-000000000001",
+      "name": "vm02",
+      "creationTime": "2024-01-17T22:00:20+01:00",
+      "endTime": "2024-01-17T22:06:00+01:00",
+      "state": "Stopped",
+      "usn": 3,
+      "result": {
+        "result": "Failed",
+        "message": "first error",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 0,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000004",
+      "sessionId": "5e55e550-0000-4000-8000-000000000002",
+      "name": "vm02",
+      "creationTime": "2024-01-17T22:40:20+01:00",
+      "endTime": "2024-01-17T22:46:00+01:00",
+      "state": "Stopped",
+      "usn": 4,
+      "result": {
+        "result": "Failed",
+        "message": "Processing vm02 Error: The operation timed out.\r\nRetrying in 10 minutes.   Details: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 0,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000005",
+      "sessionId": "5e55e550-0000-4000-8000-000000000001",
+      "name": "vm03",
+      "creationTime": "2024-01-17T22:00:30+01:00",
+      "endTime": "2024-01-17T22:10:00+01:00",
+      "state": "Stopped",
+      "usn": 5,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 2147483648,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000006",
+      "sessionId": "5e55e550-0000-4000-8000-000000000003",
+      "name": "vm03",
+      "creationTime": "2024-01-18T22:00:30+01:00",
+      "endTime": null,
+      "state": "Working",
+      "usn": 6,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 1073741824,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000007",
+      "sessionId": "5e55e550-0000-4000-8000-000000000002",
+      "name": "VM04",
+      "creationTime": "2024-01-17T22:41:00+01:00",
+      "endTime": "2024-01-17T22:42:00+01:00",
+      "state": "Stopped",
+      "usn": 7,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 1,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000008",
+      "sessionId": "5e55e550-0000-4000-8000-000000000002",
+      "name": "vm04",
+      "creationTime": "2024-01-17T22:41:30+01:00",
+      "endTime": "2024-01-17T22:43:00+01:00",
+      "state": "Stopped",
+      "usn": 8,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 2,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000009",
+      "sessionId": "5e55e550-0000-4000-8000-000000000004",
+      "name": "srv \"x\"\\share",
+      "creationTime": "2024-01-18T01:00:05Z",
+      "endTime": "2024-01-18T01:20:00Z",
+      "state": "Stopped",
+      "usn": 9,
+      "result": {
+        "result": "Warning",
+        "message": "Changed block tracking \"disabled\"\tfor disk C:\\",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 5368709120,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000010",
+      "sessionId": "5e55e550-0000-4000-8000-000000000004",
+      "name": "vm05",
+      "creationTime": "2024-01-18T01:00:06Z",
+      "endTime": "0001-01-01T00:00:00",
+      "state": "Stopped",
+      "usn": 10,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 7,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000011",
+      "sessionId": "5e55e550-0000-4000-8000-000000000005",
+      "name": "old01",
+      "creationTime": "2024-01-15T20:00:05+01:00",
+      "endTime": "2024-01-15T20:01:00+01:00",
+      "state": "Stopped",
+      "usn": 11,
+      "result": {
+        "result": "Failed",
+        "message": "gone",
+        "isCanceled": false
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000012",
+      "sessionId": "5e55e550-0000-4000-8000-000000000006",
+      "name": "old01",
+      "creationTime": "2024-01-16T20:00:05+01:00",
+      "endTime": "2024-01-16T20:01:00+01:00",
+      "state": "Stopped",
+      "usn": 12,
+      "result": {
+        "result": "Warning",
+        "message": "Low disk space",
+        "isCanceled": false
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000013",
+      "sessionId": "5e55e550-0000-4000-8000-000000000002",
+      "name": "vm06",
+      "creationTime": "2024-01-17T22:41:00+01:00",
+      "endTime": "2024-01-17T22:42:00+01:00",
+      "state": "Stopped",
+      "usn": 100,
+      "result": {
+        "result": "Failed",
+        "message": "older usn",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 3,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000014",
+      "sessionId": "5e55e550-0000-4000-8000-000000000002",
+      "name": "vm06",
+      "creationTime": "2024-01-17T22:41:00+01:00",
+      "endTime": "2024-01-17T22:42:30+01:00",
+      "state": "Stopped",
+      "usn": 101,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:00",
+        "processingRate": "1 MB/s",
+        "processedSize": 3,
+        "readSize": 0,
+        "transferredSize": 0
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000015",
+      "sessionId": "99999999-0000-4000-8000-000000000000",
+      "name": "ghost",
+      "creationTime": "2024-01-18T01:00:00Z",
+      "endTime": "2024-01-18T01:01:00Z",
+      "state": "Stopped",
+      "usn": 15,
+      "result": {
+        "result": "Failed",
+        "message": "x",
+        "isCanceled": false
+      }
+    },
+    {
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "ta5c0000-0000-4000-8000-000000000016",
+      "sessionId": "5e55e550-0000-4000-8000-000000000004",
+      "name": "",
+      "creationTime": "2024-01-18T01:00:00Z",
+      "endTime": "2024-01-18T01:01:00Z",
+      "state": "Stopped",
+      "usn": 16,
+      "result": {
+        "result": "Failed",
+        "message": "x",
+        "isCanceled": false
+      }
+    }
+  ],
+  "pagination": {
+    "total": 16,
+    "count": 16,
+    "skip": 0,
+    "limit": 200
+  }
+}

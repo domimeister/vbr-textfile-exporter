@@ -51,3 +51,32 @@ function New-TestSession {
 $script:TokenJson = '{"access_token":"access-123","token_type":"bearer","refresh_token":"refresh-456","expires_in":900}'
 $script:UnsupportedVersionJson = '{"errorCode":"BadRequest","message":"The specified API version is not supported."}'
 $script:InvalidGrantJson = '{"error":"invalid_grant","error_description":"Invalid username or password."}'
+
+$script:SupportedDocVersions = @('1.2-rev1', '1.3-rev0', '1.3-rev1', '1.3-rev2')
+
+function Get-FixtureData {
+    # data array of a fixture response
+    param([Parameter(Mandatory = $true)][string]$Name)
+    return @((Get-FixtureText -Name $Name | ConvertFrom-Json).data)
+}
+
+function Set-TestTimeZone {
+    # Fixed zone (+01:00, no DST) for timestamps without offset, docs/metrics.md#OP-9.
+    InModuleScope VeeamExporter {
+        $script:VeeamTimeZone = [System.TimeZoneInfo]::CreateCustomTimeZone('Test+01', [timespan]::FromHours(1), 'Test+01', 'Test+01')
+    }
+}
+
+function Assert-PromText {
+    # Line-by-line comparison first (readable failure), then exact match.
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Actual,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Expected
+    )
+    $actualLines = $Actual -split "`n"
+    $expectedLines = $Expected -split "`n"
+    for ($i = 0; $i -lt [math]::Max($actualLines.Count, $expectedLines.Count); $i++) {
+        $actualLines[$i] | Should -BeExactly $expectedLines[$i] -Because "Zeile $($i + 1)"
+    }
+    $Actual | Should -BeExactly $Expected
+}

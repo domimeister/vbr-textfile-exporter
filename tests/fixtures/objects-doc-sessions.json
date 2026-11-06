@@ -1,0 +1,130 @@
+{
+  "data": [
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "0bb85caf-5e80-41c4-908d-2b43608b78a3",
+      "name": "NFS Share Backup",
+      "jobId": "d0f1e2b3-53c6-4e77-9032-8c4b0f5e6d03",
+      "creationTime": "2024-11-13T22:00:30.117+01:00",
+      "endTime": "2024-11-13T22:01:13.552+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "",
+        "isCanceled": false
+      },
+      "resourceId": null,
+      "resourceReference": null,
+      "parentSessionId": null,
+      "usn": 0,
+      "initiatedBy": "scheduler"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "9811fb69-b436-4198-b848-fb6eb42fba03",
+      "name": "Backup Job 1",
+      "jobId": "b6f7c1d2-31a4-4c55-9e10-6a2f8d3c4b01",
+      "creationTime": "2024-11-13T18:00:30.117+01:00",
+      "endTime": "2024-11-13T18:02:02.552+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "",
+        "isCanceled": false
+      },
+      "resourceId": null,
+      "resourceReference": null,
+      "parentSessionId": null,
+      "usn": 0,
+      "initiatedBy": "scheduler"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "206e9bc7-86c3-40a4-91cd-0f3436cec21b",
+      "name": "Fileserver Backup",
+      "jobId": "c8e9d0a1-42b5-4d66-8f21-7b3a9e4d5c02",
+      "creationTime": "2024-11-13T16:00:30.117+01:00",
+      "endTime": "2024-11-13T16:02:59.552+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "",
+        "isCanceled": false
+      },
+      "resourceId": null,
+      "resourceReference": null,
+      "parentSessionId": null,
+      "usn": 0,
+      "initiatedBy": "scheduler"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "3779ebf8-4bbf-49af-b3ea-9fd2d5dc0689",
+      "name": "NFS Share Backup",
+      "jobId": "d0f1e2b3-53c6-4e77-9032-8c4b0f5e6d03",
+      "creationTime": "2024-11-12T22:00:30.117+01:00",
+      "endTime": "2024-11-12T22:00:53.552+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "",
+        "isCanceled": false
+      },
+      "resourceId": null,
+      "resourceReference": null,
+      "parentSessionId": null,
+      "usn": 0,
+      "initiatedBy": "scheduler"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "45e729e8-a905-4850-9e7c-8ee8f8df7695",
+      "name": "Backup Job 1",
+      "jobId": "b6f7c1d2-31a4-4c55-9e10-6a2f8d3c4b01",
+      "creationTime": "2024-11-12T18:00:30.117+01:00",
+      "endTime": "2024-11-12T18:01:35.552+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "",
+        "isCanceled": false
+      },
+      "resourceId": null,
+      "resourceReference": null,
+      "parentSessionId": null,
+      "usn": 0,
+      "initiatedBy": "scheduler"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "22babeec-9df0-41ef-b9fd-0d10c667a486",
+      "name": "Fileserver Backup",
+      "jobId": "c8e9d0a1-42b5-4d66-8f21-7b3a9e4d5c02",
+      "creationTime": "2024-11-12T16:00:30.117+01:00",
+      "endTime": "2024-11-12T16:02:46.552+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "",
+        "isCanceled": false
+      },
+      "resourceId": null,
+      "resourceReference": null,
+      "parentSessionId": null,
+      "usn": 0,
+      "initiatedBy": "scheduler"
+    }
+  ],
+  "pagination": {
+    "total": 6,
+    "count": 6,
+    "skip": 0,
+    "limit": 200
+  }
+}

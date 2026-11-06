@@ -1,0 +1,29 @@
+{
+  "data": [
+    {
+      "sessionType": "Job",
+      "state": "Stopped",
+      "id": "c924ee2f-1197-4b37-8de3-009c1977f347",
+      "name": "Backup Job 1",
+      "jobId": "c05dfa57-f59a-4e90-8065-b7f5d3276406",
+      "creationTime": "2023-12-04T06:13:34.983+01:00",
+      "endTime": "2023-12-04T06:15:00.617+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Failed",
+        "message": "Creating synthetic full backup (22% done)",
+        "isCanceled": false
+      },
+      "resourceId": "c7478158-7c99-4bab-93b1-c3efdd1062fa",
+      "resourceReference": "/api/v1/backups/c7478158-7c99-4bab-93b1-c3efdd1062fa",
+      "parentSessionId": null,
+      "usn": 0
+    }
+  ],
+  "pagination": {
+    "total": 307,
+    "count": 1,
+    "skip": 0,
+    "limit": 1
+  }
+}

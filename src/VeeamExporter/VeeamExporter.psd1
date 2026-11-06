@@ -11,6 +11,7 @@
         'Disconnect-VeeamServer'
         'Get-VeeamServerInfo'
         'Get-VeeamJobMetric'
+        'Get-VeeamObjectMetric'
         'Invoke-VeeamExporterRun'
         'New-PromMetric'
         'Add-PromSample'

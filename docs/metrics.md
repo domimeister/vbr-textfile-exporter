@@ -64,11 +64,14 @@ Alle Metriken sind Gauges.
 
 Pro Job und Objekt zählt der jüngste Task-Lauf. Ein erfolgreicher Retry überschreibt so den vorherigen Fehler automatisch. Ausgabe in `veeam_objects.prom`.
 
-1. `GET /api/v1/sessions` mit `typeFilter=BackupJob,ReplicaJob` und `createdAfterFilter=<jetzt − Lookback>`: Zuordnung sessionId → Job.
-2. `GET /api/v1/taskSessions` mit `createdAfterFilter=<jetzt − Lookback>`, gepaged über `skip`/`limit`: ein Eintrag pro Objekt und Lauf mit name, result, sessionId, endTime.
-3. Pro Job und Objekt den Eintrag mit der neuesten creationTime behalten.
+1. `GET /api/v1/jobs/states`: Zuordnung jobId → Jobname, damit `job_name` exakt dem Wert in `veeam_jobs.prom` entspricht (auch nach Umbenennen eines Jobs).
+2. `GET /api/v1/sessions` mit `typeFilter=<Typ>` und `createdAfterFilter=<jetzt − Lookback − 1 Tag>`, ein Request pro Session-Typ: Zuordnung sessionId → jobId. Der zusätzliche Tag erfasst Sessions, die vor der Grenze gestartet sind, deren Tasks aber danach.
+3. `GET /api/v1/taskSessions` mit `sessionTypeFilter=<Typ>` und `createdAfterFilter=<jetzt − Lookback>`, ein Request pro Session-Typ, gepaged über `skip`/`limit`: ein Eintrag pro Objekt und Lauf mit name, result, sessionId, creationTime, endTime, progress.
+4. Pro Job und Objekt den Eintrag mit der neuesten creationTime behalten. Jobname aus Schritt 1; fehlt die jobId dort (gelöschter Job, Typ nicht in `jobs/states`), gilt der Name der neuesten Session dieses Jobs.
 
-Beide Endpoints sind für Veeam Backup Viewer freigegeben und ab 1.2-rev1 (12.3.1) in der Referenz vorhanden ([Sessions-Referenz](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/Sessions#operation/GetAllTaskSessions)). Lookback-Vorschlag: 8 Tage, damit Wochen-Jobs nicht herausfallen. Aus einem Job entfernte Objekte verschwinden nach Ablauf des Lookbacks.
+Session-Typen: Standard `BackupJob` und `ReplicaJob`, per Parameter erweiterbar. Ein Request pro Typ, weil `typeFilter` und `sessionTypeFilter` unter 1.2-rev1 nur einen einzelnen Wert annehmen; ein Array kennt erst 1.3. Laut Doku-Beispiel laufen auch File-Share-Tasks unter `sessionType=BackupJob`.
+
+Beide Endpoints sind für Veeam Backup Viewer freigegeben (Claims `ViewSessions`, `ViewTaskSessions`) und ab 1.2-rev0 in der Referenz vorhanden ([Sessions-Referenz](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/Sessions#operation/GetAllTaskSessions)). Lookback-Vorschlag: 8 Tage, damit Wochen-Jobs nicht herausfallen. Aus einem Job entfernte Objekte verschwinden nach Ablauf des Lookbacks.
 
 | Metrik | Labels | Wert | API-Feld |
 | --- | --- | --- | --- |
@@ -78,7 +81,8 @@ Beide Endpoints sind für Veeam Backup Viewer freigegeben und ab 1.2-rev1 (12.3.
 | `veeam_object_last_failure_info` | job_name, object, message | 1, nur bei Warning oder Failed | result.message |
 
 - **Label `object` statt `vm`:** Task-Sessions enthalten auch Agents und File Shares, z. B. `winsrv88:/C:\shares\nfs_share` im Veeam-Beispiel.
-- **`message` ist Freitext:** auf 200 Zeichen kürzen, Zeilenumbrüche entfernen, `\` und `"` escapen. Nur für Warning und Failed, damit die Zahl der Serien klein bleibt.
+- **`message` ist Freitext:** Zeilenumbrüche und Tabs durch ein Leerzeichen ersetzen, Mehrfach-Leerzeichen zusammenfassen, auf 200 Zeichen kürzen, dann `\` und `"` escapen. Nur für Warning und Failed, damit die Zahl der Serien klein bleibt.
+- **Laufende Tasks:** Der jüngste Eintrag ist während eines Laufs (auch eines Retries) der laufende Task mit Resultat None (-1). Ein vorheriger Fehler ist dann bis zum Ende des Laufs nicht sichtbar; `VeeamObjectFailed` startet sein `for` danach neu.
 - **Kardinalität:** eine Serie pro Job und Objekt und Metrik.
 
 ```text
@@ -194,11 +198,12 @@ Diese Punkte sind nur im Lab zu klären; sie ändern Details, nicht die Architek
 - [ ] **OP-3** Lizenz-Task unter v13 als SYSTEM testen (PowerShell 7, Console) und ExpirationDate bei unbefristeter Lizenz prüfen.
 - [ ] **OP-4** Object-Storage-Repositories: was liefert capacityGB?
 - [ ] **OP-5** Einheit GB = GiB? Gegen die Console vergleichen.
-- [ ] **OP-6** VBR 12.0 bis 12.2 (API 1.1): gibt es `taskSessions` schon? Sonst Mindestversion 12.3.1 festlegen.
+- [x] **OP-6** VBR 12.0 bis 12.2 (API 1.1): gibt es `taskSessions` schon? Geklärt anhand der OpenAPI-Specs (1.1-rev0 bis 1.3-rev2): `taskSessions` fehlt in allen 1.1-Revisionen und ist ab 1.2-rev0 vorhanden. Mindestversion bleibt 12.3.1 (1.2-rev1).
 - [ ] **OP-7** Versions-Probe: Wie antwortet der Server auf eine nicht unterstützte `x-api-version` beim Token-Request? Annahme: HTTP 400 mit „version“ im Fehlertext. Jede andere Fehlerantwort bricht die Probe sofort ab, damit ein falsches Passwort nicht viermal probiert wird (Sperrgefahr).
 - [ ] **OP-8** Unbekannte Werte in `lastResult` bzw. `result.result` (z. B. leer oder ein neuer Enum-Wert): Annahme -1 wie None.
-- [ ] **OP-9** Zeitstempel ohne Zeitzonenangabe (`lastRun`, `nextRun`): Annahme UTC. Laut Doku liefert die API ISO 8601 mit Offset.
+- [ ] **OP-9** Zeitstempel ohne Zeitzonenangabe: Annahme Ortszeit des VBR-Servers (dort läuft der Exporter). In den Doku-Beispielen haben `jobs/states` und `sessions` einen Offset, `taskSessions` nicht (`"creationTime": "2024-11-13T22:00:49.893878"`); die Startzeiten liegen dort auf vollen Stunden wie ein lokaler Zeitplan. Im Lab prüfen, ob echte Antworten einen Offset haben.
 - [ ] **OP-10** Jobs ohne `lastRun` (noch nie gelaufen): `veeam_job_last_run_timestamp_seconds` fehlt dann. `VeeamJobNotRun` feuert für diese Jobs nicht; ggf. eigener Alert auf `veeam_job_last_result == -1`.
+- [ ] **OP-11** Unter welchem Session-Typ laufen Agent-Jobs? Ab 1.3 gibt es zusätzlich `AgentBackup`, `AgentPolicy`, `EndpointBackup` und `BackupCopyJob`. Falls Agent-Tasks dort landen, fehlen sie mit dem Standard `BackupJob,ReplicaJob` in `veeam_objects.prom` und müssen per Parameter ergänzt werden (unter 1.2-rev1 existieren diese Werte nicht).
 
 1. Script-Skelett: Auth, Versions-Probe, atomares Schreiben, Jobs-Collector.
 2. Test gegen je einen v12- und v13-Server, Beispiel-.prom ablegen.

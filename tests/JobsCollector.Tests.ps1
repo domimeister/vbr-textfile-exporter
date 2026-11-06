@@ -22,6 +22,14 @@ Describe 'Jobs-Collector' {
         $actual | Should -BeExactly $expected
     }
 
+    It 'erzeugt veeam_jobs.prom aus dem Doku-Beispiel <Version> zeilengenau' -TestCases @(
+        @{ Version = '1.2-rev1' }, @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
+    ) {
+        param($Version)
+        $actual = Get-JobsPromText -Fixture "doc/$Version/jobs-states.json"
+        Assert-PromText -Actual $actual -Expected (Get-ExpectedText -Name "doc/$Version/veeam_jobs.prom")
+    }
+
     It 'escaped Labelwerte und behaelt Umlaute (UTF-8)' {
         $actual = Get-JobsPromText -Fixture 'jobs-states-escaping.json'
         $actual | Should -BeExactly (Get-ExpectedText -Name 'veeam_jobs_escaping.prom')

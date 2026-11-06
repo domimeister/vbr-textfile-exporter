@@ -12,8 +12,9 @@ Spezifikation: [`docs/metrics.md`](docs/metrics.md). Regeln für die Entwicklung
 | Zertifikat-Pinning (5.1: Validation-Callback, 7: HttpClientHandler) | fertig |
 | Writer (atomar, UTF-8 ohne BOM, LF) | fertig |
 | Collector `jobs` → `veeam_jobs.prom` | fertig |
+| Collector `objects` → `veeam_objects.prom` | fertig |
 | Health → `veeam_exporter.prom` | fertig |
-| Collectors `objects`, `repositories`, Lizenz, Deploy | offen |
+| Collectors `repositories`, Lizenz, Deploy | offen |
 
 ## Aufruf
 
@@ -33,6 +34,13 @@ Thumbprint des Zertifikats ermitteln, das VBR auf Port 9419 ausliefert (in der R
 ```
 
 Ohne `-CertificateThumbprint` gilt die normale .NET-Zertifikatsprüfung; das selbstsignierte VBR-Zertifikat wird dann abgelehnt. `-ApiVersion` überspringt die Versions-Probe. Exit-Code 0, wenn alle Collectors erfolgreich waren, sonst 1.
+
+| Parameter | Standard | Bedeutung |
+| --- | --- | --- |
+| `-Collector` | `jobs`, `objects` | Welche Collectors laufen. |
+| `-ObjectLookbackDays` | `8` | Wie weit `objects` Task-Sessions zurückliest. |
+| `-ObjectSessionType` | `BackupJob`, `ReplicaJob` | Session-Typen für `objects` (siehe OP-11 in `docs/metrics.md`). |
+| `-TimeoutSec` | `60` | Timeout pro HTTP-Request. |
 
 ## Tests
 

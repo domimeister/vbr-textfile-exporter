@@ -8,6 +8,10 @@ the textfile directory. Exit code 0 when every collector succeeded, else 1.
 .PARAMETER CredentialPath
 Clixml file with the PSCredential of the Veeam user, created by the task
 account itself (DPAPI): Get-Credential | Export-Clixml -Path <file>
+.PARAMETER ObjectLookbackDays
+How far back the objects collector reads task sessions (default 8 days).
+.PARAMETER ObjectSessionType
+Session types for the objects collector (default BackupJob, ReplicaJob).
 .PARAMETER CertificateThumbprint
 SHA-1 thumbprint of the local VBR REST certificate. Only this certificate is
 accepted. Without it the default certificate validation applies.
@@ -22,7 +26,9 @@ param(
     [string]$BaseUri = 'https://localhost:9419',
     [string]$CertificateThumbprint,
     [string]$ApiVersion,
-    [ValidateSet('jobs')][string[]]$Collector = @('jobs'),
+    [ValidateSet('jobs', 'objects')][string[]]$Collector = @('jobs', 'objects'),
+    [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
+    [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
     [int]$TimeoutSec = 60
 )
 
@@ -37,7 +43,8 @@ try {
 
     $result = Invoke-VeeamExporterRun -TextfileDirectory $TextfileDirectory -Credential $credential `
         -BaseUri $BaseUri -CertificateThumbprint $CertificateThumbprint -ApiVersion $ApiVersion `
-        -Collector $Collector -TimeoutSec $TimeoutSec
+        -Collector $Collector -ObjectLookbackDays $ObjectLookbackDays -ObjectSessionType $ObjectSessionType `
+        -TimeoutSec $TimeoutSec
 }
 catch {
     Write-Error -Message ('Veeam exporter aborted: {0}' -f $_.Exception.Message) -ErrorAction Continue

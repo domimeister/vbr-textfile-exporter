@@ -32,6 +32,11 @@ Describe 'promtool check metrics' {
     It 'akzeptiert <Name>' -TestCases @(
         @{ Name = 'veeam_jobs.prom' }
         @{ Name = 'veeam_jobs_escaping.prom' }
+        @{ Name = 'veeam_objects_edgecases.prom' }
+        @{ Name = 'doc/1.2-rev1/veeam_jobs.prom' }
+        @{ Name = 'doc/1.2-rev1/veeam_objects.prom' }
+        @{ Name = 'doc/1.3-rev2/veeam_jobs.prom' }
+        @{ Name = 'doc/1.3-rev2/veeam_objects.prom' }
     ) {
         param($Name)
         if (-not $script:Promtool) { Set-ItResult -Skipped -Because 'promtool nicht im PATH'; return }
@@ -47,6 +52,8 @@ Describe 'promtool check metrics' {
                 '/api/oauth2/token' { return New-HttpResponse -StatusCode 200 -Content $script:TokenJson }
                 '/api/v1/serverInfo' { return New-HttpResponse -StatusCode 200 -Content '{"buildVersion":"12.3.1.1139"}' }
                 '/api/v1/jobs/states' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'jobs-states-escaping.json') }
+                '/api/v1/sessions' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'objects-edge-sessions.json') }
+                '/api/v1/taskSessions' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'objects-edge-taskSessions.json') }
             }
             return New-HttpResponse -StatusCode 200
         }
@@ -55,7 +62,7 @@ Describe 'promtool check metrics' {
         $null = Invoke-VeeamExporterRun -TextfileDirectory $dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
 
         $files = @(Get-ChildItem -LiteralPath $dir -Filter '*.prom')
-        $files.Count | Should -Be 2
+        $files.Count | Should -Be 3
         foreach ($file in $files) {
             $result = Invoke-PromtoolCheck -Bytes ([System.IO.File]::ReadAllBytes($file.FullName))
             $result.Output | Should -BeNullOrEmpty -Because $file.Name

@@ -14,11 +14,18 @@ function Invoke-VeeamExporterRun {
         [string]$BaseUri = 'https://localhost:9419',
         [AllowNull()][AllowEmptyString()][string]$CertificateThumbprint,
         [AllowNull()][AllowEmptyString()][string]$ApiVersion,
-        [ValidateSet('jobs')][string[]]$Collector = @('jobs'),
+        [ValidateSet('jobs', 'objects')][string[]]$Collector = @('jobs', 'objects'),
+        [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
+        [ValidateNotNullOrEmpty()][string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
         [int]$TimeoutSec = 60
     )
     $collectorCommands = @{
-        jobs = 'Get-VeeamJobMetric'
+        jobs    = 'Get-VeeamJobMetric'
+        objects = 'Get-VeeamObjectMetric'
+    }
+    $collectorArguments = @{
+        jobs    = @{}
+        objects = @{ LookbackDays = $ObjectLookbackDays; SessionType = $ObjectSessionType }
     }
 
     $results = New-Object -TypeName System.Collections.Generic.List[object]
@@ -49,7 +56,8 @@ function Invoke-VeeamExporterRun {
             $ok = $false
             try {
                 if ($null -eq $session) { throw 'No session (logon failed).' }
-                $metrics = & $collectorCommands[$name] -Session $session
+                $extra = $collectorArguments[$name]
+                $metrics = & $collectorCommands[$name] -Session $session @extra
                 $text = ConvertTo-PromText -Metric $metrics
                 Write-PromFile -Directory $TextfileDirectory -Name ('veeam_{0}.prom' -f $name) -Content $text
                 $ok = $true

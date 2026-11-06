@@ -13,6 +13,11 @@ $script:VeeamAllowedPostPaths = @('/api/oauth2/token', '/api/oauth2/logout')
 
 $script:VeeamDefaultPageSize = 200
 
+# Time zone for API timestamps without offset (docs/metrics.md#OP-9). The
+# exporter runs on the VBR server, so this is the server's local time zone.
+# Tests replace it with a fixed zone.
+$script:VeeamTimeZone = [System.TimeZoneInfo]::Local
+
 foreach ($folder in @('Private', 'Public')) {
     $path = Join-Path -Path $PSScriptRoot -ChildPath $folder
     if (Test-Path -LiteralPath $path) {

@@ -11,36 +11,70 @@ function Get-VeeamField {
     return $prop.Value
 }
 
-function ConvertTo-UnixTimestamp {
+function ConvertTo-VeeamDateTimeOffset {
     # Converts an API timestamp (ISO 8601 string, DateTime or DateTimeOffset)
-    # to whole Unix seconds. Returns $null for empty input.
+    # to a DateTimeOffset. Returns $null for empty input.
+    # PowerShell 7 ConvertFrom-Json already turns ISO strings into DateTime:
+    # Utc for "Z", Local for an explicit offset, Unspecified without offset.
+    [CmdletBinding()]
+    [OutputType([System.DateTimeOffset])]
+    param(
+        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$Value
+    )
+    if ($null -eq $Value) { return $null }
+    if ($Value -is [System.DateTimeOffset]) { return $Value }
+
+    $inv = [System.Globalization.CultureInfo]::InvariantCulture
+    if ($Value -is [datetime]) {
+        $dt = $Value
+    }
+    else {
+        $text = ([string]$Value).Trim()
+        if ($text.Length -eq 0) { return $null }
+        # DateTime.MinValue as "not set" (e.g. endTime of a running task).
+        if ($text.StartsWith('0001-01-01')) { return $null }
+        if ($text -match '(?i)(z|[+-][0-9]{2}:?[0-9]{2})$') {
+            $parsedOffset = [System.DateTimeOffset]::MinValue
+            if (-not [System.DateTimeOffset]::TryParse($text, $inv, [System.Globalization.DateTimeStyles]::None, [ref]$parsedOffset)) {
+                throw "Invalid timestamp: '$text'"
+            }
+            return $parsedOffset
+        }
+        $dt = [datetime]::MinValue
+        if (-not [datetime]::TryParse($text, $inv, [System.Globalization.DateTimeStyles]::None, [ref]$dt)) {
+            throw "Invalid timestamp: '$text'"
+        }
+    }
+
+    if ($dt.Year -le 1) { return $null }
+    if ($dt.Kind -ne [System.DateTimeKind]::Unspecified) {
+        return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt.ToUniversalTime())
+    }
+    # ANNAHME: no offset means local time of the VBR server, see docs/metrics.md#OP-9
+    $offset = $script:VeeamTimeZone.GetUtcOffset($dt)
+    return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt, $offset)
+}
+
+function ConvertTo-UnixTimestamp {
+    # API timestamp -> whole Unix seconds. Returns $null for empty input.
     [CmdletBinding()]
     [OutputType([long])]
     param(
         [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$Value
     )
-    if ($null -eq $Value) { return $null }
-    if ($Value -is [System.DateTimeOffset]) {
-        return [int64]$Value.ToUnixTimeSeconds()
-    }
-    if ($Value -is [datetime]) {
-        # PowerShell 7 ConvertFrom-Json turns ISO strings into DateTime.
-        # ANNAHME: Unspecified kind is UTC, see docs/metrics.md#OP-9
-        $dt = $Value
-        if ($dt.Kind -eq [System.DateTimeKind]::Unspecified) {
-            $dt = [datetime]::SpecifyKind($dt, [System.DateTimeKind]::Utc)
-        }
-        return [int64]([System.DateTimeOffset]$dt.ToUniversalTime()).ToUnixTimeSeconds()
-    }
-    $text = ([string]$Value).Trim()
-    if ($text.Length -eq 0) { return $null }
-    # ANNAHME: strings without offset are UTC, see docs/metrics.md#OP-9
-    $styles = [System.Globalization.DateTimeStyles]::AssumeUniversal -bor [System.Globalization.DateTimeStyles]::AllowWhiteSpaces
-    $parsed = [System.DateTimeOffset]::MinValue
-    if (-not [System.DateTimeOffset]::TryParse($text, [System.Globalization.CultureInfo]::InvariantCulture, $styles, [ref]$parsed)) {
-        throw "Invalid timestamp: '$text'"
-    }
-    return [int64]$parsed.ToUnixTimeSeconds()
+    $dto = ConvertTo-VeeamDateTimeOffset -Value $Value
+    if ($null -eq $dto) { return $null }
+    return [int64]$dto.ToUnixTimeSeconds()
+}
+
+function ConvertTo-VeeamFilterTimestamp {
+    # DateTimeOffset -> value for createdAfterFilter etc. (UTC, explicit "Z").
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)][System.DateTimeOffset]$Value
+    )
+    return $Value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
 function ConvertTo-VeeamResultCode {
@@ -59,4 +93,26 @@ function ConvertTo-VeeamResultCode {
     }
     # ANNAHME: unknown result values count as None, see docs/metrics.md#OP-8
     return -1
+}
+
+function Format-VeeamResultMessage {
+    # Free-text result message for a label: line breaks and tabs -> space,
+    # whitespace runs collapsed, trimmed, cut to MaxLength characters.
+    # Escaping happens later in ConvertTo-PromText.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$Message,
+        [int]$MaxLength = 200
+    )
+    if ($null -eq $Message) { return '' }
+    $text = ([string]$Message) -replace '\s+', ' '
+    $text = $text.Trim()
+    if ($text.Length -gt $MaxLength) {
+        $cut = $MaxLength
+        # Never split a surrogate pair.
+        if ([char]::IsHighSurrogate($text[$cut - 1])) { $cut-- }
+        $text = $text.Substring(0, $cut).TrimEnd()
+    }
+    return $text
 }

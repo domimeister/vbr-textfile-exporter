@@ -1,0 +1,33 @@
+# HELP veeam_job_info Veeam Job (Wert immer 1)
+# TYPE veeam_job_info gauge
+veeam_job_info{job_name="AD Backup",job_id="301450bc-34cd-4d2c-bfc3-8d269bb471be",job_type="Backup",workload="vm",repository="Default Backup Repository"} 1
+veeam_job_info{job_name="Exchange Backup",job_id="53b87378-7958-477d-8def-fbe6740d4b6f",job_type="Backup",workload="vm",repository="Default Backup Repository"} 1
+veeam_job_info{job_name="Oracle Backup",job_id="75fc491a-d158-4380-a433-ebc42a28e4df",job_type="Backup",workload="application",repository="Storage 3"} 1
+# HELP veeam_job_last_result Resultat des letzten Laufs: 0 Success, 1 Warning, 2 Failed, -1 None
+# TYPE veeam_job_last_result gauge
+veeam_job_last_result{job_name="AD Backup",job_type="Backup"} -1
+veeam_job_last_result{job_name="Exchange Backup",job_type="Backup"} 1
+veeam_job_last_result{job_name="Oracle Backup",job_type="Backup"} -1
+# HELP veeam_job_enabled 1 Job aktiv, 0 deaktiviert
+# TYPE veeam_job_enabled gauge
+veeam_job_enabled{job_name="AD Backup"} 1
+veeam_job_enabled{job_name="Exchange Backup"} 1
+veeam_job_enabled{job_name="Oracle Backup"} 1
+# HELP veeam_job_running 1 wenn der Job gerade aktiv ist (running, starting, stopping)
+# TYPE veeam_job_running gauge
+veeam_job_running{job_name="AD Backup"} 1
+veeam_job_running{job_name="Exchange Backup"} 0
+veeam_job_running{job_name="Oracle Backup"} 1
+# HELP veeam_job_last_run_timestamp_seconds Start des letzten Laufs als Unix-Zeit
+# TYPE veeam_job_last_run_timestamp_seconds gauge
+veeam_job_last_run_timestamp_seconds{job_name="AD Backup"} 1707072034
+veeam_job_last_run_timestamp_seconds{job_name="Exchange Backup"} 1676865197
+veeam_job_last_run_timestamp_seconds{job_name="Oracle Backup"} 1707072024
+# HELP veeam_job_next_run_timestamp_seconds Naechster geplanter Lauf als Unix-Zeit (fehlt bei verketteten Jobs)
+# TYPE veeam_job_next_run_timestamp_seconds gauge
+veeam_job_next_run_timestamp_seconds{job_name="Oracle Backup"} 1707138000
+# HELP veeam_job_objects Anzahl Objekte im Job
+# TYPE veeam_job_objects gauge
+veeam_job_objects{job_name="AD Backup"} 1
+veeam_job_objects{job_name="Exchange Backup"} 1
+veeam_job_objects{job_name="Oracle Backup"} 1

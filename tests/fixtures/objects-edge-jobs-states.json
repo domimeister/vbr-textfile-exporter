@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "type": "VSphereBackup",
+      "status": "Running",
+      "lastResult": "Failed",
+      "workload": "Vm",
+      "id": "11111111-aaaa-4aaa-8aaa-000000000001",
+      "name": "Prod VMs",
+      "objectsCount": 5
+    },
+    {
+      "type": "VSphereBackup",
+      "status": "Stopped",
+      "lastResult": "Warning",
+      "workload": "Vm",
+      "id": "22222222-BBBB-4BBB-8BBB-000000000002",
+      "name": "Backup \"DC\" \\\\fs01",
+      "objectsCount": 2
+    }
+  ],
+  "pagination": {
+    "total": 2,
+    "count": 2,
+    "skip": 0,
+    "limit": 200
+  }
+}

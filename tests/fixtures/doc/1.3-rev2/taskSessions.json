@@ -1,0 +1,184 @@
+{
+  "data": [
+    {
+      "algorithm": "None",
+      "state": "Stopped",
+      "name": "winsrv88:/C:\\shares\\nfs_share",
+      "restorePointId": null,
+      "restorePointReference": null,
+      "repositoryId": "00000000-0000-0000-0000-000000000000",
+      "usn": 173280,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Proxy",
+        "duration": "00:00:23",
+        "processingRate": "N/A",
+        "processedSize": 9578192,
+        "readSize": 0,
+        "transferredSize": 0,
+        "progressPercent": 100
+      },
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "692f6be5-b2cb-46fc-a6d2-ae767597c009",
+      "sessionId": "0bb85caf-5e80-41c4-908d-2b43608b78a3",
+      "creationTime": "2024-11-13T22:00:49.893878",
+      "endTime": "2024-11-13T22:01:13.613709"
+    },
+    {
+      "algorithm": "Increment",
+      "state": "Stopped",
+      "name": "linbase01",
+      "restorePointId": "d5c059d9-336b-491e-b07e-89f717eaa4af",
+      "restorePointReference": "/api/v1/restorePoints/d5c059d9-336b-491e-b07e-89f717eaa4af",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "usn": 171783,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:17",
+        "processingRate": "53.7 MB",
+        "processedSize": 21474836480,
+        "readSize": 881852416,
+        "transferredSize": 343923660,
+        "progressPercent": 100
+      },
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "8bec8b2d-11e8-45e1-b7be-a932376a0de4",
+      "sessionId": "9811fb69-b436-4198-b848-fb6eb42fba03",
+      "creationTime": "2024-11-13T18:00:45.528604",
+      "endTime": "2024-11-13T18:02:02.865537"
+    },
+    {
+      "algorithm": "Increment",
+      "state": "Stopped",
+      "name": "winsrv88",
+      "restorePointId": "59a6a818-98c5-40a2-abb3-b72b1ec4e00f",
+      "restorePointReference": "/api/v1/restorePoints/59a6a818-98c5-40a2-abb3-b72b1ec4e00f",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "usn": 170927,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:02:17",
+        "processingRate": "79 MB",
+        "processedSize": 150323855360,
+        "readSize": 3495952384,
+        "transferredSize": 1274388985,
+        "progressPercent": 100
+      },
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "d9509517-f5a3-4697-8164-71f1572ae0c6",
+      "sessionId": "206e9bc7-86c3-40a4-91cd-0f3436cec21b",
+      "creationTime": "2024-11-13T16:00:42.080574",
+      "endTime": "2024-11-13T16:02:59.266609"
+    },
+    {
+      "algorithm": "None",
+      "state": "Stopped",
+      "name": "winsrv88:/C:\\shares\\nfs_share",
+      "restorePointId": null,
+      "restorePointReference": null,
+      "repositoryId": "00000000-0000-0000-0000-000000000000",
+      "usn": 164795,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Proxy",
+        "duration": "00:00:16",
+        "processingRate": "N/A",
+        "processedSize": 9578192,
+        "readSize": 0,
+        "transferredSize": 0,
+        "progressPercent": 100
+      },
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "9e1f5ee9-02ec-48cf-a5bb-2b92c7013d91",
+      "sessionId": "3779ebf8-4bbf-49af-b3ea-9fd2d5dc0689",
+      "creationTime": "2024-11-12T22:00:37.218594",
+      "endTime": "2024-11-12T22:00:53.438072"
+    },
+    {
+      "algorithm": "Increment",
+      "state": "Stopped",
+      "name": "linbase01",
+      "restorePointId": "170bcae5-f2c4-4547-972e-15349aa04609",
+      "restorePointReference": "/api/v1/restorePoints/170bcae5-f2c4-4547-972e-15349aa04609",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "usn": 163251,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:01:06",
+        "processingRate": "95.5 MB",
+        "processedSize": 21474836480,
+        "readSize": 1001390080,
+        "transferredSize": 413068918,
+        "progressPercent": 100
+      },
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "cbede369-c316-4e33-bc9d-e0897f27f93d",
+      "sessionId": "45e729e8-a905-4850-9e7c-8ee8f8df7695",
+      "creationTime": "2024-11-12T18:00:29.437419",
+      "endTime": "2024-11-12T18:01:35.94032"
+    },
+    {
+      "algorithm": "Increment",
+      "state": "Stopped",
+      "name": "winsrv88",
+      "restorePointId": "807f0ca2-c2c0-46ae-b759-df510585459d",
+      "restorePointReference": "/api/v1/restorePoints/807f0ca2-c2c0-46ae-b759-df510585459d",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "usn": 162437,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:02:10",
+        "processingRate": "141.9 MB",
+        "processedSize": 150323855360,
+        "readSize": 4255121408,
+        "transferredSize": 548362853,
+        "progressPercent": 100
+      },
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "7dff932c-df5b-41b2-9955-7baf2ed08e57",
+      "sessionId": "22babeec-9df0-41ef-b9fd-0d10c667a486",
+      "creationTime": "2024-11-12T16:00:35.98907",
+      "endTime": "2024-11-12T16:02:46.082522"
+    }
+  ],
+  "pagination": {
+    "total": 52,
+    "count": 6,
+    "skip": 0,
+    "limit": 6
+  }
+}

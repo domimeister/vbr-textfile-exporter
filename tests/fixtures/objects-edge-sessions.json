@@ -1,0 +1,100 @@
+{
+  "data": [
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "5e55e550-0000-4000-8000-000000000001",
+      "name": "Prod VMs alt",
+      "jobId": "11111111-aaaa-4aaa-8aaa-000000000001",
+      "creationTime": "2024-01-17T22:00:00+01:00",
+      "endTime": null,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "usn": 1
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "5e55e550-0000-4000-8000-000000000002",
+      "name": "Prod VMs alt",
+      "jobId": "11111111-aaaa-4aaa-8aaa-000000000001",
+      "creationTime": "2024-01-17T22:40:00+01:00",
+      "endTime": null,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "usn": 2
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "5e55e550-0000-4000-8000-000000000003",
+      "name": "Prod VMs",
+      "jobId": "11111111-aaaa-4aaa-8aaa-000000000001",
+      "creationTime": "2024-01-18T22:00:00+01:00",
+      "endTime": null,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "usn": 3
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "5e55e550-0000-4000-8000-000000000004",
+      "name": "Backup \"DC\" \\\\fs01",
+      "jobId": "22222222-bbbb-4bbb-8bbb-000000000002",
+      "creationTime": "2024-01-18T01:00:00Z",
+      "endTime": null,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "usn": 4
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "5e55e550-0000-4000-8000-000000000005",
+      "name": "Alter Job",
+      "jobId": "33333333-cccc-4ccc-8ccc-000000000003",
+      "creationTime": "2024-01-15T20:00:00+01:00",
+      "endTime": null,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "usn": 5
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "id": "5e55e550-0000-4000-8000-000000000006",
+      "name": "Alter Job neu",
+      "jobId": "33333333-cccc-4ccc-8ccc-000000000003",
+      "creationTime": "2024-01-16T20:00:00+01:00",
+      "endTime": null,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "usn": 6
+    }
+  ],
+  "pagination": {
+    "total": 6,
+    "count": 6,
+    "skip": 0,
+    "limit": 200
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "data": [
+    {
+      "type": "VSphereBackup",
+      "status": "Stopped",
+      "lastResult": "Success",
+      "workload": "Vm",
+      "id": "b6f7c1d2-31a4-4c55-9e10-6a2f8d3c4b01",
+      "name": "Backup Job 1",
+      "lastRun": "2024-11-13T18:00:30.117+01:00",
+      "nextRun": "2024-11-14T18:00:00+01:00",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "repositoryName": "Default Backup Repository",
+      "objectsCount": 1,
+      "sessionId": "9811fb69-b436-4198-b848-fb6eb42fba03",
+      "highPriority": false
+    },
+    {
+      "type": "VSphereBackup",
+      "status": "Stopped",
+      "lastResult": "Success",
+      "workload": "Vm",
+      "id": "c8e9d0a1-42b5-4d66-8f21-7b3a9e4d5c02",
+      "name": "Fileserver Backup",
+      "lastRun": "2024-11-13T16:00:30.117+01:00",
+      "nextRun": "2024-11-14T16:00:00+01:00",
+      "repositoryId": "88788f9e-d8f5-4eb4-bc4f-9b3f5403bcec",
+      "repositoryName": "Default Backup Repository",
+      "objectsCount": 1,
+      "sessionId": "206e9bc7-86c3-40a4-91cd-0f3436cec21b",
+      "highPriority": false
+    }
+  ],
+  "pagination": {
+    "total": 2,
+    "count": 2,
+    "skip": 0,
+    "limit": 200
+  }
+}

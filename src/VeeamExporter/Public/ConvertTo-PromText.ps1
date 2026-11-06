@@ -12,16 +12,17 @@ function ConvertTo-PromText {
     param(
         [Parameter(Mandatory = $true)][AllowEmptyCollection()][object[]]$Metric
     )
-    $names = @{}
+    # Ordinal (case-sensitive) sets: PowerShell hashtables ignore case, but
+    # Prometheus names and label values do not.
+    $names = New-Object -TypeName 'System.Collections.Generic.HashSet[string]' -ArgumentList ([System.StringComparer]::Ordinal)
     $sb = New-Object -TypeName System.Text.StringBuilder
     foreach ($m in $Metric) {
-        if ($names.ContainsKey($m.Name)) { throw "Metric $($m.Name) defined twice." }
-        $names[$m.Name] = $true
+        if (-not $names.Add($m.Name)) { throw "Metric $($m.Name) defined twice." }
         if ($m.Samples.Count -eq 0) { continue }
 
         [void]$sb.Append('# HELP ').Append($m.Name).Append(' ').Append((ConvertTo-PromHelpText -Text $m.Help)).Append("`n")
         [void]$sb.Append('# TYPE ').Append($m.Name).Append(' ').Append($m.Type).Append("`n")
-        $seen = @{}
+        $seen = New-Object -TypeName 'System.Collections.Generic.HashSet[string]' -ArgumentList ([System.StringComparer]::Ordinal)
         foreach ($s in $m.Samples) {
             $labelText = ''
             if ($s.Labels.Count -gt 0) {
@@ -31,8 +32,7 @@ function ConvertTo-PromText {
                 $labelText = '{' + ($pairs -join ',') + '}'
             }
             $series = $m.Name + $labelText
-            if ($seen.ContainsKey($series)) { throw "Duplicate series: $series" }
-            $seen[$series] = $true
+            if (-not $seen.Add($series)) { throw "Duplicate series: $series" }
             [void]$sb.Append($series).Append(' ').Append((Format-PromValue -Value $s.Value)).Append("`n")
         }
     }
