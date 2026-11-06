@@ -7,6 +7,8 @@ PowerShell exporter for Veeam Backup & Replication (v12.3.1 and v13). Runs as a 
 ## Repo structure (target)
 
 ```text
+.claude/agents/reviewer.md    # read-only PR reviewer subagent (+ .claude/hooks/reviewer-guard.sh)
+.github/                      # CI workflow, PR template
 src/
   VeeamExporter/              # module: Public/ and Private/ functions
   Invoke-VeeamExporter.ps1    # REST collectors: jobs, objects, repositories
@@ -40,7 +42,8 @@ docs/metrics.md
 - Lint: `Invoke-ScriptAnalyzer -Path src -Recurse`
 - Mock REST calls in tests. Fixtures in `tests/fixtures/` taken from the response examples of the Veeam docs (jobs/states, sessions, taskSessions, repositories/states).
 - Tests check the generated `.prom` files line by line, including escaping, encoding (no BOM) and line endings.
-- If `promtool` is available: `Get-Content <file> | promtool check metrics`.
+- If `promtool` is available: `Get-Content <file> | promtool check metrics`. For the files the tests generate: set `$env:VEEAM_TEST_PROM_OUTPUT` to an empty directory before `Invoke-Pester`, then run `./tests/Invoke-PromtoolCheck.ps1 -Path $env:VEEAM_TEST_PROM_OUTPUT, 'tests/fixtures/expected'`.
+- CI (`.github/workflows/ci.yml`, `windows-latest`) runs Pester (`-CI`), PSScriptAnalyzer on `src` and `deploy` (errors fail the build) and the promtool check, once under Windows PowerShell 5.1 and once under PowerShell 7.
 
 ## Way of working
 
@@ -49,5 +52,12 @@ docs/metrics.md
 
 ## Git-Workflow
 
+- One issue = one branch = one PR. Branch names: `feat/<topic>`, `fix/<topic>`, `chore/<topic>` (lowercase, hyphen-separated).
+- Never push directly to `main`. Never approve or merge PRs and never enable auto-merge: only Domi does that. Agents push their branch, open the PR and stop there.
+- Parallel work only in a separate `git worktree` per branch, e.g. `git worktree add ../vbr-<topic> -b feat/<topic> origin/main`. Never switch branches in a checkout that another agent is using.
+- Small PRs with one concern each. Tests go into the same PR as the change they cover.
+- PR description follows `.github/pull_request_template.md`: issue (`Closes #<n>`), what and why, hard-rules checklist, test evidence.
+- CI must be green. The job names `test (Windows PowerShell 5.1)` and `test (PowerShell 7)` are required checks on `main`; renaming them means updating the ruleset as well.
+- Review: the `reviewer` subagent (`.claude/agents/reviewer.md`) checks a PR against these rules, runs the tests and posts a COMMENT review. It never approves or merges.
 - No claude.ai session links in commit messages or PR descriptions.
 - Language: instructions may be given in German, but everything that goes into the repo or onto GitHub is in English: code, comments, identifiers, log and error messages, docs, commit messages, branch names, PR titles and descriptions, issues and review comments.

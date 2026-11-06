@@ -11,6 +11,7 @@ Describe 'All .prom files of both tasks together (windows_exporter rules)' {
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
         Set-LicenseMock
         $null = Invoke-VeeamLicenseExporterRun -TextfileDirectory $script:Dir -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'TextfileConsistency/both-tasks'
         $script:Parsed = @(Get-ChildItem -LiteralPath $script:Dir -Filter '*.prom' | ForEach-Object { Read-PromFile -Path $_.FullName })
         $script:AllSamples = @($script:Parsed | ForEach-Object { $_.Samples })
     }

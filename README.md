@@ -89,6 +89,14 @@ Invoke-ScriptAnalyzer -Path deploy -Recurse
 
 If `promtool` is in the PATH, `tests/Promtool.Tests.ps1` additionally checks the expected and the generated `.prom` files with `promtool check metrics`; otherwise these tests are skipped.
 
+CI (`.github/workflows/ci.yml`) runs on every pull request and on pushes to `main`, on `windows-latest`, under Windows PowerShell 5.1 and PowerShell 7: Pester, PSScriptAnalyzer (errors fail the build) and `promtool check metrics` on all `.prom` files the tests generated. Locally the same check works like this:
+
+```powershell
+$env:VEEAM_TEST_PROM_OUTPUT = Join-Path -Path ([System.IO.Path]::GetTempPath()) -ChildPath 'veeam-prom'
+Invoke-Pester -Path tests
+./tests/Invoke-PromtoolCheck.ps1 -Path $env:VEEAM_TEST_PROM_OUTPUT, 'tests/fixtures/expected'
+```
+
 Source and test files are pure ASCII (this is tested), because Windows PowerShell 5.1 reads files without a BOM as ANSI.
 
 ## License

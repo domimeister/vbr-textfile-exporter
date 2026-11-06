@@ -17,6 +17,7 @@ Describe 'Invoke-VeeamExporterRun' {
     It 'writes all collector files and veeam_exporter.prom on success' {
         Set-VeeamApiMock
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'ExporterRun/success'
 
         $result.Success | Should -BeTrue
         $result.ApiVersion | Should -BeExactly '1.3-rev2'
@@ -46,6 +47,7 @@ Describe 'Invoke-VeeamExporterRun' {
     It 'leaves vbr_version empty on HTTP 403 from serverInfo, without a warning (Viewer role)' {
         Set-VeeamApiMock -ServerInfoStatus 403
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningVariable warnings -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'ExporterRun/serverinfo-403'
         $result.Success | Should -BeTrue
         @($warnings).Count | Should -Be 0
         Get-FileText -Path $script:HealthFile | Should -Match ([regex]::Escape('api_version="1.3-rev2",vbr_version=""} 1'))
@@ -74,6 +76,7 @@ Describe 'Invoke-VeeamExporterRun' {
     It 'runs only the jobs collector with -Collector jobs' {
         Set-VeeamApiMock
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs' -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'ExporterRun/jobs-only'
         $result.Success | Should -BeTrue
         Test-Path -LiteralPath $script:ObjectsFile | Should -BeFalse
         Get-FileText -Path $script:HealthFile | Should -Not -Match 'collector="objects"'
@@ -125,6 +128,7 @@ Describe 'Invoke-VeeamExporterRun' {
         Set-VeeamApiMock -TokenStatus 400 -TokenContent $script:InvalidGrantJson
 
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'ExporterRun/login-failed'
 
         $result.Success | Should -BeFalse
         Test-Path -LiteralPath $script:JobsFile | Should -BeFalse
