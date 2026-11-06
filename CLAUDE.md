@@ -46,3 +46,7 @@ docs/metrics.md
 
 - Reihenfolge: Skelett (Auth, Versions-Probe, Writer) → Jobs → Objects → Repositories → Lizenz → Deploy.
 - Offene Punkte stehen am Ende von `docs/metrics.md`. Annahmen im Code mit `# ANNAHME:` markieren und dort verlinken, statt sie stillschweigend festzulegen.
+
+## Git-Workflow
+
+- Keine claude.ai-Session-Links in Commit-Messages oder PR-Beschreibungen.
