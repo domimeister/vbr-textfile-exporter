@@ -782,7 +782,10 @@ Describe 'Reading the certificate from localhost:9419' {
         $port = Get-Random -Minimum 20000 -Maximum 40000
         # IPv4 explicitly: on Windows, s_server may listen on IPv6 only, and the
         # TcpClient of .NET Framework (Windows PowerShell 5.1) connects via IPv4.
-        $server = Start-Process -FilePath $openssl.Source -ArgumentList @('s_server', '-accept', "127.0.0.1:$port", '-cert', $crt, '-key', $key, '-quiet') -PassThru -RedirectStandardOutput (Join-Path $dir 'out.txt') -RedirectStandardError (Join-Path $dir 'err.txt')
+        # -www: s_server answers by itself and does not read stdin; without it,
+        # an EOF on stdin makes it drop the connection during the handshake.
+        $serverErr = Join-Path $dir 'err.txt'
+        $server = Start-Process -FilePath $openssl.Source -ArgumentList @('s_server', '-accept', "127.0.0.1:$port", '-cert', $crt, '-key', $key, '-www', '-quiet') -PassThru -RedirectStandardOutput (Join-Path $dir 'out.txt') -RedirectStandardError $serverErr
         try {
             $info = $null
             $lastError = $null
@@ -790,7 +793,10 @@ Describe 'Reading the certificate from localhost:9419' {
                 try { $info = Get-TlsCertificateInfo -HostName 'localhost' -Port $port -TimeoutSeconds 5 }
                 catch { $lastError = $_; Start-Sleep -Milliseconds 250 }
             }
-            $info | Should -Not -BeNullOrEmpty -Because "Get-TlsCertificateInfo failed: $lastError"
+            if ($null -eq $info) {
+                $serverLog = if (Test-Path -LiteralPath $serverErr) { [System.IO.File]::ReadAllText($serverErr) } else { '' }
+                $info | Should -Not -BeNullOrEmpty -Because "Get-TlsCertificateInfo failed: $lastError; s_server stderr: $serverLog"
+            }
             $info.Thumbprint | Should -BeExactly $fingerprint.ToUpperInvariant()
             $info.Subject | Should -BeExactly 'CN=vbr-test'
         }
