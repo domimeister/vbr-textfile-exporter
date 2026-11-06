@@ -15,7 +15,8 @@ Spezifikation: [`docs/metrics.md`](docs/metrics.md). Regeln für die Entwicklung
 | Collector `objects` → `veeam_objects.prom` | fertig |
 | Collector `repositories` → `veeam_repositories.prom` | fertig |
 | Health → `veeam_exporter.prom` | fertig |
-| Lizenz, Deploy | offen |
+| Lizenz-Task → `veeam_license.prom`, Health → `veeam_exporter_license.prom` | fertig |
+| Deploy (Tasks, Install-Script), Alert-Regeln, Dashboard | offen |
 
 ## Aufruf
 
@@ -44,6 +45,19 @@ Ohne `-CertificateThumbprint` gilt die normale .NET-Zertifikatsprüfung; das sel
 | `-ObjectLookbackDays` | `8` | Wie weit `objects` Task-Sessions zurückliest. |
 | `-ObjectSessionType` | `BackupJob`, `ReplicaJob` | Session-Typen für `objects` (siehe OP-11 in `docs/metrics.md`). |
 | `-TimeoutSec` | `60` | Timeout pro HTTP-Request. |
+
+## Lizenz-Task
+
+Eigener geplanter Task, einmal täglich, als **SYSTEM** oder als lokales Konto mit der VBR-Rolle Backup Administrator; kein gespeichertes Passwort. Liest die Lizenz mit `Get-VBRInstalledLicense` aus dem Veeam-PowerShell-Modul (keine REST-API).
+
+```powershell
+# VBR 13: PowerShell 7 und installierte Veeam-Console nötig
+pwsh.exe -NoProfile -File .\src\Invoke-VeeamLicenseExporter.ps1 -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs'
+# VBR 12: Windows PowerShell 5.1
+powershell.exe -NoProfile -File .\src\Invoke-VeeamLicenseExporter.ps1
+```
+
+Der Task schreibt seinen Health-Status in `veeam_exporter_license.prom` (`collector="license"`), damit er `veeam_exporter.prom` des REST-Tasks nicht überschreibt.
 
 ## Tests
 

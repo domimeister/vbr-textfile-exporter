@@ -1,0 +1,18 @@
+{
+  "Status": "Expired",
+  "ExpirationDate": "2026-10-31T23:59:59",
+  "Type": "Subscription",
+  "Edition": "Standard",
+  "LicensedTo": "Kunde AG",
+  "SupportId": "01112222",
+  "SupportExpirationDate": "9999-12-31T23:59:59.9999999",
+  "AutoUpdateEnabled": true,
+  "FreeAgentInstanceConsumptionEnabled": true,
+  "SocketLicenseSummary": [],
+  "InstanceLicenseSummary": {
+    "LicensedInstancesNumber": 50,
+    "UsedInstancesNumber": 57.33,
+    "NewInstancesNumber": 3,
+    "RentalInstancesNumber": 0
+  }
+}

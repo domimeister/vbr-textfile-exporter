@@ -92,20 +92,15 @@ function Invoke-VeeamExporterRun {
             catch { Write-Warning ('Logout failed: {0}' -f $_.Exception.Message) }
         }
 
-        $success = New-PromMetric -Name 'veeam_exporter_collector_success' -Help '1 letzter Lauf des Collectors ok, 0 Fehler'
-        $duration = New-PromMetric -Name 'veeam_exporter_collector_duration_seconds' -Help 'Laufzeit des Collectors in Sekunden'
+        $health = New-VeeamCollectorHealthMetric -Result $results.ToArray()
         $info = New-PromMetric -Name 'veeam_exporter_info' -Help 'Exporter- und Server-Version (Wert immer 1)'
-        foreach ($r in $results) {
-            Add-PromSample -Metric $success -Labels ([ordered]@{ collector = $r.Collector }) -Value ([int]$r.Success)
-            Add-PromSample -Metric $duration -Labels ([ordered]@{ collector = $r.Collector }) -Value ([double]$r.DurationSeconds)
-        }
         Add-PromSample -Metric $info -Value 1 -Labels ([ordered]@{
                 script_version = $scriptVersion
                 api_version    = $apiVersionUsed
                 vbr_version    = $vbrVersion
             })
         try {
-            Write-PromFile -Directory $TextfileDirectory -Name 'veeam_exporter.prom' -Content (ConvertTo-PromText -Metric @($success, $duration, $info))
+            Write-PromFile -Directory $TextfileDirectory -Name 'veeam_exporter.prom' -Content (ConvertTo-PromText -Metric (@($health) + @($info)))
         }
         catch {
             Write-Warning ('Writing veeam_exporter.prom failed: {0}' -f $_.Exception.Message)

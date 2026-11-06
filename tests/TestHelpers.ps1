@@ -80,3 +80,106 @@ function Assert-PromText {
     }
     $Actual | Should -BeExactly $Expected
 }
+
+# REST API mock for complete runs (all collectors). Parameters switch
+# single endpoints to an error status.
+function Set-VeeamApiMock {
+    param(
+        [int]$TokenStatus = 200,
+        [string]$TokenContent = $script:TokenJson,
+        [int]$JobsStatus = 200,
+        [int]$TaskSessionsStatus = 200,
+        [int]$ServerInfoStatus = 200
+    )
+    $script:MockTokenStatus = $TokenStatus
+    $script:MockTokenContent = $TokenContent
+    $script:MockJobsStatus = $JobsStatus
+    $script:MockTaskSessionsStatus = $TaskSessionsStatus
+    $script:MockServerInfoStatus = $ServerInfoStatus
+    $script:MockRepositoryStates = Get-FixtureText -Name 'repositories-sobr-states.json'
+    $script:MockSobrs = Get-FixtureText -Name 'doc/1.3-rev2/scaleOutRepositories.json'
+    $script:MockJobsContent = Get-FixtureText -Name 'jobs-states.json'
+    $script:MockSessionsContent = Get-FixtureText -Name 'objects-doc-sessions.json'
+    $script:MockTasksContent = (Get-FixtureText -Name 'doc/1.3-rev0/taskSessions.json') -replace '"total": 52', '"total": 6'
+    $script:MockEmpty = '{"data":[],"pagination":{"total":0,"count":0,"skip":0,"limit":200}}'
+    Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
+        switch ($Path) {
+            '/api/oauth2/token' { return New-HttpResponse -StatusCode $script:MockTokenStatus -Content $script:MockTokenContent }
+            '/api/oauth2/logout' { return New-HttpResponse -StatusCode 200 }
+            '/api/v1/serverInfo' {
+                if ($script:MockServerInfoStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockServerInfoStatus -Content '{"errorCode":"AccessDenied","message":"Access is denied."}' }
+                return New-HttpResponse -StatusCode 200 -Content '{"vbrId":"b3b2c6e0","name":"vbr01","buildVersion":"13.0.1.180","patches":[]}'
+            }
+            '/api/v1/backupInfrastructure/repositories/states' { return New-HttpResponse -StatusCode 200 -Content $script:MockRepositoryStates }
+            '/api/v1/backupInfrastructure/scaleOutRepositories' { return New-HttpResponse -StatusCode 200 -Content $script:MockSobrs }
+            '/api/v1/jobs/states' {
+                if ($script:MockJobsStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockJobsStatus -Content '{"errorCode":"InternalError","message":"boom"}' }
+                return New-HttpResponse -StatusCode 200 -Content $script:MockJobsContent
+            }
+            '/api/v1/sessions' {
+                if ($Query['typeFilter'] -ne 'BackupJob') { return New-HttpResponse -StatusCode 200 -Content $script:MockEmpty }
+                return New-HttpResponse -StatusCode 200 -Content $script:MockSessionsContent
+            }
+            '/api/v1/taskSessions' {
+                if ($script:MockTaskSessionsStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockTaskSessionsStatus -Content '{"errorCode":"InternalError","message":"boom"}' }
+                if ($Query['sessionTypeFilter'] -ne 'BackupJob') { return New-HttpResponse -StatusCode 200 -Content $script:MockEmpty }
+                return New-HttpResponse -StatusCode 200 -Content $script:MockTasksContent
+            }
+        }
+        throw "Unexpected request: $Method $Path"
+    }
+}
+
+function Set-LicenseMock {
+    # Mocks the wrappers around the Veeam PowerShell module.
+    param(
+        [string]$Fixture = 'license-rental',
+        [switch]$ImportFails,
+        [switch]$LicenseFails,
+        [bool]$Connected = $true
+    )
+    $script:MockLicense = Get-FixtureText -Name "license/$Fixture.json" | ConvertFrom-Json
+    $script:MockConnected = $Connected
+    if ($ImportFails) {
+        Mock -ModuleName VeeamExporter Import-VeeamBackupModule { throw 'Cannot import module Veeam.Backup.PowerShell: not found' }
+    }
+    else {
+        Mock -ModuleName VeeamExporter Import-VeeamBackupModule { }
+    }
+    Mock -ModuleName VeeamExporter Connect-VeeamLocalServer { $script:MockConnected }
+    Mock -ModuleName VeeamExporter Disconnect-VeeamLocalServer { }
+    if ($LicenseFails) {
+        Mock -ModuleName VeeamExporter Get-VeeamInstalledLicense { throw 'Get-VBRInstalledLicense: access denied' }
+    }
+    else {
+        Mock -ModuleName VeeamExporter Get-VeeamInstalledLicense { @($script:MockLicense) }
+    }
+}
+
+function Read-PromFile {
+    # Minimal parser for the checks the windows_exporter does across files:
+    # returns HELP/TYPE per metric and every sample with its label names.
+    param([Parameter(Mandatory = $true)][string]$Path)
+    $help = @{}
+    $type = @{}
+    $samples = New-Object System.Collections.Generic.List[object]
+    foreach ($line in ((Get-FileText -Path $Path).TrimEnd("`n") -split "`n")) {
+        if ($line -match '^# HELP (\S+) (.*)$') { $help[$Matches[1]] = $Matches[2]; continue }
+        if ($line -match '^# TYPE (\S+) (\S+)$') { $type[$Matches[1]] = $Matches[2]; continue }
+        if ($line -match '^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{(.*)\})? (\S+)$') {
+            $labelText = $Matches[3]
+            $names = @()
+            if ($labelText) { $names = @([regex]::Matches($labelText, '([a-zA-Z_][a-zA-Z0-9_]*)="(?:[^"\\]|\\.)*"') | ForEach-Object { $_.Groups[1].Value }) }
+            $samples.Add([pscustomobject]@{ File = (Split-Path -Leaf $Path); Name = $Matches[1]; Series = $Matches[1] + $Matches[2]; LabelNames = ($names -join ',') })
+        }
+    }
+    return [pscustomobject]@{ Help = $help; Type = $type; Samples = $samples.ToArray() }
+}
+
+function Get-SortedFileName {
+    # File names in ordinal order (Sort-Object depends on the culture).
+    param([Parameter(Mandatory = $true)][string]$Directory, [string]$Filter = '*')
+    $names = [string[]]@(Get-ChildItem -LiteralPath $Directory -Filter $Filter | ForEach-Object Name)
+    [System.Array]::Sort($names, [System.StringComparer]::Ordinal)
+    return ($names -join ',')
+}

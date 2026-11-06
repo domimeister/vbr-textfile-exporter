@@ -1,0 +1,18 @@
+# HELP veeam_license_info Installierte Veeam-Lizenz (Wert immer 1)
+# TYPE veeam_license_info gauge
+veeam_license_info{edition="EnterprisePlus",license_type="Rental",status="Valid",licensed_to="Muster & Söhne AG \"IT\" \\ Basel"} 1
+# HELP veeam_license_valid 1 wenn der Lizenzstatus Valid ist, sonst 0
+# TYPE veeam_license_valid gauge
+veeam_license_valid 1
+# HELP veeam_license_expiration_timestamp_seconds Ablauf der Lizenz als Unix-Zeit (fehlt bei unbefristeter Lizenz)
+# TYPE veeam_license_expiration_timestamp_seconds gauge
+veeam_license_expiration_timestamp_seconds 1806447600
+# HELP veeam_license_support_expiration_timestamp_seconds Ablauf des Supports als Unix-Zeit
+# TYPE veeam_license_support_expiration_timestamp_seconds gauge
+veeam_license_support_expiration_timestamp_seconds 1806447600
+# HELP veeam_license_instances_licensed Lizenzierte Instanzen
+# TYPE veeam_license_instances_licensed gauge
+veeam_license_instances_licensed 1000
+# HELP veeam_license_instances_used Belegte Instanzen
+# TYPE veeam_license_instances_used gauge
+veeam_license_instances_used 2

@@ -62,6 +62,24 @@ Describe 'Quellcode-Regeln' {
         $text | Should -Not -Match 'Invoke-RestMethod'
     }
 
+    It 'ruft nur lesende Veeam-Cmdlets auf' {
+        $allowed = @('Get-VBRServerSession', 'Connect-VBRServer', 'Disconnect-VBRServer', 'Get-VBRInstalledLicense')
+        $bad = foreach ($f in $script:SourceFiles) {
+            $ast = [System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$null)
+            $commands = $ast.FindAll({ param($n) $n -is [System.Management.Automation.Language.CommandAst] }, $true)
+            foreach ($c in $commands) {
+                $name = $c.GetCommandName()
+                if ($name -match '-VBR' -and $allowed -notcontains $name) { '{0}:{1} {2}' -f $f.Name, $c.Extent.StartLineNumber, $name }
+            }
+            # also catches calls by string, e.g. & 'Install-VBRLicense'
+            $text = [System.IO.File]::ReadAllText($f.FullName)
+            foreach ($m in [regex]::Matches($text, '\b[A-Za-z]+-VBR[A-Za-z]+')) {
+                if ($allowed -notcontains $m.Value) { '{0}: {1}' -f $f.Name, $m.Value }
+            }
+        }
+        @($bad) | Should -BeNullOrEmpty
+    }
+
     It 'exportiert die Funktionen aus dem Manifest' {
         $manifest = Import-PowerShellDataFile -Path $script:ModuleManifest
         $exported = @((Get-Command -Module VeeamExporter).Name | Sort-Object)

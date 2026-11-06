@@ -22,6 +22,14 @@ Auffällig: Die Beispiele schreiben Enum-Werte je nach Version klein oder gross 
 - `jobs-states.json`: selbst gebaut, deckt Success/Warning/Failed/None, running/disabled, verkettete Jobs ohne `nextRun` und nie gelaufene Jobs ohne `lastRun` ab.
 - `jobs-states-escaping.json`: Grenzfälle für Labelwerte (Anführungszeichen, Backslashes, Zeilenumbruch, Umlaute) und unbekannte Werte in `lastResult`/`status`.
 
+## `license/`
+
+Lizenzobjekte, wie sie `Get-VBRInstalledLicense` liefert, als JSON. Aufgebaut nach den dokumentierten Eigenschaften von [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstalledlicense.html) und den Beispielen von [Get-VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/get-vbrinstalledlicense.html) (Instanzen 1000/2, Socket-Zusammenfassung). Eine echte Ausgabe gibt es in der Doku nicht; beim ersten Lab-Test mit `Get-VBRInstalledLicense | ConvertTo-Json -Depth 3` abgleichen.
+
+- `license-rental.json`: Valid, Rental, Instanzlizenz, Escaping und Umlaut in `LicensedTo`.
+- `license-perpetual-socket.json`: unbefristet (`ExpirationDate` = `0001-01-01`), reine Socket-Lizenz ohne `InstanceLicenseSummary`.
+- `license-expired.json`: Expired, Support bis `9999-12-31` (= nicht gesetzt), Überbelegung mit Bruchteil (57.33 von 50).
+
 ## `expected/`
 
 Erwartete Ausgabe, zeilengenau, UTF-8 ohne BOM, LF, Zeilenumbruch am Ende. Die Dateien für Objects und die Doku-Beispiele wurden mit einer unabhängigen Python-Referenzimplementierung erzeugt, nicht mit dem Exporter selbst. Zeitstempel ohne Offset gelten in den Tests als +01:00 (`Set-TestTimeZone`).

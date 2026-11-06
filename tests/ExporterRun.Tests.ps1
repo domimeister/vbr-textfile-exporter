@@ -2,53 +2,6 @@ BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     $script:ScriptVersion = (Import-PowerShellDataFile -Path $script:ModuleManifest).ModuleVersion
     Set-TestTimeZone
-
-    function Set-VeeamApiMock {
-        param(
-            [int]$TokenStatus = 200,
-            [string]$TokenContent = $script:TokenJson,
-            [int]$JobsStatus = 200,
-            [int]$TaskSessionsStatus = 200,
-            [int]$ServerInfoStatus = 200
-        )
-        $script:MockTokenStatus = $TokenStatus
-        $script:MockTokenContent = $TokenContent
-        $script:MockJobsStatus = $JobsStatus
-        $script:MockTaskSessionsStatus = $TaskSessionsStatus
-        $script:MockServerInfoStatus = $ServerInfoStatus
-        $script:MockRepositoryStates = Get-FixtureText -Name 'repositories-sobr-states.json'
-        $script:MockSobrs = Get-FixtureText -Name 'doc/1.3-rev2/scaleOutRepositories.json'
-        $script:MockJobsContent = Get-FixtureText -Name 'jobs-states.json'
-        $script:MockSessionsContent = Get-FixtureText -Name 'objects-doc-sessions.json'
-        $script:MockTasksContent = (Get-FixtureText -Name 'doc/1.3-rev0/taskSessions.json') -replace '"total": 52', '"total": 6'
-        $script:MockEmpty = '{"data":[],"pagination":{"total":0,"count":0,"skip":0,"limit":200}}'
-        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
-            switch ($Path) {
-                '/api/oauth2/token' { return New-HttpResponse -StatusCode $script:MockTokenStatus -Content $script:MockTokenContent }
-                '/api/oauth2/logout' { return New-HttpResponse -StatusCode 200 }
-                '/api/v1/serverInfo' {
-                    if ($script:MockServerInfoStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockServerInfoStatus -Content '{"errorCode":"AccessDenied","message":"Access is denied."}' }
-                    return New-HttpResponse -StatusCode 200 -Content '{"vbrId":"b3b2c6e0","name":"vbr01","buildVersion":"13.0.1.180","patches":[]}'
-                }
-                '/api/v1/backupInfrastructure/repositories/states' { return New-HttpResponse -StatusCode 200 -Content $script:MockRepositoryStates }
-                '/api/v1/backupInfrastructure/scaleOutRepositories' { return New-HttpResponse -StatusCode 200 -Content $script:MockSobrs }
-                '/api/v1/jobs/states' {
-                    if ($script:MockJobsStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockJobsStatus -Content '{"errorCode":"InternalError","message":"boom"}' }
-                    return New-HttpResponse -StatusCode 200 -Content $script:MockJobsContent
-                }
-                '/api/v1/sessions' {
-                    if ($Query['typeFilter'] -ne 'BackupJob') { return New-HttpResponse -StatusCode 200 -Content $script:MockEmpty }
-                    return New-HttpResponse -StatusCode 200 -Content $script:MockSessionsContent
-                }
-                '/api/v1/taskSessions' {
-                    if ($script:MockTaskSessionsStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockTaskSessionsStatus -Content '{"errorCode":"InternalError","message":"boom"}' }
-                    if ($Query['sessionTypeFilter'] -ne 'BackupJob') { return New-HttpResponse -StatusCode 200 -Content $script:MockEmpty }
-                    return New-HttpResponse -StatusCode 200 -Content $script:MockTasksContent
-                }
-            }
-            throw "Unexpected request: $Method $Path"
-        }
-    }
 }
 
 Describe 'Invoke-VeeamExporterRun' {
@@ -185,6 +138,6 @@ Describe 'Invoke-VeeamExporterRun' {
         Set-VeeamApiMock
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
         @(Get-ChildItem -LiteralPath $script:Dir -Filter '*.tmp').Count | Should -Be 0
-        @(Get-ChildItem -LiteralPath $script:Dir | ForEach-Object Name | Sort-Object) -join ',' | Should -BeExactly 'veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom,veeam_repositories.prom'
+        Get-SortedFileName -Directory $script:Dir | Should -BeExactly 'veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom,veeam_repositories.prom'
     }
 }

@@ -40,6 +40,9 @@ Describe 'promtool check metrics' {
         @{ Name = 'veeam_repositories_sobr.prom' }
         @{ Name = 'doc/1.2-rev1/veeam_repositories.prom' }
         @{ Name = 'doc/1.3-rev0/veeam_repositories.prom' }
+        @{ Name = 'license/veeam_license_rental.prom' }
+        @{ Name = 'license/veeam_license_perpetual-socket.prom' }
+        @{ Name = 'license/veeam_license_expired.prom' }
     ) {
         param($Name)
         if (-not $script:Promtool) { Set-ItResult -Skipped -Because 'promtool nicht im PATH'; return }

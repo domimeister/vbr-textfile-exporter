@@ -14,6 +14,8 @@
         'Get-VeeamObjectMetric'
         'Get-VeeamRepositoryMetric'
         'Invoke-VeeamExporterRun'
+        'Get-VeeamLicenseMetric'
+        'Invoke-VeeamLicenseExporterRun'
         'New-PromMetric'
         'Add-PromSample'
         'ConvertTo-PromText'

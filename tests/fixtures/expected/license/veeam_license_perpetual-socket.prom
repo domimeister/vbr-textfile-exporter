@@ -1,0 +1,9 @@
+# HELP veeam_license_info Installierte Veeam-Lizenz (Wert immer 1)
+# TYPE veeam_license_info gauge
+veeam_license_info{edition="Enterprise",license_type="Perpetual",status="Valid",licensed_to="Beispiel GmbH"} 1
+# HELP veeam_license_valid 1 wenn der Lizenzstatus Valid ist, sonst 0
+# TYPE veeam_license_valid gauge
+veeam_license_valid 1
+# HELP veeam_license_support_expiration_timestamp_seconds Ablauf des Supports als Unix-Zeit
+# TYPE veeam_license_support_expiration_timestamp_seconds gauge
+veeam_license_support_expiration_timestamp_seconds 1782774000

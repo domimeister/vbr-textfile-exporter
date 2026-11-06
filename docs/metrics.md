@@ -116,8 +116,10 @@ veeam_object_last_failure_info{job_name="Backup Job 1",object="winsrv88",message
 Die Lizenz kommt nicht über REST, sondern über `Get-VBRInstalledLicense` in einem eigenen Task, einmal täglich. Grund: `GET /api/v1/license` ist nur für Veeam Backup Administrator freigegeben ([License-Referenz](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/License#operation/GetInstalledLicense)); dafür müsste ein Admin-Passwort auf dem Server liegen.
 
 - **Task-Konto:** SYSTEM oder ein lokales Konto, das in VBR Backup Administrator ist. Kein gespeichertes Passwort.
-- **Voraussetzung:** Veeam-PS-Modul. Unter v13 nur mit PowerShell 7 und installierter Console ([Veeam PowerShell v13](https://helpcenter.veeam.com/docs/vbr/powershell/gloabl_changes_v13.html)), unter v12 mit Windows PowerShell 5.1.
-- **Ausgabe:** `veeam_license.prom`, getrennt von den REST-Dateien. Fällt dieser Task aus, laufen Jobs und Repositories weiter.
+- **Voraussetzung:** Veeam-PS-Modul. Unter v13 nur mit PowerShell 7 und installierter Console ([Veeam PowerShell v13](https://helpcenter.veeam.com/docs/vbr/powershell/global_changes_v13.html)), unter v12 mit Windows PowerShell 5.1.
+- **Verbindung:** Gibt es keine Session (`Get-VBRServerSession`), verbindet sich das Script mit `Connect-VBRServer` ohne Parameter, also lokal als Task-Konto, und trennt am Ende mit `Disconnect-VBRServer`. Weitere Veeam-Cmdlets ruft es nicht auf; schreibende wie `Install-VBRLicense`, `Update-VBRLicense` oder `Enable-VBRLicenseAutoUpdate` sind per Test ausgeschlossen.
+- **Ausgabe:** `veeam_license.prom`, getrennt von den REST-Dateien, nur bei Erfolg ersetzt. Fällt dieser Task aus, laufen Jobs und Repositories weiter.
+- **Health:** Der Lizenz-Task schreibt `veeam_exporter_collector_success{collector="license"}` und die Laufzeit in eine eigene Datei `veeam_exporter_license.prom`, bei jedem Lauf. In `veeam_exporter.prom` würden sich die beiden Tasks gegenseitig überschreiben.
 
 | Metrik | Labels | Wert | Feld in `VBRInstalledLicense` |
 | --- | --- | --- | --- |
@@ -128,11 +130,15 @@ Die Lizenz kommt nicht über REST, sondern über `Get-VBRInstalledLicense` in ei
 | `veeam_license_instances_licensed` | – | Anzahl | InstanceLicenseSummary |
 | `veeam_license_instances_used` | – | Anzahl | InstanceLicenseSummary |
 
-Felder laut [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstalledlicense.html). Das Verhalten von ExpirationDate bei unbefristeten Lizenzen ist noch zu prüfen.
+Felder laut [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstalledlicense.html) und [VBRInstanceLicenseSummary](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstancelicensesummary.html): `LicensedInstancesNumber` und `UsedInstancesNumber`. Werte laut [Enums](https://helpcenter.veeam.com/docs/vbr/powershell/enums.html): Status Valid, Expired, Invalid; Type Rental, Perpetual, Subscription, Evaluation, Free, Empty, NFR; Edition Community, Standard, Enterprise, EnterprisePlus, Unspecified.
+
+- **„Nur wenn gesetzt“:** Ein Datum fehlt, wenn es leer ist oder `DateTime.MinValue` bzw. `DateTime.MaxValue` entspricht (Annahme für unbefristete Lizenzen, OP-3). Ohne `InstanceLicenseSummary` (z. B. reine Socket-Lizenz) fehlen die beiden Instanz-Metriken.
 
 ## Exporter-Health
 
-Jeder Collector schreibt seine eigene Datei und ersetzt sie nur bei Erfolg. Das Alter der Datei zeigt also, seit wann ein Collector hängt; zusätzliche Zustandsdateien braucht es nicht. `veeam_exporter.prom` wird bei jedem Lauf geschrieben, auch im Fehlerfall.
+Jeder Collector schreibt seine eigene Datei und ersetzt sie nur bei Erfolg. Das Alter der Datei zeigt also, seit wann ein Collector hängt; zusätzliche Zustandsdateien braucht es nicht. `veeam_exporter.prom` (REST-Task) und `veeam_exporter_license.prom` (Lizenz-Task) werden bei jedem Lauf geschrieben, auch im Fehlerfall.
+
+Dieselbe Metrik darf in mehreren Dateien stehen, wenn sich die Label-Werte unterscheiden. Eine identische Serie in zwei Dateien lässt den windows_exporter (v0.25.1) dagegen **alle** Textfile-Metriken verwerfen (`windows_textfile_scrape_error` = 1). HELP-Text und Label-Namen einer Metrik müssen in allen Dateien gleich sein. Beides prüft ein Test über die Dateien beider Tasks.
 
 | Metrik | Labels | Wert | Quelle |
 | --- | --- | --- | --- |
@@ -196,7 +202,7 @@ Diese Punkte sind nur im Lab zu klären; sie ändern Details, nicht die Architek
 
 - [x] **OP-1** Rolle für `repositories/states` und `scaleOutRepositories`: reicht Veeam Backup Viewer? Laut Referenz ja, in allen Revisionen von 1.2-rev1 bis 1.3-rev2 („Available to … Backup Viewer“). Im Lab bestätigen.
 - [ ] **OP-2** Tape-, File-Share- und SureBackup-Jobs: erscheinen sie in `jobs/states`, etwa als Unknown? Sonst über `/api/v1/sessions` abdecken.
-- [ ] **OP-3** Lizenz-Task unter v13 als SYSTEM testen (PowerShell 7, Console) und ExpirationDate bei unbefristeter Lizenz prüfen.
+- [ ] **OP-3** Lizenz-Task unter v13 als SYSTEM testen (PowerShell 7, Console) und ExpirationDate bei unbefristeter Lizenz prüfen. Annahme: `MinValue`/`MaxValue` bedeutet „nicht gesetzt“. Ausserdem prüfen, ob `Get-VBRInstalledLicense` je mehr als ein Objekt liefert; das Script nimmt dann das erste und warnt.
 - [ ] **OP-4** Object-Storage-Repositories: was liefert capacityGB?
 - [ ] **OP-5** Einheit GB = GiB? Gegen die Console vergleichen.
 - [x] **OP-6** VBR 12.0 bis 12.2 (API 1.1): gibt es `taskSessions` schon? Geklärt anhand der OpenAPI-Specs (1.1-rev0 bis 1.3-rev2): `taskSessions` fehlt in allen 1.1-Revisionen und ist ab 1.2-rev0 vorhanden. Mindestversion bleibt 12.3.1 (1.2-rev1).
@@ -207,6 +213,7 @@ Diese Punkte sind nur im Lab zu klären; sie ändern Details, nicht die Architek
 - [ ] **OP-11** Unter welchem Session-Typ laufen Agent-Jobs? Ab 1.3 gibt es zusätzlich `AgentBackup`, `AgentPolicy`, `EndpointBackup` und `BackupCopyJob`. Falls Agent-Tasks dort landen, fehlen sie mit dem Standard `BackupJob,ReplicaJob` in `veeam_objects.prom` und müssen per Parameter ergänzt werden (unter 1.2-rev1 existieren diese Werte nicht).
 - [ ] **OP-12** Erscheint ein SOBR selbst als Zeile in `repositories/states` (Typ `ExtendableRepository` im Enum)? Dann zählen Summen über alle Repositories die Extents doppelt; Summen deshalb über `sobr=""` plus Extents bilden oder die SOBR-Zeile ausschliessen. Der Exporter gibt die Zeile vorerst unverändert aus.
 - [ ] **OP-13** `GET /api/v1/serverInfo` ist laut Referenz nur für Backup Administrator freigegeben. Mit dem Viewer-Konto bleibt `vbr_version` in `veeam_exporter_info` leer (HTTP 403, keine Warnung). Alternative: Version lokal aus der Installation lesen.
+- [ ] **OP-14** Socket-Lizenzen: `SocketLicenseSummary` (`LicensedSocketsNumber`, `UsedSocketsNumber` pro Plattform) wird noch nicht exportiert. Nur nötig, wenn noch Socket-Lizenzen im Einsatz sind.
 
 1. Script-Skelett: Auth, Versions-Probe, atomares Schreiben, Jobs-Collector.
 2. Test gegen je einen v12- und v13-Server, Beispiel-.prom ablegen.
@@ -221,6 +228,6 @@ Diese Punkte sind nur im Lab zu klären; sie ändern Details, nicht die Architek
 - [License-Referenz](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/License#operation/GetInstalledLicense)
 - [Repositories-Referenz](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/Repositories)
 - [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstalledlicense.html)
-- [Veeam PowerShell v13 Global Changes](https://helpcenter.veeam.com/docs/vbr/powershell/gloabl_changes_v13.html)
+- [Veeam PowerShell v13 Global Changes](https://helpcenter.veeam.com/docs/vbr/powershell/global_changes_v13.html)
 - [windows_exporter Textfile-Collector](https://github.com/prometheus-community/windows_exporter/blob/v0.25.1/docs/collector.textfile.md)
 - [Veeam Forum: Retry-Status über REST](https://forums.veeam.com/viewtopic.php?p=453319)

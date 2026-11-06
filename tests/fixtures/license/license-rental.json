@@ -1,0 +1,18 @@
+{
+  "Status": "Valid",
+  "ExpirationDate": "2027-03-31T00:00:00",
+  "Type": "Rental",
+  "Edition": "EnterprisePlus",
+  "LicensedTo": "Muster & S\u00f6hne AG \"IT\" \\ Basel",
+  "SupportId": "01234567",
+  "SupportExpirationDate": "2027-03-31T00:00:00",
+  "AutoUpdateEnabled": true,
+  "FreeAgentInstanceConsumptionEnabled": true,
+  "SocketLicenseSummary": [],
+  "InstanceLicenseSummary": {
+    "LicensedInstancesNumber": 1000,
+    "UsedInstancesNumber": 2,
+    "NewInstancesNumber": 0,
+    "RentalInstancesNumber": 0
+  }
+}

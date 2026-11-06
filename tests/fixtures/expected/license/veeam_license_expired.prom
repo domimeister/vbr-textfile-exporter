@@ -1,0 +1,15 @@
+# HELP veeam_license_info Installierte Veeam-Lizenz (Wert immer 1)
+# TYPE veeam_license_info gauge
+veeam_license_info{edition="Standard",license_type="Subscription",status="Expired",licensed_to="Kunde AG"} 1
+# HELP veeam_license_valid 1 wenn der Lizenzstatus Valid ist, sonst 0
+# TYPE veeam_license_valid gauge
+veeam_license_valid 0
+# HELP veeam_license_expiration_timestamp_seconds Ablauf der Lizenz als Unix-Zeit (fehlt bei unbefristeter Lizenz)
+# TYPE veeam_license_expiration_timestamp_seconds gauge
+veeam_license_expiration_timestamp_seconds 1793487599
+# HELP veeam_license_instances_licensed Lizenzierte Instanzen
+# TYPE veeam_license_instances_licensed gauge
+veeam_license_instances_licensed 50
+# HELP veeam_license_instances_used Belegte Instanzen
+# TYPE veeam_license_instances_used gauge
+veeam_license_instances_used 57.33

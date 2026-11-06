@@ -22,7 +22,10 @@ function ConvertTo-VeeamDateTimeOffset {
         [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$Value
     )
     if ($null -eq $Value) { return $null }
-    if ($Value -is [System.DateTimeOffset]) { return $Value }
+    if ($Value -is [System.DateTimeOffset]) {
+        if ($Value.Year -le 1 -or $Value.Year -ge 9999) { return $null }
+        return $Value
+    }
 
     $inv = [System.Globalization.CultureInfo]::InvariantCulture
     if ($Value -is [datetime]) {
@@ -31,8 +34,9 @@ function ConvertTo-VeeamDateTimeOffset {
     else {
         $text = ([string]$Value).Trim()
         if ($text.Length -eq 0) { return $null }
-        # DateTime.MinValue as "not set" (e.g. endTime of a running task).
-        if ($text.StartsWith('0001-01-01')) { return $null }
+        # DateTime.MinValue/MaxValue as "not set" (e.g. endTime of a running
+        # task, expiration of a perpetual license, docs/metrics.md#OP-3).
+        if ($text.StartsWith('0001-01-01') -or $text.StartsWith('9999-12-31')) { return $null }
         if ($text -match '(?i)(z|[+-][0-9]{2}:?[0-9]{2})$') {
             $parsedOffset = [System.DateTimeOffset]::MinValue
             if (-not [System.DateTimeOffset]::TryParse($text, $inv, [System.Globalization.DateTimeStyles]::None, [ref]$parsedOffset)) {
@@ -46,7 +50,7 @@ function ConvertTo-VeeamDateTimeOffset {
         }
     }
 
-    if ($dt.Year -le 1) { return $null }
+    if ($dt.Year -le 1 -or $dt.Year -ge 9999) { return $null }
     if ($dt.Kind -ne [System.DateTimeKind]::Unspecified) {
         return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt.ToUniversalTime())
     }
@@ -152,4 +156,15 @@ function ConvertTo-VeeamByteCount {
     $value = [System.Convert]::ToDouble($GB, [System.Globalization.CultureInfo]::InvariantCulture)
     if ([double]::IsNaN($value) -or [double]::IsInfinity($value)) { return $null }
     return [int64][math]::Round($value * 1073741824.0, [System.MidpointRounding]::AwayFromZero)
+}
+
+function ConvertTo-VeeamCount {
+    # Whole numbers as int64 ("1000", not "1000.0"), fractions stay double.
+    [CmdletBinding()]
+    [OutputType([long], [double])]
+    param([Parameter(Mandatory = $true)][AllowNull()][object]$Value)
+    if ($null -eq $Value) { return $null }
+    $d = [double]$Value
+    if ([math]::Floor($d) -eq $d) { return [int64]$d }
+    return $d
 }
