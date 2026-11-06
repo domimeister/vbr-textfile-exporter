@@ -1,96 +1,96 @@
 # Veeam Prometheus Exporter (windows_exporter Textfile)
 
-PowerShell-Exporter für Veeam Backup & Replication 12.3.1 und 13. Läuft als geplanter Task auf dem VBR-Server, liest die REST API auf `localhost:9419` (nur lesend) und schreibt `.prom`-Dateien ins Textfile-Verzeichnis des windows_exporter.
+PowerShell exporter for Veeam Backup & Replication 12.3.1 and 13. Runs as a scheduled task on the VBR server, reads the REST API on `localhost:9419` (read-only) and writes `.prom` files into the textfile directory of the windows_exporter.
 
-## Zweck
+## Purpose
 
-Backup-Zustand von Veeam in Prometheus und Grafana sichtbar machen, ohne einen zusätzlichen Dienst oder Port auf dem Backup-Server:
+Make the Veeam backup state visible in Prometheus and Grafana without an additional service or port on the backup server:
 
-- **Jobs:** letztes Ergebnis (Success/Warning/Failed), aktiviert/läuft, letzter und nächster Lauf, Anzahl Objekte.
-- **Objekte:** letztes Ergebnis, letzter Lauf, verarbeitete Datenmenge und letzte Fehlermeldung pro VM bzw. gesichertem Objekt, um nicht gesicherte VMs zu finden.
-- **Repositories:** Kapazität, freier Platz, Belegung durch Backups, Online- und Out-of-Date-Status, SOBR-Zuordnung.
-- **Lizenz:** Gültigkeit, Ablauf von Lizenz und Support, lizenzierte und belegte Instanzen.
-- **Health des Exporters:** Erfolg und Laufzeit jedes Collectors, damit ein stehengebliebener Export auffällt.
+- **Jobs:** last result (Success/Warning/Failed), enabled/running, last and next run, number of objects.
+- **Objects:** last result, last run, processed data and last error message per VM or protected object, to find VMs that are not backed up.
+- **Repositories:** capacity, free space, space used by backups, online and out-of-date status, SOBR membership.
+- **License:** validity, license and support expiration, licensed and used instances.
+- **Exporter health:** success and duration of each collector, so a stalled export gets noticed.
 
-Der windows_exporter, der ohnehin auf dem Server läuft, liefert die Dateien über seinen Textfile-Collector an Prometheus aus. Der Exporter liest nur: Er ruft ausser Login und Logout ausschliesslich GET-Endpoints auf und ändert nichts in VBR.
+The windows_exporter, which runs on the server anyway, serves the files to Prometheus through its textfile collector. The exporter only reads: apart from login and logout it calls GET endpoints exclusively and changes nothing in VBR.
 
-**Spezifikation:** Metriknamen, Labels, Wertecodes, Beispiel-Alerts und offene Punkte stehen in [`docs/metrics.md`](docs/metrics.md). Regeln für die Entwicklung: [`CLAUDE.md`](CLAUDE.md).
+**Specification:** metric names, labels, value codes, example alerts and open points are in [`docs/metrics.md`](docs/metrics.md). Development rules: [`CLAUDE.md`](CLAUDE.md).
 
-## Voraussetzungen
+## Prerequisites
 
-| Was | Details |
+| What | Details |
 | --- | --- |
-| Veeam Backup & Replication | 12.3.1 oder 13, REST-API auf `localhost:9419` (REST-Revision 1.2-rev1 bis 1.3-rev2, wird automatisch erkannt) |
-| windows_exporter | als Dienst auf dem VBR-Server, Textfile-Collector aktiv (Standard) |
-| PowerShell | Windows PowerShell 5.1 (REST-Task, Installation). Lizenz-Task unter VBR 13: PowerShell 7 und die installierte Veeam-Console |
-| Veeam-Konto | lokaler Windows-Benutzer mit der VBR-Rolle **Backup Viewer** für den REST-Task |
-| Rechte | Installation in einer PowerShell **als Administrator** |
-| Prometheus | scrapt den windows_exporter (Standard-Port 9182) |
+| Veeam Backup & Replication | 12.3.1 or 13, REST API on `localhost:9419` (REST revision 1.2-rev1 to 1.3-rev2, detected automatically) |
+| windows_exporter | as a service on the VBR server, textfile collector enabled (default) |
+| PowerShell | Windows PowerShell 5.1 (REST task, installation). License task under VBR 13: PowerShell 7 and the installed Veeam console |
+| Veeam account | local Windows user with the VBR role **Backup Viewer** for the REST task |
+| Permissions | installation in a PowerShell **as Administrator** |
+| Prometheus | scrapes the windows_exporter (default port 9182) |
 
-Ausführlich in [`deploy/README.md`](deploy/README.md#voraussetzungen).
+Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 
-## Stand
+## Status
 
-| Teil | Status |
+| Part | Status |
 | --- | --- |
-| Auth (OAuth2 Password-Grant, Logout), Versions-Probe | fertig |
-| Zertifikat-Pinning (5.1: Validation-Callback, 7: HttpClientHandler) | fertig |
-| Writer (atomar, UTF-8 ohne BOM, LF) | fertig |
-| Collector `jobs` → `veeam_jobs.prom` | fertig |
-| Collector `objects` → `veeam_objects.prom` | fertig |
-| Collector `repositories` → `veeam_repositories.prom` | fertig |
-| Health → `veeam_exporter.prom` | fertig |
-| Lizenz-Task → `veeam_license.prom`, Health → `veeam_exporter_license.prom` | fertig |
-| Deploy: Install-Script, Tasks, Credential für SYSTEM, Uninstall | fertig |
-| Alert-Regeln (`rules/`), Dashboard (`dashboards/`) | offen |
+| Auth (OAuth2 password grant, logout), version probe | done |
+| Certificate pinning (5.1: validation callback, 7: HttpClientHandler) | done |
+| Writer (atomic, UTF-8 without BOM, LF) | done |
+| Collector `jobs` → `veeam_jobs.prom` | done |
+| Collector `objects` → `veeam_objects.prom` | done |
+| Collector `repositories` → `veeam_repositories.prom` | done |
+| Health → `veeam_exporter.prom` | done |
+| License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | done |
+| Deploy: install script, tasks, credential for SYSTEM, uninstall | done |
+| Alert rules (`rules/`), dashboard (`dashboards/`) | open |
 
 ## Installation
 
-Manuell pro VBR-Server, in einer PowerShell als Administrator:
+Manually per VBR server, in a PowerShell as Administrator:
 
 ```powershell
 .\deploy\Install-VeeamExporter.ps1
 ```
 
-Das Script liest den Thumbprint der REST-API (mit Rückfrage), fragt das Veeam-Konto ab (Rolle **Backup Viewer**), speichert es per DPAPI für SYSTEM und richtet zwei Tasks ein: REST alle 15 Minuten, Lizenz täglich. Danach startet es beide einmal. Details, Voraussetzungen, Update und Deinstallation: [`deploy/README.md`](deploy/README.md).
+The script reads the thumbprint of the REST API (with confirmation), asks for the Veeam account (role **Backup Viewer**), stores it with DPAPI for SYSTEM and sets up two tasks: REST every 15 minutes, license daily. It then starts both once. Details, prerequisites, update and uninstallation: [`deploy/README.md`](deploy/README.md).
 
-`vbr_version` in `veeam_exporter_info` bleibt mit der Viewer-Rolle leer, weil `/api/v1/serverInfo` nur Backup Administrator lesen darf (OP-13 in `docs/metrics.md`).
+With the Viewer role, `vbr_version` in `veeam_exporter_info` stays empty, because only Backup Administrator may read `/api/v1/serverInfo` (OP-13 in `docs/metrics.md`).
 
-## Aufruf von Hand (Test, Fehlersuche)
+## Running by hand (testing, troubleshooting)
 
 ```powershell
 .\src\Invoke-VeeamExporter.ps1 `
     -CredentialPath 'C:\ProgramData\VeeamExporter\veeam.cred.xml' `
-    -CertificateThumbprint '<SHA-1-Thumbprint>' `
+    -CertificateThumbprint '<SHA-1 thumbprint>' `
     -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs'
 .\src\Invoke-VeeamLicenseExporter.ps1 -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs'
 ```
 
-Das Credential ist für SYSTEM verschlüsselt; von Hand aufgerufen braucht `Invoke-VeeamExporter.ps1` deshalb ein eigenes, mit `Get-Credential | Export-Clixml -LiteralPath <datei>` im eigenen Konto erzeugtes Credential. Ohne `-CertificateThumbprint` gilt die normale .NET-Zertifikatsprüfung, und das selbstsignierte VBR-Zertifikat wird abgelehnt. Exit-Code 0, wenn alle Collectors erfolgreich waren, sonst 1.
+The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.ps1` therefore needs its own credential, created in your own account with `Get-Credential | Export-Clixml -LiteralPath <file>`. Without `-CertificateThumbprint` the normal .NET certificate validation applies, and the self-signed VBR certificate is rejected. Exit code 0 if all collectors succeeded, otherwise 1.
 
-| Parameter | Standard | Bedeutung |
+| Parameter | Default | Meaning |
 | --- | --- | --- |
-| `-Collector` | `jobs,objects,repositories` | Welche Collectors laufen (auch als Kommaliste). |
-| `-ObjectLookbackDays` | `8` | Wie weit `objects` Task-Sessions zurückliest. |
-| `-ObjectSessionType` | `BackupJob,ReplicaJob` | Session-Typen für `objects` (siehe OP-11 in `docs/metrics.md`). |
-| `-ApiVersion` | Probe | Feste `x-api-version`, überspringt die Versions-Probe. |
-| `-TimeoutSec` | `60` | Timeout pro HTTP-Request. |
-| `-LogPath` | – | Transcript des Laufs (wird jedes Mal überschrieben). |
+| `-Collector` | `jobs,objects,repositories` | Which collectors run (also as a comma-separated list). |
+| `-ObjectLookbackDays` | `8` | How far back `objects` reads task sessions. |
+| `-ObjectSessionType` | `BackupJob,ReplicaJob` | Session types for `objects` (see OP-11 in `docs/metrics.md`). |
+| `-ApiVersion` | probe | Fixed `x-api-version`, skips the version probe. |
+| `-TimeoutSec` | `60` | Timeout per HTTP request. |
+| `-LogPath` | – | Transcript of the run (overwritten every time). |
 
-Der Lizenz-Task läuft als SYSTEM ohne gespeichertes Passwort und liest die Lizenz mit `Get-VBRInstalledLicense`. Unter VBR 13 braucht er PowerShell 7 und die Veeam-Console. Seinen Health-Status schreibt er in `veeam_exporter_license.prom` (`collector="license"`), damit er `veeam_exporter.prom` des REST-Tasks nicht überschreibt.
+The license task runs as SYSTEM without a stored password and reads the license with `Get-VBRInstalledLicense`. Under VBR 13 it needs PowerShell 7 and the Veeam console. It writes its health status to `veeam_exporter_license.prom` (`collector="license"`), so it does not overwrite the REST task's `veeam_exporter.prom`.
 
 ## Tests
 
 ```powershell
-Invoke-Pester -Path tests                      # Pester >= 5.2, unter powershell.exe und pwsh
+Invoke-Pester -Path tests                      # Pester >= 5.2, under powershell.exe and pwsh
 Invoke-ScriptAnalyzer -Path src -Recurse
 Invoke-ScriptAnalyzer -Path deploy -Recurse
 ```
 
-Liegt `promtool` im PATH, prüft `tests/Promtool.Tests.ps1` die erwarteten und die erzeugten `.prom`-Dateien zusätzlich mit `promtool check metrics`; sonst werden diese Tests übersprungen.
+If `promtool` is in the PATH, `tests/Promtool.Tests.ps1` additionally checks the expected and the generated `.prom` files with `promtool check metrics`; otherwise these tests are skipped.
 
-Quell- und Testdateien sind reines ASCII (wird getestet), weil Windows PowerShell 5.1 Dateien ohne BOM als ANSI liest.
+Source and test files are pure ASCII (this is tested), because Windows PowerShell 5.1 reads files without a BOM as ANSI.
 
-## Lizenz
+## License
 
-[MIT](LICENSE). Veeam und Veeam Backup & Replication sind Marken der Veeam Software Group GmbH; dieses Projekt ist kein offizielles Veeam-Produkt.
+[MIT](LICENSE). Veeam and Veeam Backup & Replication are trademarks of Veeam Software Group GmbH; this project is not an official Veeam product.

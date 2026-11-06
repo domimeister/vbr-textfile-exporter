@@ -6,7 +6,7 @@ function Test-VeeamSuccessStatus {
 }
 
 function Test-VeeamUnsupportedApiVersion {
-    # ANNAHME: an unsupported x-api-version is answered with HTTP 400 and an
+    # ASSUMPTION: an unsupported x-api-version is answered with HTTP 400 and an
     # error text mentioning "version", see docs/metrics.md#OP-7. Everything
     # else (wrong password, 401, 403, 5xx) stops the probe immediately, so a
     # wrong password is never tried once per version.

@@ -14,7 +14,7 @@ Describe 'Invoke-VeeamExporterRun' {
         $script:HealthFile = Join-Path -Path $script:Dir -ChildPath 'veeam_exporter.prom'
     }
 
-    It 'schreibt alle Collector-Dateien und veeam_exporter.prom bei Erfolg' {
+    It 'writes all collector files and veeam_exporter.prom on success' {
         Set-VeeamApiMock
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
 
@@ -27,23 +27,23 @@ Describe 'Invoke-VeeamExporterRun' {
 
         $lines = (Get-FileText -Path $script:HealthFile) -split "`n"
         $lines.Count | Should -Be 14
-        $lines[0] | Should -BeExactly '# HELP veeam_exporter_collector_success 1 letzter Lauf des Collectors ok, 0 Fehler'
+        $lines[0] | Should -BeExactly '# HELP veeam_exporter_collector_success 1 last collector run ok, 0 failure'
         $lines[1] | Should -BeExactly '# TYPE veeam_exporter_collector_success gauge'
         $lines[2] | Should -BeExactly 'veeam_exporter_collector_success{collector="jobs"} 1'
         $lines[3] | Should -BeExactly 'veeam_exporter_collector_success{collector="objects"} 1'
         $lines[4] | Should -BeExactly 'veeam_exporter_collector_success{collector="repositories"} 1'
-        $lines[5] | Should -BeExactly '# HELP veeam_exporter_collector_duration_seconds Laufzeit des Collectors in Sekunden'
+        $lines[5] | Should -BeExactly '# HELP veeam_exporter_collector_duration_seconds Collector duration in seconds'
         $lines[6] | Should -BeExactly '# TYPE veeam_exporter_collector_duration_seconds gauge'
         $lines[7] | Should -Match '^veeam_exporter_collector_duration_seconds\{collector="jobs"\} [0-9]+(\.[0-9]+)?$'
         $lines[8] | Should -Match '^veeam_exporter_collector_duration_seconds\{collector="objects"\} [0-9]+(\.[0-9]+)?$'
         $lines[9] | Should -Match '^veeam_exporter_collector_duration_seconds\{collector="repositories"\} [0-9]+(\.[0-9]+)?$'
-        $lines[10] | Should -BeExactly '# HELP veeam_exporter_info Exporter- und Server-Version (Wert immer 1)'
+        $lines[10] | Should -BeExactly '# HELP veeam_exporter_info Exporter and server version (value always 1)'
         $lines[11] | Should -BeExactly '# TYPE veeam_exporter_info gauge'
         $lines[12] | Should -BeExactly ('veeam_exporter_info{{script_version="{0}",api_version="1.3-rev2",vbr_version="13.0.1.180"}} 1' -f $script:ScriptVersion)
         $lines[13] | Should -BeExactly ''
     }
 
-    It 'laesst vbr_version bei HTTP 403 auf serverInfo leer, ohne Warnung (Viewer-Rolle)' {
+    It 'leaves vbr_version empty on HTTP 403 from serverInfo, without a warning (Viewer role)' {
         Set-VeeamApiMock -ServerInfoStatus 403
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningVariable warnings -WarningAction SilentlyContinue
         $result.Success | Should -BeTrue
@@ -51,27 +51,27 @@ Describe 'Invoke-VeeamExporterRun' {
         Get-FileText -Path $script:HealthFile | Should -Match ([regex]::Escape('api_version="1.3-rev2",vbr_version=""} 1'))
     }
 
-    It 'warnt bei anderen Fehlern auf serverInfo' {
+    It 'warns on other errors from serverInfo' {
         Set-VeeamApiMock -ServerInfoStatus 500
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningVariable warnings -WarningAction SilentlyContinue
         $result.Success | Should -BeTrue
         @($warnings | Where-Object { "$_" -like '*serverInfo*' }).Count | Should -Be 1
     }
 
-    It 'akzeptiert Collectors als Kommaliste (powershell.exe -File)' {
+    It 'accepts collectors as a comma-separated list (powershell.exe -File)' {
         Set-VeeamApiMock
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs, objects' -ObjectSessionType 'BackupJob,ReplicaJob' -WarningAction SilentlyContinue
         ($result.Collectors | ForEach-Object Collector) -join ',' | Should -BeExactly 'jobs,objects'
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
     }
 
-    It 'bricht bei unbekanntem Collector vor der Anmeldung ab' {
+    It 'aborts on an unknown collector before logging in' {
         Set-VeeamApiMock
         { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs,licence' } | Should -Throw "*Unknown collector 'licence'*"
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
     }
 
-    It 'laesst mit -Collector jobs nur den Jobs-Collector laufen' {
+    It 'runs only the jobs collector with -Collector jobs' {
         Set-VeeamApiMock
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs' -WarningAction SilentlyContinue
         $result.Success | Should -BeTrue
@@ -80,7 +80,7 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
     }
 
-    It 'gibt Lookback und Session-Typen an den Objects-Collector weiter' {
+    It 'passes lookback and session types on to the objects collector' {
         Set-VeeamApiMock
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -ObjectSessionType 'ReplicaJob' -ObjectLookbackDays 2 -WarningAction SilentlyContinue
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' -and $Query['sessionTypeFilter'] -eq 'ReplicaJob' }
@@ -89,7 +89,7 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' -and $Query['createdAfterFilter'].StartsWith($expected) }
     }
 
-    It 'isoliert Collectors: faellt objects aus, laeuft jobs weiter' {
+    It 'isolates collectors: if objects fails, jobs keeps running' {
         [System.IO.File]::WriteAllText($script:ObjectsFile, "veeam_object_last_result{job_name=`"alt`",object=`"vm`"} 0`n")
         Set-VeeamApiMock -TaskSessionsStatus 500
 
@@ -103,13 +103,13 @@ Describe 'Invoke-VeeamExporterRun' {
         $health | Should -Match 'veeam_exporter_collector_success\{collector="objects"\} 0'
     }
 
-    It 'meldet sich am Ende ab' {
+    It 'logs out at the end' {
         Set-VeeamApiMock
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/oauth2/logout' }
     }
 
-    It 'laesst die alte veeam_jobs.prom stehen, wenn der Collector fehlschlaegt' {
+    It 'keeps the old veeam_jobs.prom if the collector fails' {
         [System.IO.File]::WriteAllText($script:JobsFile, "veeam_job_enabled{job_name=`"alt`"} 1`n")
         Set-VeeamApiMock -JobsStatus 500
 
@@ -121,7 +121,7 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/oauth2/logout' }
     }
 
-    It 'schreibt veeam_exporter.prom auch, wenn die Anmeldung fehlschlaegt' {
+    It 'writes veeam_exporter.prom even if the login fails' {
         Set-VeeamApiMock -TokenStatus 400 -TokenContent $script:InvalidGrantJson
 
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
@@ -136,7 +136,7 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Path -eq '/api/v1/jobs/states' }
     }
 
-    It 'schreibt weder Passwort noch Token in eine .prom-Datei' {
+    It 'writes neither password nor token into a .prom file' {
         Set-VeeamApiMock
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
         foreach ($file in Get-ChildItem -LiteralPath $script:Dir) {
@@ -147,7 +147,7 @@ Describe 'Invoke-VeeamExporterRun' {
         }
     }
 
-    It 'hinterlaesst keine .tmp-Dateien' {
+    It 'leaves no .tmp files behind' {
         Set-VeeamApiMock
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
         @(Get-ChildItem -LiteralPath $script:Dir -Filter '*.tmp').Count | Should -Be 0

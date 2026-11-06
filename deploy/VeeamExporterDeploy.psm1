@@ -222,7 +222,7 @@ function Format-CertificateThumbprint {
 function Find-VeeamPowerShellModule {
     <#
     Veeam.Backup.PowerShell module: path and version. Searches PSModulePath
-    and the console folder (ANNAHME: VBR 13 console path, see deploy/README.md).
+    and the console folder (ASSUMPTION: VBR 13 console path, see deploy/README.md).
     #>
     [CmdletBinding()]
     param()

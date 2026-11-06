@@ -1,35 +1,35 @@
 # Fixtures
 
-## `doc/<version>/` – unverändert aus der Veeam-Doku
+## `doc/<version>/` – unchanged from the Veeam docs
 
-Response-Beispiele aus den OpenAPI-Specs der [REST-Referenz](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview) (`components.examples`), je unterstützte Revision 1.2-rev1, 1.3-rev0, 1.3-rev1, 1.3-rev2. Nur neu formatiert, Inhalt unverändert.
+Response examples from the OpenAPI specs of the [REST reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview) (`components.examples`), for each supported revision 1.2-rev1, 1.3-rev0, 1.3-rev1, 1.3-rev2. Only reformatted, content unchanged.
 
-| Datei | Beispiel in der Spec |
+| File | Example in the spec |
 | --- | --- |
 | `jobs-states.json` | `JobStatesResultExample` |
 | `sessions.json` | `SessionsResultExample` |
 | `taskSessions.json` | `TaskSessionsResultExample` |
 | `repositories-states.json` | `RepositoryStatesResultExample` |
-| `scaleOutRepositories.json` (nur 1.3-rev2, ältere Specs haben kein Beispiel) | `ScaleOutRepositoriesResultExample` |
+| `scaleOutRepositories.json` (1.3-rev2 only, older specs have no example) | `ScaleOutRepositoriesResultExample` |
 
-Auffällig: Die Beispiele schreiben Enum-Werte je nach Version klein oder gross (`stopped`/`Stopped`, `vm`/`Vm`), `taskSessions` liefert Zeitstempel ohne Offset (siehe OP-9 in `docs/metrics.md`), und in 1.3-rev0 ist `isOutOfDate` ein String (`"false"`).
+Notable: depending on the version, the examples write enum values in lower or upper case (`stopped`/`Stopped`, `vm`/`Vm`), `taskSessions` returns timestamps without offset (see OP-9 in `docs/metrics.md`), and in 1.3-rev0 `isOutOfDate` is a string (`"false"`).
 
-## Abgeleitete Fixtures
+## Derived fixtures
 
-- `objects-doc-sessions.json`, `objects-doc-jobs-states.json`: Die Doku-Beispiele für Sessions und Task-Sessions passen nicht zusammen (andere IDs). Diese Dateien ordnen die sechs `sessionId` aus `TaskSessionsResultExample` drei Jobs zu, im Aufbau von `SessionsResultExample`. Der NFS-Share-Job fehlt absichtlich in `jobs/states` (Fallback auf den Session-Namen).
-- `objects-edge-*.json`: Grenzfälle für den Objects-Collector: erfolgreicher Retry nach Fehler, laufender Task, umbenannter und gelöschter Job, Gross-/Kleinschreibung im Objektnamen, Escaping, lange mehrzeilige Meldung, `endTime` = `0001-01-01T00:00:00`, gleiche creationTime (höhere `usn` gewinnt), unbekannte Session, Task ohne Namen.
-- `repositories-sobr-states.json`: Repository-States passend zu den Extent-IDs aus `ScaleOutRepositoriesResultExample`: Performance-Extent mit `scaleOutRepositoryDetails`, Performance-Extent nur über die Extent-Liste (wie unter 1.2-rev1, ID in Grossbuchstaben), Archive-Extent mit Kapazität 0, Object Storage ohne Kapazität, eigenständiges Repository, Extent eines unbekannten SOBR (`membership`), Escaping, 0,1 GB, `isOnline`/`isOutOfDate` als String, Repository ohne Status.
-- `jobs-states.json`: selbst gebaut, deckt Success/Warning/Failed/None, running/disabled, verkettete Jobs ohne `nextRun` und nie gelaufene Jobs ohne `lastRun` ab.
-- `jobs-states-escaping.json`: Grenzfälle für Labelwerte (Anführungszeichen, Backslashes, Zeilenumbruch, Umlaute) und unbekannte Werte in `lastResult`/`status`.
+- `objects-doc-sessions.json`, `objects-doc-jobs-states.json`: the doc examples for sessions and task sessions do not match (different IDs). These files map the six `sessionId` values from `TaskSessionsResultExample` to three jobs, in the structure of `SessionsResultExample`. The NFS share job is intentionally missing from `jobs/states` (fallback to the session name).
+- `objects-edge-*.json`: edge cases for the objects collector: successful retry after a failure, running task, renamed and deleted job, upper/lower case in the object name, escaping, long multi-line message, `endTime` = `0001-01-01T00:00:00`, identical creationTime (higher `usn` wins), unknown session, task without a name.
+- `repositories-sobr-states.json`: repository states matching the extent IDs from `ScaleOutRepositoriesResultExample`: performance extent with `scaleOutRepositoryDetails`, performance extent only via the extent list (as under 1.2-rev1, ID in upper case), archive extent with capacity 0, object storage without capacity, standalone repository, extent of an unknown SOBR (`membership`), escaping, 0.1 GB, `isOnline`/`isOutOfDate` as strings, repository without status.
+- `jobs-states.json`: hand-made, covers Success/Warning/Failed/None, running/disabled, chained jobs without `nextRun` and never-run jobs without `lastRun`.
+- `jobs-states-escaping.json`: edge cases for label values (quotes, backslashes, line break, umlauts) and unknown values in `lastResult`/`status`. The German names with umlauts are intentional test data for UTF-8 handling.
 
 ## `license/`
 
-Lizenzobjekte, wie sie `Get-VBRInstalledLicense` liefert, als JSON. Aufgebaut nach den dokumentierten Eigenschaften von [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstalledlicense.html) und den Beispielen von [Get-VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/get-vbrinstalledlicense.html) (Instanzen 1000/2, Socket-Zusammenfassung). Eine echte Ausgabe gibt es in der Doku nicht; beim ersten Lab-Test mit `Get-VBRInstalledLicense | ConvertTo-Json -Depth 3` abgleichen.
+License objects as returned by `Get-VBRInstalledLicense`, as JSON. Built from the documented properties of [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstalledlicense.html) and the examples of [Get-VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/get-vbrinstalledlicense.html) (instances 1000/2, socket summary). The docs contain no real output; compare with `Get-VBRInstalledLicense | ConvertTo-Json -Depth 3` during the first lab test.
 
-- `license-rental.json`: Valid, Rental, Instanzlizenz, Escaping und Umlaut in `LicensedTo`.
-- `license-perpetual-socket.json`: unbefristet (`ExpirationDate` = `0001-01-01`), reine Socket-Lizenz ohne `InstanceLicenseSummary`.
-- `license-expired.json`: Expired, Support bis `9999-12-31` (= nicht gesetzt), Überbelegung mit Bruchteil (57.33 von 50).
+- `license-rental.json`: Valid, Rental, instance license, escaping and umlaut in `LicensedTo`.
+- `license-perpetual-socket.json`: perpetual (`ExpirationDate` = `0001-01-01`), socket-only license without `InstanceLicenseSummary`.
+- `license-expired.json`: Expired, support until `9999-12-31` (= not set), over-use with a fraction (57.33 of 50).
 
 ## `expected/`
 
-Erwartete Ausgabe, zeilengenau, UTF-8 ohne BOM, LF, Zeilenumbruch am Ende. Die Dateien für Objects und die Doku-Beispiele wurden mit einer unabhängigen Python-Referenzimplementierung erzeugt, nicht mit dem Exporter selbst. Zeitstempel ohne Offset gelten in den Tests als +01:00 (`Set-TestTimeZone`).
+Expected output, line by line, UTF-8 without BOM, LF, newline at end of file. The files for objects and the doc examples were generated with an independent Python reference implementation, not with the exporter itself. In the tests, timestamps without offset are treated as +01:00 (`Set-TestTimeZone`).

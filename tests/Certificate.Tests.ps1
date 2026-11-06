@@ -17,17 +17,17 @@ AfterAll {
     }
 }
 
-Describe 'Zertifikat-Pinning' {
-    It 'akzeptiert das Zertifikat mit passendem Thumbprint' {
-        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest nicht verfuegbar'; return }
+Describe 'Certificate pinning' {
+    It 'accepts the certificate with a matching thumbprint' {
+        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest not available'; return }
         InModuleScope VeeamExporter -Parameters @{ Cert = $script:Cert } {
             param($Cert)
             Test-VeeamCertificateThumbprint -Certificate $Cert -Thumbprint $Cert.Thumbprint | Should -BeTrue
         }
     }
 
-    It 'ignoriert Gross-/Kleinschreibung, Leerzeichen und Doppelpunkte im Thumbprint' {
-        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest nicht verfuegbar'; return }
+    It 'ignores case, spaces and colons in the thumbprint' {
+        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest not available'; return }
         $t = $script:Cert.Thumbprint.ToLowerInvariant()
         $spaced = ($t -split '(..)' | Where-Object { $_ }) -join ' '
         $colon = ($t -split '(..)' | Where-Object { $_ }) -join ':'
@@ -38,16 +38,16 @@ Describe 'Zertifikat-Pinning' {
         }
     }
 
-    It 'lehnt ein anderes Zertifikat ab' {
-        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest nicht verfuegbar'; return }
+    It 'rejects a different certificate' {
+        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest not available'; return }
         InModuleScope VeeamExporter -Parameters @{ Cert = $script:OtherCert; Thumb = $script:Cert.Thumbprint } {
             param($Cert, $Thumb)
             Test-VeeamCertificateThumbprint -Certificate $Cert -Thumbprint $Thumb | Should -BeFalse
         }
     }
 
-    It 'lehnt bei leerem Thumbprint ab (kein pauschales Akzeptieren)' {
-        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest nicht verfuegbar'; return }
+    It 'rejects an empty thumbprint (no blanket acceptance)' {
+        if (-not $script:CanCreateCert) { Set-ItResult -Skipped -Because 'CertificateRequest not available'; return }
         InModuleScope VeeamExporter -Parameters @{ Cert = $script:Cert } {
             param($Cert)
             Initialize-VeeamCertificatePinType
@@ -56,8 +56,8 @@ Describe 'Zertifikat-Pinning' {
         }
     }
 
-    It 'PowerShell 7: HttpClient mit Pinning-Handler' {
-        if ($PSVersionTable.PSEdition -ne 'Core') { Set-ItResult -Skipped -Because 'nur PowerShell 7'; return }
+    It 'PowerShell 7: HttpClient with pinning handler' {
+        if ($PSVersionTable.PSEdition -ne 'Core') { Set-ItResult -Skipped -Because 'PowerShell 7 only'; return }
         InModuleScope VeeamExporter {
             $ctx = New-VeeamHttpContext -BaseUri 'https://localhost:9419' -CertificateThumbprint 'AB CD EF'
             try {
@@ -68,8 +68,8 @@ Describe 'Zertifikat-Pinning' {
         }
     }
 
-    It 'Windows PowerShell 5.1: TLS 1.2 und Validation-Callback' {
-        if ($PSVersionTable.PSEdition -eq 'Core') { Set-ItResult -Skipped -Because 'nur Windows PowerShell 5.1'; return }
+    It 'Windows PowerShell 5.1: TLS 1.2 and validation callback' {
+        if ($PSVersionTable.PSEdition -eq 'Core') { Set-ItResult -Skipped -Because 'Windows PowerShell 5.1 only'; return }
         InModuleScope VeeamExporter {
             $ctx = New-VeeamHttpContext -BaseUri 'https://localhost:9419' -CertificateThumbprint 'AB CD EF'
             $ctx.HttpClient | Should -BeNullOrEmpty

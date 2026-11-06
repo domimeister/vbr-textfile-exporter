@@ -29,7 +29,7 @@ BeforeAll {
 }
 
 Describe 'promtool check metrics' {
-    It 'akzeptiert <Name>' -TestCases @(
+    It 'accepts <Name>' -TestCases @(
         @{ Name = 'veeam_jobs.prom' }
         @{ Name = 'veeam_jobs_escaping.prom' }
         @{ Name = 'veeam_objects_edgecases.prom' }
@@ -45,14 +45,14 @@ Describe 'promtool check metrics' {
         @{ Name = 'license/veeam_license_expired.prom' }
     ) {
         param($Name)
-        if (-not $script:Promtool) { Set-ItResult -Skipped -Because 'promtool nicht im PATH'; return }
+        if (-not $script:Promtool) { Set-ItResult -Skipped -Because 'promtool not in PATH'; return }
         $result = Invoke-PromtoolCheck -Bytes ([System.IO.File]::ReadAllBytes((Join-Path -Path $script:ExpectedDir -ChildPath $Name)))
         $result.Output | Should -BeNullOrEmpty
         $result.ExitCode | Should -Be 0
     }
 
-    It 'akzeptiert die Dateien eines kompletten Laufs' {
-        if (-not $script:Promtool) { Set-ItResult -Skipped -Because 'promtool nicht im PATH'; return }
+    It 'accepts the files of a complete run' {
+        if (-not $script:Promtool) { Set-ItResult -Skipped -Because 'promtool not in PATH'; return }
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
             switch ($Path) {
                 '/api/oauth2/token' { return New-HttpResponse -StatusCode 200 -Content $script:TokenJson }

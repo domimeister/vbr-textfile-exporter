@@ -1,44 +1,44 @@
-# HELP veeam_repository_capacity_bytes Kapazitaet des Repositories in Bytes (GB aus der API mal 1024^3)
+# HELP veeam_repository_capacity_bytes Repository capacity in bytes (GB from the API times 1024^3)
 # TYPE veeam_repository_capacity_bytes gauge
 veeam_repository_capacity_bytes{repository="extent01",repository_type="WinLocal",host="vbr-px01.tech.local",sobr="SOBR Production"} 1099511627776
 veeam_repository_capacity_bytes{repository="extent02",repository_type="LinuxHardened",host="lhr01.tech.local",sobr="SOBR Archive"} 21990232555520
 veeam_repository_capacity_bytes{repository="Glacier Archive",repository_type="AmazonS3Glacier",host="",sobr="SOBR Archive"} 0
 veeam_repository_capacity_bytes{repository="Default Backup Repository",repository_type="WinLocal",host="enterprise06.tech.local",sobr=""} 106729937306
-veeam_repository_capacity_bytes{repository="Neues Extent",repository_type="Nfs",host="nas02",sobr="SOBR Neu"} 536870912000
-veeam_repository_capacity_bytes{repository="NAS \"Keller\" \\\\nas01\\veeam",repository_type="Smb",host="nas01",sobr=""} 107374182
-veeam_repository_capacity_bytes{repository="Ohne Status",repository_type="WinLocal",host="srv9",sobr=""} 10737418240
-# HELP veeam_repository_free_bytes Freier Platz im Repository in Bytes
+veeam_repository_capacity_bytes{repository="New Extent",repository_type="Nfs",host="nas02",sobr="SOBR Neu"} 536870912000
+veeam_repository_capacity_bytes{repository="NAS \"Basement\" \\\\nas01\\veeam",repository_type="Smb",host="nas01",sobr=""} 107374182
+veeam_repository_capacity_bytes{repository="No Status",repository_type="WinLocal",host="srv9",sobr=""} 10737418240
+# HELP veeam_repository_free_bytes Free space in the repository in bytes
 # TYPE veeam_repository_free_bytes gauge
 veeam_repository_free_bytes{repository="extent01",repository_type="WinLocal",host="vbr-px01.tech.local",sobr="SOBR Production"} 439804651110
 veeam_repository_free_bytes{repository="extent02",repository_type="LinuxHardened",host="lhr01.tech.local",sobr="SOBR Archive"} 1979120929997
 veeam_repository_free_bytes{repository="Glacier Archive",repository_type="AmazonS3Glacier",host="",sobr="SOBR Archive"} 0
 veeam_repository_free_bytes{repository="Default Backup Repository",repository_type="WinLocal",host="enterprise06.tech.local",sobr=""} 17609365914
-veeam_repository_free_bytes{repository="Neues Extent",repository_type="Nfs",host="nas02",sobr="SOBR Neu"} 536763537818
-veeam_repository_free_bytes{repository="NAS \"Keller\" \\\\nas01\\veeam",repository_type="Smb",host="nas01",sobr=""} 53687091
-veeam_repository_free_bytes{repository="Ohne Status",repository_type="WinLocal",host="srv9",sobr=""} 5368709120
-# HELP veeam_repository_backup_bytes Von Backup-Dateien belegter Platz in Bytes (nicht fuer den Fuellgrad verwenden)
+veeam_repository_free_bytes{repository="New Extent",repository_type="Nfs",host="nas02",sobr="SOBR Neu"} 536763537818
+veeam_repository_free_bytes{repository="NAS \"Basement\" \\\\nas01\\veeam",repository_type="Smb",host="nas01",sobr=""} 53687091
+veeam_repository_free_bytes{repository="No Status",repository_type="WinLocal",host="srv9",sobr=""} 5368709120
+# HELP veeam_repository_backup_bytes Space used by backup files in bytes (do not use for the fill level)
 # TYPE veeam_repository_backup_bytes gauge
 veeam_repository_backup_bytes{repository="extent01",repository_type="WinLocal",host="vbr-px01.tech.local",sobr="SOBR Production"} 550077936435
 veeam_repository_backup_bytes{repository="extent02",repository_type="LinuxHardened",host="lhr01.tech.local",sobr="SOBR Archive"} 19220837643059
 veeam_repository_backup_bytes{repository="Glacier Archive",repository_type="AmazonS3Glacier",host="",sobr="SOBR Archive"} 13421772800
 veeam_repository_backup_bytes{repository="S3 Bucket Offsite",repository_type="AmazonS3",host="",sobr=""} 2199774874829
 veeam_repository_backup_bytes{repository="Default Backup Repository",repository_type="WinLocal",host="enterprise06.tech.local",sobr=""} 32641751450
-veeam_repository_backup_bytes{repository="Neues Extent",repository_type="Nfs",host="nas02",sobr="SOBR Neu"} 0
-veeam_repository_backup_bytes{repository="NAS \"Keller\" \\\\nas01\\veeam",repository_type="Smb",host="nas01",sobr=""} 0
-veeam_repository_backup_bytes{repository="Ohne Status",repository_type="WinLocal",host="srv9",sobr=""} 1073741824
-# HELP veeam_repository_online 1 Repository online, 0 offline
+veeam_repository_backup_bytes{repository="New Extent",repository_type="Nfs",host="nas02",sobr="SOBR Neu"} 0
+veeam_repository_backup_bytes{repository="NAS \"Basement\" \\\\nas01\\veeam",repository_type="Smb",host="nas01",sobr=""} 0
+veeam_repository_backup_bytes{repository="No Status",repository_type="WinLocal",host="srv9",sobr=""} 1073741824
+# HELP veeam_repository_online 1 repository online, 0 offline
 # TYPE veeam_repository_online gauge
 veeam_repository_online{repository="extent01"} 1
 veeam_repository_online{repository="extent02"} 0
 veeam_repository_online{repository="Glacier Archive"} 1
 veeam_repository_online{repository="S3 Bucket Offsite"} 1
 veeam_repository_online{repository="Default Backup Repository"} 1
-veeam_repository_online{repository="Neues Extent"} 1
-veeam_repository_online{repository="NAS \"Keller\" \\\\nas01\\veeam"} 1
-# HELP veeam_repository_out_of_date 1 wenn Komponenten des Repositories veraltet sind
+veeam_repository_online{repository="New Extent"} 1
+veeam_repository_online{repository="NAS \"Basement\" \\\\nas01\\veeam"} 1
+# HELP veeam_repository_out_of_date 1 if components of the repository are out of date
 # TYPE veeam_repository_out_of_date gauge
 veeam_repository_out_of_date{repository="extent01"} 0
 veeam_repository_out_of_date{repository="extent02"} 1
 veeam_repository_out_of_date{repository="Glacier Archive"} 0
 veeam_repository_out_of_date{repository="Default Backup Repository"} 1
-veeam_repository_out_of_date{repository="Neues Extent"} 0
+veeam_repository_out_of_date{repository="New Extent"} 0

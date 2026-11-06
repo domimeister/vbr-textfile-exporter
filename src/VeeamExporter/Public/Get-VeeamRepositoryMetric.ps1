@@ -20,11 +20,11 @@ function Get-VeeamRepositoryMetric {
     }
     $sobrMap = Get-VeeamSobrMap -ScaleOutRepository @($ScaleOutRepository)
 
-    $capacity = New-PromMetric -Name 'veeam_repository_capacity_bytes' -Help 'Kapazitaet des Repositories in Bytes (GB aus der API mal 1024^3)'
-    $free = New-PromMetric -Name 'veeam_repository_free_bytes' -Help 'Freier Platz im Repository in Bytes'
-    $backup = New-PromMetric -Name 'veeam_repository_backup_bytes' -Help 'Von Backup-Dateien belegter Platz in Bytes (nicht fuer den Fuellgrad verwenden)'
-    $online = New-PromMetric -Name 'veeam_repository_online' -Help '1 Repository online, 0 offline'
-    $outOfDate = New-PromMetric -Name 'veeam_repository_out_of_date' -Help '1 wenn Komponenten des Repositories veraltet sind'
+    $capacity = New-PromMetric -Name 'veeam_repository_capacity_bytes' -Help 'Repository capacity in bytes (GB from the API times 1024^3)'
+    $free = New-PromMetric -Name 'veeam_repository_free_bytes' -Help 'Free space in the repository in bytes'
+    $backup = New-PromMetric -Name 'veeam_repository_backup_bytes' -Help 'Space used by backup files in bytes (do not use for the fill level)'
+    $online = New-PromMetric -Name 'veeam_repository_online' -Help '1 repository online, 0 offline'
+    $outOfDate = New-PromMetric -Name 'veeam_repository_out_of_date' -Help '1 if components of the repository are out of date'
 
     foreach ($state in $RepositoryState) {
         $name = [string](Get-VeeamField -InputObject $state -Name 'name')
