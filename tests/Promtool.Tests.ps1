@@ -1,30 +1,11 @@
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
+    . (Join-Path -Path $PSScriptRoot -ChildPath 'PromtoolHelpers.ps1')
     $script:Promtool = Get-Command -Name 'promtool' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 
     function Invoke-PromtoolCheck {
-        # Feeds the raw UTF-8 bytes to "promtool check metrics" via stdin.
-        # A pipeline into a native exe would re-encode under Windows PowerShell 5.1.
         param([Parameter(Mandatory = $true)][byte[]]$Bytes)
-        $psi = New-Object System.Diagnostics.ProcessStartInfo
-        $psi.FileName = $script:Promtool.Source
-        $psi.Arguments = 'check metrics'
-        $psi.UseShellExecute = $false
-        $psi.RedirectStandardInput = $true
-        $psi.RedirectStandardOutput = $true
-        $psi.RedirectStandardError = $true
-        $process = [System.Diagnostics.Process]::Start($psi)
-        try {
-            $process.StandardInput.BaseStream.Write($Bytes, 0, $Bytes.Length)
-            $process.StandardInput.Close()
-            $stdout = $process.StandardOutput.ReadToEnd()
-            $stderr = $process.StandardError.ReadToEnd()
-            $process.WaitForExit()
-            return [pscustomobject]@{ ExitCode = $process.ExitCode; Output = ($stdout + $stderr).Trim() }
-        }
-        finally {
-            $process.Dispose()
-        }
+        return Invoke-PromtoolProcess -Executable $script:Promtool.Source -Bytes $Bytes
     }
 }
 

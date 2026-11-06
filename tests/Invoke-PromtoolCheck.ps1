@@ -30,33 +30,7 @@ $ErrorActionPreference = 'Stop'
 $command = Get-Command -Name $Promtool -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
 if (-not $command) { throw "promtool not found ('$Promtool'). Put it in PATH or pass -Promtool." }
 
-function Invoke-Promtool {
-    # Feeds the raw UTF-8 bytes via stdin. A pipeline into a native exe
-    # would re-encode the text under Windows PowerShell 5.1.
-    param(
-        [Parameter(Mandatory = $true)][string]$Executable,
-        [Parameter(Mandatory = $true)][byte[]]$Bytes
-    )
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $Executable
-    $psi.Arguments = 'check metrics'
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardInput = $true
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $process = [System.Diagnostics.Process]::Start($psi)
-    try {
-        $process.StandardInput.BaseStream.Write($Bytes, 0, $Bytes.Length)
-        $process.StandardInput.Close()
-        $stdout = $process.StandardOutput.ReadToEnd()
-        $stderr = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        return [pscustomobject]@{ ExitCode = $process.ExitCode; Output = ($stdout + $stderr).Trim() }
-    }
-    finally {
-        $process.Dispose()
-    }
-}
+. (Join-Path -Path $PSScriptRoot -ChildPath 'PromtoolHelpers.ps1')
 
 $checked = 0
 $failed = New-Object System.Collections.Generic.List[string]
@@ -65,7 +39,7 @@ foreach ($root in $Path) {
     $files = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.prom' | Sort-Object -Property FullName)
     if ($files.Count -eq 0) { throw "No .prom files in $root" }
     foreach ($file in $files) {
-        $result = Invoke-Promtool -Executable $command.Source -Bytes ([System.IO.File]::ReadAllBytes($file.FullName))
+        $result = Invoke-PromtoolProcess -Executable $command.Source -Bytes ([System.IO.File]::ReadAllBytes($file.FullName))
         $checked++
         if ($result.ExitCode -eq 0 -and -not $result.Output) {
             Write-Output ('ok    {0}' -f $file.FullName)
