@@ -2,7 +2,32 @@
 
 PowerShell-Exporter für Veeam Backup & Replication 12.3.1 und 13. Läuft als geplanter Task auf dem VBR-Server, liest die REST API auf `localhost:9419` (nur lesend) und schreibt `.prom`-Dateien ins Textfile-Verzeichnis des windows_exporter.
 
-Spezifikation: [`docs/metrics.md`](docs/metrics.md). Regeln für die Entwicklung: [`CLAUDE.md`](CLAUDE.md).
+## Zweck
+
+Backup-Zustand von Veeam in Prometheus und Grafana sichtbar machen, ohne einen zusätzlichen Dienst oder Port auf dem Backup-Server:
+
+- **Jobs:** letztes Ergebnis (Success/Warning/Failed), aktiviert/läuft, letzter und nächster Lauf, Anzahl Objekte.
+- **Objekte:** letztes Ergebnis, letzter Lauf, verarbeitete Datenmenge und letzte Fehlermeldung pro VM bzw. gesichertem Objekt, um nicht gesicherte VMs zu finden.
+- **Repositories:** Kapazität, freier Platz, Belegung durch Backups, Online- und Out-of-Date-Status, SOBR-Zuordnung.
+- **Lizenz:** Gültigkeit, Ablauf von Lizenz und Support, lizenzierte und belegte Instanzen.
+- **Health des Exporters:** Erfolg und Laufzeit jedes Collectors, damit ein stehengebliebener Export auffällt.
+
+Der windows_exporter, der ohnehin auf dem Server läuft, liefert die Dateien über seinen Textfile-Collector an Prometheus aus. Der Exporter liest nur: Er ruft ausser Login und Logout ausschliesslich GET-Endpoints auf und ändert nichts in VBR.
+
+**Spezifikation:** Metriknamen, Labels, Wertecodes, Beispiel-Alerts und offene Punkte stehen in [`docs/metrics.md`](docs/metrics.md). Regeln für die Entwicklung: [`CLAUDE.md`](CLAUDE.md).
+
+## Voraussetzungen
+
+| Was | Details |
+| --- | --- |
+| Veeam Backup & Replication | 12.3.1 oder 13, REST-API auf `localhost:9419` (REST-Revision 1.2-rev1 bis 1.3-rev2, wird automatisch erkannt) |
+| windows_exporter | als Dienst auf dem VBR-Server, Textfile-Collector aktiv (Standard) |
+| PowerShell | Windows PowerShell 5.1 (REST-Task, Installation). Lizenz-Task unter VBR 13: PowerShell 7 und die installierte Veeam-Console |
+| Veeam-Konto | lokaler Windows-Benutzer mit der VBR-Rolle **Backup Viewer** für den REST-Task |
+| Rechte | Installation in einer PowerShell **als Administrator** |
+| Prometheus | scrapt den windows_exporter (Standard-Port 9182) |
+
+Ausführlich in [`deploy/README.md`](deploy/README.md#voraussetzungen).
 
 ## Stand
 
@@ -65,3 +90,7 @@ Invoke-ScriptAnalyzer -Path deploy -Recurse
 Liegt `promtool` im PATH, prüft `tests/Promtool.Tests.ps1` die erwarteten und die erzeugten `.prom`-Dateien zusätzlich mit `promtool check metrics`; sonst werden diese Tests übersprungen.
 
 Quell- und Testdateien sind reines ASCII (wird getestet), weil Windows PowerShell 5.1 Dateien ohne BOM als ANSI liest.
+
+## Lizenz
+
+[MIT](LICENSE). Veeam und Veeam Backup & Replication sind Marken der Veeam Software Group GmbH; dieses Projekt ist kein offizielles Veeam-Produkt.
