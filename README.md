@@ -1,5 +1,7 @@
 # Veeam Prometheus Exporter (windows_exporter Textfile)
 
+> **Status: experimental.** This exporter has not been run against a real Veeam Backup & Replication server yet. All tests run in CI against mocked REST responses taken from the Veeam documentation. Expect bugs and breaking changes, try it on a non-production VBR server first, and use it at your own risk. Feedback and issues are welcome.
+
 PowerShell exporter for Veeam Backup & Replication 12.3.1 and 13. Runs as a scheduled task on the VBR server, reads the REST API on `localhost:9419` (read-only) and writes `.prom` files into the textfile directory of the windows_exporter.
 
 ## Purpose
@@ -31,17 +33,20 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 
 ## Status
 
+"Implemented" means written and covered by Pester tests against mocks in CI. None of it has been verified on a live VBR server yet.
+
 | Part | Status |
 | --- | --- |
-| Auth (OAuth2 password grant, logout), version probe | done |
-| Certificate pinning (5.1: validation callback, 7: HttpClientHandler) | done |
-| Writer (atomic, UTF-8 without BOM, LF) | done |
-| Collector `jobs` → `veeam_jobs.prom` | done |
-| Collector `objects` → `veeam_objects.prom` | done |
-| Collector `repositories` → `veeam_repositories.prom` | done |
-| Health → `veeam_exporter.prom` | done |
-| License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | done |
-| Deploy: install script, tasks, credential for SYSTEM, uninstall | done |
+| Auth (OAuth2 password grant, logout), version probe | implemented |
+| Certificate pinning (5.1: validation callback, 7: HttpClientHandler) | implemented |
+| Writer (atomic, UTF-8 without BOM, LF) | implemented |
+| Collector `jobs` → `veeam_jobs.prom` | implemented |
+| Collector `objects` → `veeam_objects.prom` | implemented |
+| Collector `repositories` → `veeam_repositories.prom` | implemented |
+| Health → `veeam_exporter.prom` | implemented |
+| License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented |
+| Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented |
+| Verified on a live VBR 12.3.1 and 13 server | open |
 | Alert rules (`rules/`), dashboard (`dashboards/`) | open |
 
 ## Installation
