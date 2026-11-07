@@ -47,7 +47,22 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented |
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented |
 | Verified on a live VBR 12.3.1 and 13 server | open |
-| Alert rules (`rules/`), dashboard (`dashboards/`) | open |
+| Grafana dashboard (`dashboards/`) | implemented, tried against mocked data only |
+| Alert rules (`rules/`) | open |
+
+## Grafana dashboard
+
+`dashboards/veeam-vbr.json` shows what the exporter collects, for one or several VBR servers:
+
+- status tiles: failed jobs and objects, jobs with warnings, offline and nearly full repositories, days until the license expires, failing collectors, textfile read errors
+- jobs: last result, enabled, running, time since the last run (yellow after 26 h, like `VeeamJobNotRun`), next run
+- objects whose last task run ended with Warning or Failed, with the error message
+- repositories: fill level (`1 - free / capacity`) now and over time, online and out-of-date status, sizes
+- license and exporter health: validity, expiration, instance usage, success, duration and data age per collector
+
+Import it in Grafana under *Dashboards > New > Import*. It needs a Prometheus data source that scrapes the windows_exporter of the VBR servers. Variables: `datasource` (Prometheus data source) and `instance` (one or more VBR servers, taken from `veeam_exporter_info`). Status colours always come with a symbol and a label (Success, Warning, Failed).
+
+Built and checked with Grafana 13.3 and Prometheus 3.16 against the fixtures in `tests/fixtures/expected`, not against a live VBR server yet. `tests/Dashboard.Tests.ps1` checks that every query uses the data source variable, filters by `instance` and only uses metrics from `docs/metrics.md`.
 
 ## Installation
 
