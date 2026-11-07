@@ -43,7 +43,7 @@ docs/metrics.md
 - Mock REST calls in tests. Fixtures in `tests/fixtures/` taken from the response examples of the Veeam docs (jobs/states, sessions, taskSessions, repositories/states).
 - Tests check the generated `.prom` files line by line, including escaping, encoding (no BOM) and line endings.
 - If `promtool` is available: `Get-Content <file> | promtool check metrics`. For the files the tests generate: set `$env:VEEAM_TEST_PROM_OUTPUT` to an empty directory before `Invoke-Pester`, then run `./tests/Invoke-PromtoolCheck.ps1 -Path $env:VEEAM_TEST_PROM_OUTPUT, 'tests/fixtures/expected'`.
-- CI (`.github/workflows/ci.yml`, `windows-latest`) runs Pester (`-CI`), PSScriptAnalyzer on `src` and `deploy` (errors fail the build) and the promtool check, once under Windows PowerShell 5.1 and once under PowerShell 7.
+- CI (`.github/workflows/ci.yml`, `windows-latest`) runs Pester (`-CI`), PSScriptAnalyzer on `src` and `deploy` (errors fail the build) and the promtool check, once under Windows PowerShell 5.1 and once under PowerShell 7. Both jobs also run `tests/reviewer-guard.test.sh` (Git Bash) against the reviewer's hook.
 
 ## Way of working
 
