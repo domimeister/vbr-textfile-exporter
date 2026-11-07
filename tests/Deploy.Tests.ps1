@@ -131,7 +131,8 @@ Describe 'Task arguments' {
         $p = [System.Diagnostics.Process]::Start($psi)
         $out = $p.StandardOutput.ReadToEnd()
         $p.WaitForExit()
-        $received = @($out | ConvertFrom-Json)
+        # Windows PowerShell 5.1: ConvertFrom-Json emits a JSON array as one object.
+        $received = @(($out | ConvertFrom-Json) | ForEach-Object { $_ })
         ($received -join '|') | Should -BeExactly ($values -join '|')
     }
 
@@ -168,11 +169,27 @@ Describe 'Task arguments' {
     }
 
     It 'registers tasks as SYSTEM with repetition or a daily trigger' {
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskAction { [pscustomobject]@{ Execute = $Execute; Argument = $Argument } }
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskPrincipal { [pscustomobject]@{ UserId = $UserId } }
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskSettingsSet { [pscustomobject]@{} }
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskTrigger { [pscustomobject]@{} }
-        Mock -ModuleName VeeamExporterDeploy New-ScheduledTask { [pscustomobject]@{} }
+        # On Windows these mocks replace the real ScheduledTasks cmdlets. Their
+        # parameters stay CimInstance-typed, and Pester also binds the dynamic
+        # parameters of the original, so the mocks hand out real task objects
+        # there (in memory, never registered; module-qualified calls bypass the
+        # mocks). The untyped Linux stubs take plain objects.
+        $script:RealTaskCmdlets = -not ($script:CreatedStubs -contains 'New-ScheduledTask')
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskAction {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskAction -Execute 'cmd.exe' } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskPrincipal {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskSettingsSet {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskSettingsSet } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTaskTrigger {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTaskTrigger -Once -At ([datetime]::Today) } else { [pscustomobject]@{} }
+        }
+        Mock -ModuleName VeeamExporterDeploy New-ScheduledTask {
+            if ($script:RealTaskCmdlets) { ScheduledTasks\New-ScheduledTask -Action (ScheduledTasks\New-ScheduledTaskAction -Execute 'cmd.exe') } else { [pscustomobject]@{} }
+        }
         Mock -ModuleName VeeamExporterDeploy Register-ScheduledTask { }
         InModuleScope VeeamExporterDeploy {
             foreach ($kind in 'Rest', 'License') {
@@ -399,6 +416,9 @@ Describe 'Credential for SYSTEM' {
     }
 
     It 'worker script refuses outside of SYSTEM and deletes the handover file' {
+        # Windows PowerShell 5.1 turns redirected stderr of a child process into a
+        # terminating error when $ErrorActionPreference is Stop (GitHub Actions sets it).
+        $ErrorActionPreference = 'Continue'
         $transfer = Join-Path -Path $script:Data -ChildPath 'transfer-test.bin'
         [System.IO.File]::WriteAllText($transfer, '{}')
         $worker = Join-Path -Path (Join-Path -Path $script:RepoRoot -ChildPath 'deploy') -ChildPath 'Save-VeeamExporterSystemCredential.ps1'
@@ -408,10 +428,13 @@ Describe 'Credential for SYSTEM' {
         Test-Path -LiteralPath $transfer | Should -BeFalse
         Test-Path -LiteralPath (Join-Path $script:Data 'veeam.cred.xml') | Should -BeFalse
     }
+}
 
+# Separate block: 'Credential for SYSTEM' mocks Write-VeeamExporterTransferFile.
+Describe 'Credential handover file' {
     It 'encrypts the handover file with DPAPI LocalMachine (Windows only)' {
         if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'DPAPI on Windows only'; return }
-        $path = Join-Path -Path $script:Data -ChildPath 'transfer-roundtrip.bin'
+        $path = Join-Path -Path (New-TestDirectory -Name 'handover') -ChildPath 'transfer-roundtrip.bin'
         InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path; Cred = (New-TestCredential) } {
             param($Path, $Cred)
             Write-VeeamExporterTransferFile -Path $Path -Credential $Cred
@@ -537,6 +560,20 @@ Describe 'Permissions: rules' {
     }
 }
 
+# Separate block: 'Permissions: directories' mocks New-VeeamExporterSecureDirectoryItem.
+Describe 'Permissions: creating a directory' {
+    It 'Windows: new directory has from the start only SYSTEM and Administrators, without inheritance' {
+        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs on Windows only'; return }
+        $path = Join-Path -Path $TestDrive -ChildPath ('acl-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
+        InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) New-VeeamExporterSecureDirectoryItem -Path $Path -Kind Data -Confirm:$false }
+        $acl = Get-Acl -LiteralPath $path
+        $acl.AreAccessRulesProtected | Should -BeTrue
+        $sids = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
+        ($sids -join ',') | Should -BeExactly 'S-1-5-18,S-1-5-32-544'
+        @($acl.GetAccessRules($false, $true, [System.Security.Principal.SecurityIdentifier])).Count | Should -Be 0
+    }
+}
+
 Describe 'Permissions: directories' {
     BeforeAll {
         function New-TestLink {
@@ -584,17 +621,6 @@ Describe 'Permissions: directories' {
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Initialize-VeeamExporterSecureDirectory -Path $Path -Kind Data -Confirm:$false } } |
             Should -Throw '*not created by an administrator*'
         Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 0 -Exactly
-    }
-
-    It 'Windows: new directory has from the start only SYSTEM and Administrators, without inheritance' {
-        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'ACLs on Windows only'; return }
-        $path = Join-Path -Path $TestDrive -ChildPath ('acl-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
-        InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) New-VeeamExporterSecureDirectoryItem -Path $Path -Kind Data -Confirm:$false }
-        $acl = Get-Acl -LiteralPath $path
-        $acl.AreAccessRulesProtected | Should -BeTrue
-        $sids = @($acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]) | ForEach-Object { $_.IdentityReference.Value } | Sort-Object -Unique)
-        ($sids -join ',') | Should -BeExactly 'S-1-5-18,S-1-5-32-544'
-        @($acl.GetAccessRules($false, $true, [System.Security.Principal.SecurityIdentifier])).Count | Should -Be 0
     }
 
     It 'Windows: target ACL with owner Administrators only on request' {
@@ -657,7 +683,7 @@ Describe 'Permissions: directories' {
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsReadExecute) }
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Assert-VeeamExporterDirectorySecure -Path $Path -Kind Install } } | Should -Not -Throw
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidAuthUsers -Rights $script:RightsModify) }
-        { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Assert-VeeamExporterDirectorySecure -Path $Path -Kind Install } } | Should -Throw '*S-1-5-11 has access*'
+        { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $path } { param($Path) Assert-VeeamExporterDirectorySecure -Path $Path -Kind Install } } | Should -Throw '*S-1-5-11*has access*'
     }
 
     It 'textfile directory: reports write permissions and links on its own files' {
@@ -668,7 +694,7 @@ Describe 'Permissions: directories' {
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsCreateFolders) }
         $problems = @(InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) Get-VeeamExporterTextfileProblem -Directory $Dir })
         @($problems).Count | Should -Be 1
-        $problems[0] | Should -BeLike '*S-1-5-32-545 has access'
+        $problems[0] | Should -BeLike '*S-1-5-32-545*has access'
 
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
         if (-not (New-TestLink -Path (Join-Path $dir 'veeam_jobs.prom.tmp') -Target (Join-Path $dir 'node_custom.prom'))) { Set-ItResult -Skipped -Because 'symbolic links not permitted'; return }
@@ -743,6 +769,9 @@ Describe 'Permissions: install and uninstall' {
 
 Describe 'Reading the certificate from localhost:9419' {
     It 'reads thumbprint and subject of a TLS service (openssl s_server)' {
+        # Windows PowerShell 5.1 turns redirected stderr of a child process into a
+        # terminating error when $ErrorActionPreference is Stop (GitHub Actions sets it).
+        $ErrorActionPreference = 'Continue'
         $openssl = Get-Command -Name 'openssl' -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1
         if (-not $openssl) { Set-ItResult -Skipped -Because 'openssl not available'; return }
         $dir = New-TestDirectory -Name 'tls'
@@ -751,12 +780,22 @@ Describe 'Reading the certificate from localhost:9419' {
         & $openssl.Source req -x509 -newkey rsa:2048 -nodes -keyout $key -out $crt -days 1 -subj '/CN=vbr-test' 2>$null
         $fingerprint = ((& $openssl.Source x509 -in $crt -noout -fingerprint -sha1) -replace '^.*=', '' -replace ':', '')
         $port = Get-Random -Minimum 20000 -Maximum 40000
-        $server = Start-Process -FilePath $openssl.Source -ArgumentList @('s_server', '-accept', $port, '-cert', $crt, '-key', $key, '-quiet') -PassThru -RedirectStandardOutput (Join-Path $dir 'out.txt') -RedirectStandardError (Join-Path $dir 'err.txt')
+        # IPv4 explicitly: on Windows, s_server may listen on IPv6 only, and the
+        # TcpClient of .NET Framework (Windows PowerShell 5.1) connects via IPv4.
+        # -www: s_server answers by itself and does not read stdin; without it,
+        # an EOF on stdin makes it drop the connection during the handshake.
+        $serverErr = Join-Path $dir 'err.txt'
+        $server = Start-Process -FilePath $openssl.Source -ArgumentList @('s_server', '-accept', "127.0.0.1:$port", '-cert', $crt, '-key', $key, '-www', '-quiet') -PassThru -RedirectStandardOutput (Join-Path $dir 'out.txt') -RedirectStandardError $serverErr
         try {
             $info = $null
+            $lastError = $null
             for ($i = 0; $i -lt 20 -and $null -eq $info; $i++) {
                 try { $info = Get-TlsCertificateInfo -HostName 'localhost' -Port $port -TimeoutSeconds 5 }
-                catch { Start-Sleep -Milliseconds 250 }
+                catch { $lastError = $_; Start-Sleep -Milliseconds 250 }
+            }
+            if ($null -eq $info) {
+                $serverLog = if (Test-Path -LiteralPath $serverErr) { [System.IO.File]::ReadAllText($serverErr) } else { '' }
+                $info | Should -Not -BeNullOrEmpty -Because "Get-TlsCertificateInfo failed: $lastError; s_server stderr: $serverLog"
             }
             $info.Thumbprint | Should -BeExactly $fingerprint.ToUpperInvariant()
             $info.Subject | Should -BeExactly 'CN=vbr-test'
