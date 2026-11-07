@@ -1,4 +1,4 @@
-# Shared by tests/Promtool.Tests.ps1 and tests/Invoke-PromtoolCheck.ps1.
+# Shared by tests/Promtool.Tests.ps1, tests/Rules.Tests.ps1 and tests/Invoke-PromtoolCheck.ps1.
 # Keep this file ASCII-only (Windows PowerShell 5.1 reads it as ANSI).
 
 function Invoke-PromtoolProcess {
@@ -41,6 +41,30 @@ function Invoke-PromtoolProcess {
     try {
         $process.StandardInput.BaseStream.Write($Bytes, 0, $Bytes.Length)
         $process.StandardInput.Close()
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+        return [pscustomobject]@{ ExitCode = $process.ExitCode; Output = ($stdout + $stderr).Trim() }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
+function Invoke-PromtoolCommand {
+    # Runs promtool with arguments and without stdin, e.g. "check rules <file>".
+    param(
+        [Parameter(Mandatory = $true)][string]$Executable,
+        [Parameter(Mandatory = $true)][string[]]$Arguments
+    )
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = $Executable
+    $psi.Arguments = (@($Arguments | ForEach-Object { '"{0}"' -f $_ })) -join ' '
+    $psi.UseShellExecute = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+    $process = [System.Diagnostics.Process]::Start($psi)
+    try {
         $stdout = $process.StandardOutput.ReadToEnd()
         $stderr = $process.StandardError.ReadToEnd()
         $process.WaitForExit()

@@ -153,7 +153,7 @@ Values for `collector`: jobs, objects, repositories, license. The textfile colle
 
 ## Example Alerts
 
-Eight rules cover the minimum requirements and the exporter itself. The thresholds are proposals. `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval; `VeeamJobNotRun` assumes daily jobs.
+Nine rules cover the minimum requirements and the exporter itself. The thresholds are proposals. They are implemented in [`rules/veeam.rules.yml`](../rules/veeam.rules.yml), which adds a `summary` annotation to every rule; `tests/rules/veeam.rules.test.yml` covers each rule with `promtool test rules`. `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval; `VeeamJobNotRun` assumes daily jobs.
 
 ```yaml
 groups:
@@ -193,9 +193,12 @@ groups:
       - alert: VeeamExporterStale
         expr: time() - windows_textfile_mtime_seconds{file=~".*veeam_(jobs|objects|repositories)\\.prom"} > 3600
         labels: {severity: warning}
+      - alert: VeeamExporterLicenseStale
+        expr: time() - windows_textfile_mtime_seconds{file=~".*veeam_license\\.prom"} > 2 * 86400
+        labels: {severity: warning}
 ```
 
-The license file uses the same stale rule with 2 days instead of 1 hour, because the task runs only once a day.
+`VeeamExporterLicenseStale` is the same rule for the license file with 2 days instead of 1 hour, because the license task runs only once a day.
 
 ## Open Points & Next Steps
 
