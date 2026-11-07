@@ -96,6 +96,13 @@ jobs:
           Import-Module -Name Pester -RequiredVersion $env:PESTER_VERSION -Force
           Invoke-Pester -Path tests -CI
 
+      - name: Reviewer guard
+        # Hook of the reviewer subagent (.claude/hooks/reviewer-guard.sh);
+        # Git Bash, independent of the PowerShell edition.
+        if: ${{ !cancelled() }}
+        shell: bash
+        run: bash tests/reviewer-guard.test.sh
+
       - name: PSScriptAnalyzer
         if: ${{ !cancelled() }}
         run: |

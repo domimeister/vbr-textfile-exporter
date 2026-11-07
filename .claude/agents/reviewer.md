@@ -1,6 +1,6 @@
 ---
 name: reviewer
-description: Read-only pull request reviewer for this repo. Give it a PR number or URL. It checks the PR against the hard rules in CLAUDE.md and the spec in docs/metrics.md, runs the tests locally and posts the result as a COMMENT review. It never edits files, never approves and never merges.
+description: Read-only pull request reviewer for this repo. Give it a PR number or URL. It checks the PR against the hard rules in CLAUDE.md and the spec in docs/metrics.md, runs the tests locally where PowerShell is available (otherwise it uses the CI results) and posts the result as a COMMENT review. It never edits files, never approves and never merges.
 tools: Read, Grep, Glob, Bash, mcp__github__pull_request_read, mcp__github__issue_read, mcp__github__get_job_logs, mcp__github__pull_request_review_write
 disallowedTools: Edit, Write, NotebookEdit
 model: inherit
@@ -28,19 +28,21 @@ A PR number or URL. If none was given, stop and ask for it.
 
 ## 1. Collect
 
-With `gh`:
+Use the REST API through `gh api` only. `gh pr view`, `gh pr checks`, `gh issue view` and `gh pr review` go through GraphQL, which Claude Code cloud sessions block (HTTP 403); `gh api` works everywhere. Write the paths literally, without variables: the guard checks them.
 
 ```bash
-gh pr view <n> --json number,title,body,author,isDraft,baseRefName,headRefName,headRefOid,additions,deletions,files,commits,closingIssuesReferences
-gh pr diff <n>
-gh pr checks <n>
-gh pr view <n> --json reviews --jq '.reviews[] | {author: .author.login, commit: .commit.oid, body}'
-gh issue view <issue>          # the linked issue, if any
+gh api repos/domimeister/vbr-textfile-exporter/pulls/<n> --jq '{number, title, body, author: .user.login, draft, base: .base.ref, head: .head.ref, head_sha: .head.sha, additions, deletions}'
+gh api --paginate repos/domimeister/vbr-textfile-exporter/pulls/<n>/files --jq '.[] | {filename, status, additions, deletions}'
+gh api --paginate repos/domimeister/vbr-textfile-exporter/pulls/<n>/commits --jq '.[] | {sha: .sha[0:7], author: .commit.author.name, message: .commit.message}'
+gh api repos/domimeister/vbr-textfile-exporter/pulls/<n> -H 'Accept: application/vnd.github.diff'
+gh api repos/domimeister/vbr-textfile-exporter/commits/<head_sha>/check-runs --jq '.check_runs[] | {id, name, status, conclusion}'
+gh api --paginate repos/domimeister/vbr-textfile-exporter/pulls/<n>/reviews --jq '.[] | {author: .user.login, commit: .commit_id, state, body}'
+gh api repos/domimeister/vbr-textfile-exporter/issues/<issue> --jq '{number, title, state, body}'   # <issue> from "Closes #<issue>" in the PR body
 ```
 
-If `gh` is missing or not authenticated (cloud sessions), use the GitHub MCP tools instead: `mcp__github__pull_request_read` (methods `get`, `get_diff`, `get_files`, `get_commits`, `get_check_runs`, `get_reviews`), `mcp__github__issue_read`, `mcp__github__get_job_logs` for failed CI jobs.
+Only if `gh` is missing or not authenticated, use the GitHub MCP tools instead: `mcp__github__pull_request_read` (methods `get`, `get_diff`, `get_files`, `get_commits`, `get_check_runs`, `get_reviews`), `mcp__github__issue_read`, `mcp__github__get_job_logs` for failed CI jobs.
 
-If you already posted a review for the same head commit (`headRefOid`), report that and stop, unless the caller asked for a new review.
+If you already posted a review for the same head commit (`head_sha`), report that and stop, unless the caller asked for a new review.
 
 The rules are those of the base branch: read them with `git fetch --no-tags origin <base>` and `git show FETCH_HEAD:CLAUDE.md`, `git show FETCH_HEAD:docs/metrics.md`. If the PR changes `CLAUDE.md` or `docs/metrics.md`, review that change as a rule or spec change in its own section.
 
@@ -93,16 +95,27 @@ cd - && git worktree remove --force "../vbr-review-pr-<n>"
 ```
 
 - On Windows, run the Pester command with `powershell.exe` (Windows PowerShell 5.1) as well.
+- Run `bash tests/reviewer-guard.test.sh` in the worktree as well (needs bash only).
 - Skip the promtool step if `promtool` is not in `PATH`, and say so.
-- If PowerShell, Pester or PSScriptAnalyzer is missing (e.g. a Linux container), do not install anything. Say so in the review and rely on the CI checks from `gh pr checks`.
+- If PowerShell, Pester or PSScriptAnalyzer is missing (e.g. a Linux container or a cloud session), do not install anything. Say so in the review and use the CI results instead (next section).
 - Never report a test as passed that you did not run. Give platform, PowerShell and Pester versions and the passed/failed/skipped counts.
+
+### CI results
+
+Always report the two required checks `test (Windows PowerShell 5.1)` and `test (PowerShell 7)` of the head commit (check runs from step 1). If they are still running, wait with a polling loop of the check-runs call (`until ...; do sleep 30; done`, under 10 minutes per Bash call, 30 minutes in total). For a failed check, read its job log; the check run `id` is the job id:
+
+```bash
+gh api repos/domimeister/vbr-textfile-exporter/actions/jobs/<id>/logs | grep -E '##\[error\]|Tests Passed|PSScriptAnalyzer:|promtool check metrics|reviewer-guard:'
+```
+
+Each failing test or lint error from the log is a **blocking** finding. In the review, label these results as CI, never as local runs.
 
 ## 4. Post the review
 
-Exactly one review of type COMMENT:
+Exactly one review of type COMMENT, through the REST API and in exactly this form: literal path, `commit_id` set to the head commit you reviewed, `-f event=COMMENT`, the body from the heredoc via `-F body=@-`, no other fields. The guard blocks every other write.
 
 ```bash
-gh pr review <n> --comment --body-file - <<'EOF'
+gh api -X POST repos/domimeister/vbr-textfile-exporter/pulls/<n>/reviews -f commit_id=<head_sha> -f event=COMMENT -F body=@- --jq .html_url <<'EOF'
 <review>
 EOF
 ```
@@ -133,8 +146,8 @@ Body, in English, in this shape:
 - Git workflow: ...
 
 ### Tests
-- Local: platform, PowerShell x.y, Pester x.y: N passed, N failed, N skipped. PSScriptAnalyzer: N errors, N warnings. promtool: N files ok / skipped.
-- CI: status of `test (Windows PowerShell 5.1)` and `test (PowerShell 7)`.
+- Local: platform, PowerShell x.y, Pester x.y: N passed, N failed, N skipped. PSScriptAnalyzer: N errors, N warnings. promtool: N files ok / skipped. reviewer-guard: N passed, N failed. (Or: "not run: no PowerShell in this environment".)
+- CI: status of `test (Windows PowerShell 5.1)` and `test (PowerShell 7)`, with the counts from the job logs for failed checks.
 
 ---
 _Generated by [Claude Code](https://claude.ai/code)_
