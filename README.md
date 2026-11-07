@@ -48,7 +48,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented |
 | Verified on a live VBR 12.3.1 and 13 server | open |
 | Grafana dashboard (`dashboards/`) | implemented, tried against mocked data only |
-| Alert rules (`rules/`) | open |
+| Alert rules (`rules/`) | implemented, unit-tested with promtool |
 
 ## Grafana dashboard
 
@@ -99,6 +99,12 @@ The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.
 
 The license task runs as SYSTEM without a stored password and reads the license with `Get-VBRInstalledLicense`. Under VBR 13 it needs PowerShell 7 and the Veeam console. It writes its health status to `veeam_exporter_license.prom` (`collector="license"`), so it does not overwrite the REST task's `veeam_exporter.prom`.
 
+## Alert rules
+
+`rules/veeam.rules.yml` holds the nine Prometheus alerting rules from [`docs/metrics.md`](docs/metrics.md#example-alerts): failed jobs and objects, jobs with warnings, jobs not run for 26 hours, full and offline repositories, expiring license, and stale exporter files. Load the file via `rule_files` in the Prometheus configuration. The thresholds are proposals; `for: 45m` on the job and object rules covers the Veeam retry window.
+
+`tests/rules/veeam.rules.test.yml` tests every rule with `promtool test rules`, including the cases that must not fire (a failed job that is retrying, a disabled job, object storage without capacity).
+
 ## Tests
 
 ```powershell
@@ -107,7 +113,7 @@ Invoke-ScriptAnalyzer -Path src -Recurse
 Invoke-ScriptAnalyzer -Path deploy -Recurse
 ```
 
-If `promtool` is in the PATH, `tests/Promtool.Tests.ps1` additionally checks the expected and the generated `.prom` files with `promtool check metrics`; otherwise these tests are skipped.
+If `promtool` is in the PATH, `tests/Promtool.Tests.ps1` additionally checks the expected and the generated `.prom` files with `promtool check metrics`, and `tests/Rules.Tests.ps1` runs `promtool check rules` and the rule unit tests; otherwise these tests are skipped.
 
 CI (`.github/workflows/ci.yml`) runs on every pull request and on pushes to `main`, on `windows-latest`, under Windows PowerShell 5.1 and PowerShell 7: Pester, PSScriptAnalyzer (errors fail the build) and `promtool check metrics` on all `.prom` files the tests generated. Locally the same check works like this:
 

@@ -1,0 +1,160 @@
+# Unit tests for rules/veeam.rules.yml: promtool test rules tests/rules/veeam.rules.test.yml
+# promtool lists only firing alerts, so exp_alerts: [] also covers pending ones.
+rule_files:
+  - ../../rules/veeam.rules.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: jobs, objects, repositories and license
+    interval: 1m
+    input_series:
+      # Failed and idle: fires after 45m.
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Failed Job",job_type="VSphereBackup"}'
+        values: '2x120'
+      - series: 'veeam_job_running{instance="vbr01:9182",job="windows",job_name="Failed Job"}'
+        values: '0x120'
+      # Failed but running again (retry): no VeeamJobFailed.
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Retrying Job",job_type="VSphereBackup"}'
+        values: '2x120'
+      - series: 'veeam_job_running{instance="vbr01:9182",job="windows",job_name="Retrying Job"}'
+        values: '1x120'
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Warning Job",job_type="BackupCopy"}'
+        values: '1x120'
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Good Job",job_type="VSphereBackup"}'
+        values: '0x120'
+      - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="Failed Job",object="vm02"}'
+        values: '2x120'
+      - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="Failed Job",object="vm01"}'
+        values: '0x120'
+      # 90 % full: fires after 1h.
+      - series: 'veeam_repository_capacity_bytes{instance="vbr01:9182",job="windows",repository="repo-full",repository_type="WinLocal",host="srv1"}'
+        values: '100x120'
+      - series: 'veeam_repository_free_bytes{instance="vbr01:9182",job="windows",repository="repo-full",repository_type="WinLocal",host="srv1"}'
+        values: '10x120'
+      # 50 % full: no alert.
+      - series: 'veeam_repository_capacity_bytes{instance="vbr01:9182",job="windows",repository="repo-ok",repository_type="WinLocal",host="srv1"}'
+        values: '100x120'
+      - series: 'veeam_repository_free_bytes{instance="vbr01:9182",job="windows",repository="repo-ok",repository_type="WinLocal",host="srv1"}'
+        values: '50x120'
+      # Object storage without capacity: no alert.
+      - series: 'veeam_repository_capacity_bytes{instance="vbr01:9182",job="windows",repository="s3",repository_type="AmazonS3"}'
+        values: '0x120'
+      - series: 'veeam_repository_free_bytes{instance="vbr01:9182",job="windows",repository="s3",repository_type="AmazonS3"}'
+        values: '0x120'
+      - series: 'veeam_repository_online{instance="vbr01:9182",job="windows",repository="repo-offline"}'
+        values: '0x120'
+      - series: 'veeam_repository_online{instance="vbr01:9182",job="windows",repository="repo-full"}'
+        values: '1x120'
+      # Expires 10 days after t=0 on vbr01, 100 days on vbr02, expired at t=0 on vbr03.
+      - series: 'veeam_license_expiration_timestamp_seconds{instance="vbr01:9182",job="windows"}'
+        values: '864000x120'
+      - series: 'veeam_license_expiration_timestamp_seconds{instance="vbr02:9182",job="windows"}'
+        values: '8640000x120'
+      - series: 'veeam_license_expiration_timestamp_seconds{instance="vbr03:9182",job="windows"}'
+        values: '0x120'
+    alert_rule_test:
+      - eval_time: 44m
+        alertname: VeeamJobFailed
+        exp_alerts: []
+      - eval_time: 46m
+        alertname: VeeamJobFailed
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: Failed Job, job_type: VSphereBackup}
+            exp_annotations: {summary: 'Job Failed Job on vbr01:9182 failed'}
+      - eval_time: 46m
+        alertname: VeeamJobWarning
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Warning Job, job_type: BackupCopy}
+            exp_annotations: {summary: 'Job Warning Job on vbr01:9182 ended with a warning'}
+      - eval_time: 44m
+        alertname: VeeamObjectFailed
+        exp_alerts: []
+      - eval_time: 46m
+        alertname: VeeamObjectFailed
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: Failed Job, object: vm02}
+            exp_annotations: {summary: 'vm02 in Failed Job not backed up'}
+      - eval_time: 59m
+        alertname: VeeamRepositoryFull
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: VeeamRepositoryFull
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, repository: repo-full, repository_type: WinLocal, host: srv1}
+            exp_annotations: {summary: 'Repository repo-full on vbr01:9182 is 90% full'}
+      - eval_time: 14m
+        alertname: VeeamRepositoryOffline
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: VeeamRepositoryOffline
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, repository: repo-offline}
+            exp_annotations: {summary: 'Repository repo-offline on vbr01:9182 is offline'}
+      - eval_time: 5m
+        alertname: VeeamLicenseExpiring
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows}
+            exp_annotations: {summary: 'Veeam license on vbr01:9182 expires in 10 days'}
+          - exp_labels: {severity: warning, instance: 'vbr03:9182', job: windows}
+            exp_annotations: {summary: 'Veeam license on vbr03:9182 has expired'}
+
+  - name: jobs not run for 26 hours
+    interval: 1m
+    input_series:
+      # Last run at t=0: fires 1h after it is 26h old.
+      - series: 'veeam_job_last_run_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Old Job"}'
+        values: '0x1700'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Old Job"}'
+        values: '1x1700'
+      # Just as old, but disabled.
+      - series: 'veeam_job_last_run_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Disabled Job"}'
+        values: '0x1700'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Disabled Job"}'
+        values: '0x1700'
+      # Runs all the time: the last run is always now.
+      - series: 'veeam_job_last_run_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Busy Job"}'
+        values: '0+60x1700'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Busy Job"}'
+        values: '1x1700'
+    alert_rule_test:
+      - eval_time: 27h
+        alertname: VeeamJobNotRun
+        exp_alerts: []
+      - eval_time: 27h5m
+        alertname: VeeamJobNotRun
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Old Job}
+            exp_annotations: {summary: 'Job Old Job on vbr01:9182 has not run for more than 26 hours'}
+
+  - name: stale exporter files
+    interval: 1m
+    input_series:
+      # Written at t=0 and never again.
+      - series: 'windows_textfile_mtime_seconds{instance="vbr01:9182",job="windows",file="C:\\Program Files\\windows_exporter\\textfile_inputs\\veeam_jobs.prom"}'
+        values: '0x2900'
+      - series: 'windows_textfile_mtime_seconds{instance="vbr01:9182",job="windows",file="C:\\Program Files\\windows_exporter\\textfile_inputs\\veeam_license.prom"}'
+        values: '0x2900'
+      # Written on every run, but not covered by the rules.
+      - series: 'windows_textfile_mtime_seconds{instance="vbr01:9182",job="windows",file="C:\\Program Files\\windows_exporter\\textfile_inputs\\veeam_exporter.prom"}'
+        values: '0x2900'
+      # Fresh.
+      - series: 'windows_textfile_mtime_seconds{instance="vbr01:9182",job="windows",file="C:\\Program Files\\windows_exporter\\textfile_inputs\\veeam_objects.prom"}'
+        values: '0+60x2900'
+    alert_rule_test:
+      - eval_time: 60m
+        alertname: VeeamExporterStale
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: VeeamExporterStale
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, file: 'C:\Program Files\windows_exporter\textfile_inputs\veeam_jobs.prom'}
+            exp_annotations: {summary: 'Veeam exporter file C:\Program Files\windows_exporter\textfile_inputs\veeam_jobs.prom on vbr01:9182 is older than 1 hour'}
+      - eval_time: 48h
+        alertname: VeeamExporterLicenseStale
+        exp_alerts: []
+      - eval_time: 48h1m
+        alertname: VeeamExporterLicenseStale
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, file: 'C:\Program Files\windows_exporter\textfile_inputs\veeam_license.prom'}
+            exp_annotations: {summary: 'Veeam license file on vbr01:9182 is older than 2 days'}
