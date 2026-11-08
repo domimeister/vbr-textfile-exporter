@@ -191,14 +191,12 @@ Describe 'Wrapper around the Veeam PowerShell module' {
     }
 
     It 'reports a failed import with the module name' {
-        Remove-Item -Path 'Function:\Get-VBRInstalledLicense'
-        try {
-            Mock -ModuleName VeeamExporter Import-Module { throw 'The specified module was not loaded' }
-            { InModuleScope VeeamExporter { Import-VeeamBackupModule } } | Should -Throw '*Veeam.Backup.PowerShell*not loaded*'
-            Should -Invoke -ModuleName VeeamExporter Import-Module -Times 1 -Exactly -ParameterFilter { $Name -eq 'Veeam.Backup.PowerShell' -and $Global }
-        }
-        finally {
-            function global:Get-VBRInstalledLicense { }
-        }
+        # Mock the command lookup instead of removing the stub: on a machine with
+        # VBR installed, PowerShell would find the real cmdlet via module
+        # auto-loading and never call Import-Module (#23).
+        Mock -ModuleName VeeamExporter Get-Command { } -ParameterFilter { $Name -eq 'Get-VBRInstalledLicense' }
+        Mock -ModuleName VeeamExporter Import-Module { throw 'The specified module was not loaded' }
+        { InModuleScope VeeamExporter { Import-VeeamBackupModule } } | Should -Throw '*Veeam.Backup.PowerShell*not loaded*'
+        Should -Invoke -ModuleName VeeamExporter Import-Module -Times 1 -Exactly -ParameterFilter { $Name -eq 'Veeam.Backup.PowerShell' -and $Global }
     }
 }
