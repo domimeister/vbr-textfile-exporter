@@ -488,6 +488,34 @@ Describe 'Install-VeeamExporter' {
         Test-Path -LiteralPath $script:Install | Should -BeFalse
     }
 
+    It 'waits for a running task before the first run, as long as the task may run' {
+        $script:RunningPolls = 2
+        $script:PollsLeftAtStart = New-Object System.Collections.Generic.List[int]
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask {
+            if ($script:RunningPolls -gt 0) { $script:RunningPolls--; return [pscustomobject]@{ State = 'Running' } }
+            [pscustomobject]@{ State = 'Ready' }
+        }
+        Mock -ModuleName VeeamExporterDeploy Start-Sleep { }
+        Mock -ModuleName VeeamExporterDeploy Start-ScheduledTask { $script:PollsLeftAtStart.Add($script:RunningPolls) }
+        $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue
+        # The first start only happens after the running instance has finished.
+        ($script:PollsLeftAtStart -join ',') | Should -BeExactly '0,0'
+        Should -Invoke -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'Veeam Exporter REST' -and $TimeoutSeconds -eq 660 }
+        Should -Invoke -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'Veeam Exporter License' -and $TimeoutSeconds -eq 1860 }
+        @($result.FirstRun | Where-Object Ok).Count | Should -Be 2
+    }
+
+    It 'goes on with the next task and returns the summary if a first run is not finished in time' {
+        Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask { throw 'Task \VeeamExporter\Veeam Exporter REST did not finish within 660 s.' } -ParameterFilter { $TaskName -eq 'Veeam Exporter REST' }
+        $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+        Should -Invoke -ModuleName VeeamExporterDeploy Start-ScheduledTask -Times 2 -Exactly
+        $rest = @($result.FirstRun | Where-Object Task -EQ 'Veeam Exporter REST')[0]
+        $rest.Ok | Should -BeFalse
+        $rest.LastTaskResult | Should -BeNullOrEmpty
+        @($result.FirstRun | Where-Object { $_.Task -eq 'Veeam Exporter License' -and $_.Ok }).Count | Should -Be 1
+        @($warnings | Where-Object { "$_" -like "First run of Veeam Exporter REST not checked*did not finish within 660 s*Get-ScheduledTaskInfo*" }).Count | Should -Be 1
+    }
+
     It 'warns if a task reports an error on its first run' {
         Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask { [pscustomobject]@{ LastTaskResult = 1 } }
         $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
@@ -946,5 +974,22 @@ Describe 'Reading the certificate from localhost:9419' {
 
     It 'reports a closed port with host and port' {
         { Get-TlsCertificateInfo -HostName '127.0.0.1' -Port 9 -TimeoutSeconds 3 } | Should -Throw '*127.0.0.1:9*'
+    }
+}
+
+Describe 'Wait-VeeamExporterTaskIdle' {
+    BeforeEach {
+        Mock -ModuleName VeeamExporterDeploy Start-Sleep { }
+    }
+
+    It 'returns at once when the task does not run' {
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { [pscustomobject]@{ State = 'Ready' } }
+        InModuleScope VeeamExporterDeploy { Wait-VeeamExporterTaskIdle -TaskPath '\VeeamExporter\' -TaskName 'Veeam Exporter REST' }
+        Should -Invoke -ModuleName VeeamExporterDeploy Start-Sleep -Times 0 -Exactly
+    }
+
+    It 'throws when the task is still running at the deadline' {
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { [pscustomobject]@{ State = 'Running' } }
+        { InModuleScope VeeamExporterDeploy { Wait-VeeamExporterTaskIdle -TaskPath '\VeeamExporter\' -TaskName 'Veeam Exporter REST' -TimeoutSeconds 0 -InformationAction SilentlyContinue } } | Should -Throw '*still running after 0 s*'
     }
 }
