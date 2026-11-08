@@ -135,10 +135,14 @@ It only deletes folders that look like an exporter installation.
 
 The deploy logic is tested under Linux with Pester; the Windows cmdlets (scheduled tasks, ACLs, DPAPI) are replaced by mocks there. To verify on a real server:
 
-- [ ] Installation under Windows PowerShell 5.1 on VBR 13, including the credential handover to SYSTEM.
-- [ ] VBR 13: where is the Veeam PowerShell module, and does `pwsh.exe` find it under SYSTEM? Assumption in the script: `C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1`; otherwise pass `-VeeamModule`.
-- [ ] Is SYSTEM Backup Administrator in VBR, so that `Get-VBRInstalledLicense` works (OP-3 in `docs/metrics.md`)?
-- [ ] Does the REST task repeat indefinitely on the target Windows version? Without `RepetitionDuration` this is the case from Windows Server 2016 on.
-- [ ] Permissions on creation: a newly created `C:\ProgramData\VeeamExporter` has only SYSTEM and Administrators from the start (run the test `Windows: new directory has from the start ...` in `tests/Deploy.Tests.ps1` under Windows).
-- [ ] Permissions: after installation, `Get-Acl 'C:\Program Files\VeeamExporter' | Format-List` and the same for `C:\ProgramData\VeeamExporter` show owner *Administrators* and the permissions from the table above. A `C:\ProgramData\VeeamExporter` created beforehand by a normal user leads to an abort.
+Results of the lab test with VBR 13.1 on Windows Server 2025 (November 2026) are marked; open items still need a check.
+
+- [x] Installation under Windows PowerShell 5.1 on VBR 13, including the credential handover to SYSTEM. An update run (without `-Credential`) keeps the credential.
+- [x] VBR 13: the Veeam PowerShell module is at `C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1` (13.1: `ModuleVersion` 13.1.2.57, `PowerShellVersion` 7.6), and `pwsh.exe` finds it under SYSTEM via `PSModulePath`.
+- [x] SYSTEM is Backup Administrator in VBR by default (role assignment *Administrators → BackupAdmin*), so `Get-VBRInstalledLicense` works (OP-3 in `docs/metrics.md`).
+- [x] The REST task repeats every 15 minutes without an end (`Duration` empty); checked over 2.5 hours on Windows Server 2025, no missed runs.
+- [x] Permissions on creation: the test `Windows: new directory has from the start ...` in `tests/Deploy.Tests.ps1` passes under Windows PowerShell 5.1 and PowerShell 7 on Windows Server 2025.
+- [x] Permissions after installation: `C:\Program Files\VeeamExporter` and `C:\ProgramData\VeeamExporter` have owner *Administrators*, inheritance off and exactly the permissions from the table above.
+- [ ] A `C:\ProgramData\VeeamExporter` created beforehand by a normal user leads to an abort.
+- [ ] Uninstallation removes tasks, `.prom` files, installation and data as described.
 - [ ] If a GPO enforces `AllSigned`, the unsigned scripts do not run. In that case sign the scripts or set up an exception.
