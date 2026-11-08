@@ -1,6 +1,6 @@
 # Veeam Prometheus Exporter (windows_exporter Textfile)
 
-> **Status: experimental.** This exporter has not been run against a real Veeam Backup & Replication server yet. All tests run in CI against mocked REST responses taken from the Veeam documentation. Expect bugs and breaking changes, try it on a non-production VBR server first, and use it at your own risk. Feedback and issues are welcome.
+> **Status: experimental.** Tested in a lab against a real Veeam Backup & Replication 13.1 server, not yet in production. The lab test found open issues, see [Status](#status). CI runs against mocked REST responses taken from the Veeam documentation. Expect bugs and breaking changes, try it on a non-production VBR server first, and use it at your own risk. Feedback and issues are welcome.
 
 PowerShell exporter for Veeam Backup & Replication 13. Runs as a scheduled task on the VBR server, reads the REST API on `localhost:9419` (read-only) and writes `.prom` files into the textfile directory of the windows_exporter.
 
@@ -33,22 +33,22 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 
 ## Status
 
-"Implemented" means written and covered by Pester tests against mocks in CI. None of it has been verified on a live VBR server yet.
+"Implemented" means written and covered by Pester tests against mocks in CI. "Lab test" is the result against a real server: VBR 13.1 on Windows Server 2025 with windows_exporter 0.32.1 (November 2026), one server with file share backup jobs (Success, Failed, never run), a standard repository and a scale-out repository with two extents. No VM backup jobs, agents or tape (no hypervisor in the lab), no production use yet.
 
-| Part | Status |
-| --- | --- |
-| Auth (OAuth2 password grant, logout), version probe | implemented |
-| Certificate pinning (5.1: validation callback, 7: HttpClientHandler) | implemented |
-| Writer (atomic, UTF-8 without BOM, LF) | implemented |
-| Collector `jobs` → `veeam_jobs.prom` | implemented |
-| Collector `objects` → `veeam_objects.prom` | implemented |
-| Collector `repositories` → `veeam_repositories.prom` | implemented |
-| Health → `veeam_exporter.prom` | implemented |
-| License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented |
-| Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented |
-| Verified on a live VBR 13 server | open |
-| Grafana dashboard (`dashboards/`) | implemented, tried against mocked data only |
-| Alert rules (`rules/`) | implemented, unit-tested with promtool |
+| Part | Status | Lab test (VBR 13.1) |
+| --- | --- | --- |
+| Auth (OAuth2 password grant, logout), version probe | implemented | works with 1.3-rev2. An unsupported revision gets HTTP 400 with an empty body, which the probe does not recognise; likely breaks VBR 13.0.x ([#22](https://github.com/domimeister/vbr-textfile-exporter/issues/22)) |
+| Certificate pinning (5.1: validation callback, 7: HttpClientHandler) | implemented | works (REST task under 5.1, self-signed VBR certificate) |
+| Writer (atomic, UTF-8 without BOM, LF) | implemented | works |
+| Collector `jobs` → `veeam_jobs.prom` | implemented | works; file share jobs appear as `job_type="FileBackup"`, `workload="File"`. The configuration backup job is not in `jobs/states` |
+| Collector `objects` → `veeam_objects.prom` | implemented | empty for file share jobs ([#21](https://github.com/domimeister/vbr-textfile-exporter/issues/21)); VM jobs not tested |
+| Collector `repositories` → `veeam_repositories.prom` | implemented | works, including SOBR extents (the SOBR itself has no row of its own) |
+| Health → `veeam_exporter.prom` | implemented | works; `vbr_version` stays empty for Backup Viewer (OP-13) |
+| License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
+| Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented. Textfile collector detection is wrong for windows_exporter 0.32 ([#20](https://github.com/domimeister/vbr-textfile-exporter/issues/20)). Uninstall not tested yet |
+| Grafana dashboard (`dashboards/`) | implemented | not tried against lab data yet |
+| Alert rules (`rules/`) | implemented, unit-tested with promtool | not tried against lab data yet |
+| Test suite on a machine with VBR installed | - | one test depends on the machine ([#23](https://github.com/domimeister/vbr-textfile-exporter/issues/23)) |
 
 ## Grafana dashboard
 
