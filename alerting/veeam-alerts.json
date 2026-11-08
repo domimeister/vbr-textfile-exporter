@@ -208,6 +208,56 @@
           }
         },
         {
+          "uid": "veeam-job-never-run",
+          "title": "VeeamJobNeverRun",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_job_last_result unless on(instance, job_name) veeam_job_last_run_timestamp_seconds and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!=\"none\"}",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        -1
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "26h",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Job {{ $labels.job_name }} on {{ $labels.instance }} has a schedule but has never run"
+          }
+        },
+        {
           "uid": "veeam-repository-full",
           "title": "VeeamRepositoryFull",
           "condition": "B",

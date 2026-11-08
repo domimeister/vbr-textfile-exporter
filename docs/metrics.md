@@ -161,12 +161,13 @@ Values for `collector`: jobs, objects, repositories, license. The textfile colle
 
 ## Example Alerts
 
-Nine Grafana-managed alert rules cover the minimum requirements and the exporter itself. The thresholds are proposals. They are implemented in [`alerting/veeam-alerts.json`](../alerting/veeam-alerts.json), a Grafana alerting provisioning file (folder `Veeam`, group `veeam`, evaluated every minute). The file is a template: nothing loads it automatically, users pick the rules they need (README, "Alert rules").
+Ten Grafana-managed alert rules cover the minimum requirements and the exporter itself. The thresholds are proposals. They are implemented in [`alerting/veeam-alerts.json`](../alerting/veeam-alerts.json), a Grafana alerting provisioning file (folder `Veeam`, group `veeam`, evaluated every minute). The file is a template: nothing loads it automatically, users pick the rules they need (README, "Alert rules").
 
 Every rule has two steps: query `A` is an instant Prometheus query that returns the measured value per series, and the condition `B` is a threshold on `A`. The rule fires for each series of `A` that meets the threshold for the time given in `for`. Grafana shows the value of `A` in the alert and in `$values.A.Value` for the `summary` annotation, which every rule has.
 
 - `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval.
-- `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand. Jobs that never ran have no last run timestamp and do not fire (OP-10). Exporters older than the `schedule` label alert for all enabled jobs.
+- `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand. Jobs that never ran have no last run timestamp and do not fire here. Exporters older than the `schedule` label alert for all enabled jobs.
+- `VeeamJobNeverRun` covers those jobs (OP-10): enabled, with a schedule or chained, and no last run at all. 26 hours give a new daily job time for its first run. Jobs without a schedule and disabled jobs are left out as in `VeeamJobNotRun`; a job that ran with an unknown result (-1, OP-8) has a last run timestamp and does not fire.
 - The fill level comes from free space and capacity, never from `veeam_repository_backup_bytes`, which counts backup files only.
 - `VeeamLicenseExpiring` also fires once the license has expired; `A` is negative then.
 - A collector replaces its file only on success, so an old file means failed or missing runs. The REST task runs every 15 minutes, the license task once a day; `VeeamExporterLicenseStale` therefore allows 48 hours instead of 1.
@@ -195,6 +196,11 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
   condition: A > 26
   for: 1h
   severity: warning
+- alert: VeeamJobNeverRun
+  query: veeam_job_last_result unless on(instance, job_name) veeam_job_last_run_timestamp_seconds and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!="none"}
+  condition: A == -1
+  for: 26h
+  severity: warning
 - alert: VeeamRepositoryFull
   query: 1 - veeam_repository_free_bytes / veeam_repository_capacity_bytes and veeam_repository_capacity_bytes > 0
   condition: A > 0.85
@@ -222,7 +228,7 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
   severity: warning
 ```
 
-Units of `A`: result codes for the first three rules (0 Success, 1 Warning, 2 Failed, -1 None), hours for `VeeamJobNotRun` and the two exporter rules, a fraction from 0 to 1 for `VeeamRepositoryFull`, 1 or 0 for `VeeamRepositoryOffline`, days for `VeeamLicenseExpiring`.
+Units of `A`: result codes for the first three rules and `VeeamJobNeverRun` (0 Success, 1 Warning, 2 Failed, -1 None), hours for `VeeamJobNotRun` and the two exporter rules, a fraction from 0 to 1 for `VeeamRepositoryFull`, 1 or 0 for `VeeamRepositoryOffline`, days for `VeeamLicenseExpiring`.
 
 ## Open Points & Next Steps
 
@@ -237,7 +243,7 @@ These points can only be settled in the lab; they change details, not the archit
 - [x] **OP-7** Version probe: how does the server answer an unsupported `x-api-version` on the token request? Settled in the lab (VBR 13.1): HTTP 400 with `{"errorCode":"NotImplemented","message":"... does not support the API version '1.3-rev3'."}`; wrong credentials give HTTP 401 with `errorCode` `AccessDenied`. Any other error response aborts the probe immediately, so a wrong password is never tried once per version. Under Windows PowerShell 5.1 the exporter lost the error body (stream already read by `Invoke-WebRequest`), so the probe stopped at the first unsupported revision; fixed in #22.
 - [ ] **OP-8** Unknown values in `lastResult` or `result.result` (e.g. empty or a new enum value): assumption -1 like None.
 - [x] **OP-9** Timestamps without a time zone: assumption local time of the VBR server (where the exporter runs). In the documentation examples `jobs/states` and `sessions` carry an offset, `taskSessions` does not (`"creationTime": "2024-11-13T22:00:49.893878"`); the start times there fall on full hours like a local schedule. Check in the lab whether real responses carry an offset. Lab test with VBR 13.1 (November 2026): same as in the docs: `jobs/states` and `sessions` carry the offset of the server (`+01:00`), `taskSessions` does not and are local time of the server. A task that ended at 09:14:50 local time is exported as 1794125690 (08:14:50 UTC), as in `tests/fixtures/lab/vbr-13.1`.
-- [ ] **OP-10** Jobs without `lastRun` (never run): `veeam_job_last_run_timestamp_seconds` is then missing. `VeeamJobNotRun` does not fire for these jobs; consider a separate alert on `veeam_job_last_result == -1`. Lab test with VBR 13.1 (November 2026): a job created but never started has no `lastRun`; the exporter writes `veeam_job_last_result -1` and no `veeam_job_last_run_timestamp_seconds`, as assumed. Open: whether a separate alert is wanted.
+- [x] **OP-10** Jobs without `lastRun` (never run): `veeam_job_last_run_timestamp_seconds` is then missing. `VeeamJobNotRun` does not fire for these jobs; consider a separate alert on `veeam_job_last_result == -1`. Lab test with VBR 13.1 (November 2026): a job created but never started has no `lastRun`; the exporter writes `veeam_job_last_result -1` and no `veeam_job_last_run_timestamp_seconds`, as assumed. Settled: the separate alert `VeeamJobNeverRun` covers enabled jobs with a schedule or chain that never ran (see Example Alerts).
 - [ ] **OP-11** Which session type do agent jobs run under? From 1.3 on there are also `AgentBackup`, `AgentPolicy`, `EndpointBackup` and `BackupCopyJob`. If agent tasks end up there, they are missing from `veeam_objects.prom` with the default `BackupJob,ReplicaJob` and have to be added via parameter.
 - [x] **OP-12** Does a SOBR itself appear as a row in `repositories/states` (type `ExtendableRepository` in the enum)? Then sums over all repositories count the extents twice; build sums over `sobr=""` plus extents, or exclude the SOBR row. For now the exporter outputs the row unchanged. Lab test with VBR 13.1 (November 2026): no. Only the two extents appear, each with the `sobr` label; a sum over all rows counts every extent once.
 - [ ] **OP-13** According to the reference, `GET /api/v1/serverInfo` is only available to Backup Administrator. With the viewer account, `vbr_version` in `veeam_exporter_info` stays empty (HTTP 403, no warning). Alternative: read the version locally from the installation. Lab test with VBR 13.1 (November 2026): confirmed, HTTP 403 for Backup Viewer. Open: whether to read the version locally instead.
