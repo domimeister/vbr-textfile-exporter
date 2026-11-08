@@ -49,7 +49,7 @@ function Get-VeeamJobMetric {
         if ($status -match '^(?i)(running|starting|stopping)$') { $isRunning = 1 }
         Add-PromSample -Metric $running -Labels ([ordered]@{ job_name = $name }) -Value $isRunning
 
-        # ASSUMPTION: no lastRun means the series is missing, see docs/metrics.md#OP-10
+        # A job that never ran has no lastRun; the series is then missing (confirmed with VBR 13.1, docs/metrics.md#OP-10).
         Add-PromSample -Metric $lastRun -Labels ([ordered]@{ job_name = $name }) `
             -Value (ConvertTo-UnixTimestamp -Value (Get-VeeamField -InputObject $job -Name 'lastRun'))
         Add-PromSample -Metric $nextRun -Labels ([ordered]@{ job_name = $name }) `

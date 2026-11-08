@@ -33,7 +33,7 @@ docs/metrics.md
 - **Prometheus format:** `# HELP` and `# TYPE` exactly once per metric. Escape label values (`\` → `\\`, `"` → `\"`, newline → `\n`). No timestamps on samples. snake_case with unit suffix (`_bytes`, `_seconds`, `_timestamp_seconds`).
 - **Labels:** `job_name`, never `job` or `instance` (Prometheus sets those itself).
 - **Value codes:** Success 0, Warning 1, Failed 2, None -1.
-- **Units:** multiply GB from the API by 1073741824 (assuming GiB, see open points).
+- **Units:** multiply GB from the API by 1073741824 (GB means GiB, confirmed in the lab, OP-5).
 - **Secrets:** password only via DPAPI (`Export-Clixml`) for the task account. No credentials in the repo, in logs or in `.prom` files.
 
 ## Tests
