@@ -44,7 +44,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Collector `jobs` → `veeam_jobs.prom` | implemented | works; file share jobs appear as `job_type="FileBackup"`, `workload="File"`. The configuration backup job is not in `jobs/states` |
 | Collector `objects` → `veeam_objects.prom` | implemented | works for file share jobs (object = file server); VM jobs not tested |
 | Collector `repositories` → `veeam_repositories.prom` | implemented | works, including SOBR extents (the SOBR itself has no row of its own) |
-| Health → `veeam_exporter.prom` | implemented | works; `vbr_version` stays empty for Backup Viewer (OP-13) |
+| Health → `veeam_exporter.prom` | implemented | works; `vbr_version` read locally from the backup service binary (OP-13) |
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter; uninstallation removes tasks, `veeam_*.prom` files, installation and data; a data directory created beforehand by a normal user aborts the installation; under an `AllSigned` policy the scripts do not run (see [`deploy/README.md`](deploy/README.md#to-verify-in-the-lab)) |
 | Grafana dashboard (`dashboards/`) | implemented | works in Grafana 13.3: every panel shows the lab data; status tiles, jobs with result, schedule (scheduled, chained, manual) and next run, the failed object with its message, repositories including the SOBR extents, license and exporter health |
@@ -75,7 +75,7 @@ Manually per VBR server, in a PowerShell as Administrator:
 
 The script reads the thumbprint of the REST API (with confirmation), asks for the Veeam account (role **Backup Viewer**), stores it with DPAPI for SYSTEM and sets up two tasks: REST every 15 minutes, license daily. It then starts both once. Details, prerequisites, update and uninstallation: [`deploy/README.md`](deploy/README.md).
 
-With the Viewer role, `vbr_version` in `veeam_exporter_info` stays empty, because only Backup Administrator may read `/api/v1/serverInfo` (OP-13 in `docs/metrics.md`).
+`vbr_version` in `veeam_exporter_info` is the file version of the Veeam backup service on the server, read locally, because only Backup Administrator may read it through REST (`/api/v1/serverInfo`, OP-13 in `docs/metrics.md`).
 
 ## Running by hand (testing, troubleshooting)
 

@@ -2474,7 +2474,7 @@
       "id": 21,
       "type": "table",
       "title": "Exporter version",
-      "description": "VBR version stays empty with the Backup Viewer role (OP-13 in docs/metrics.md).",
+      "description": "VBR version: file version of the Veeam backup service on the server, empty if it cannot be read (OP-13 in docs/metrics.md).",
       "gridPos": {
         "x": 16,
         "y": 51,

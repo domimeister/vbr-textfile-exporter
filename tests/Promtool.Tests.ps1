@@ -34,7 +34,6 @@ Describe 'promtool check metrics' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
             switch ($Path) {
                 '/api/oauth2/token' { return New-HttpResponse -StatusCode 200 -Content $script:TokenJson }
-                '/api/v1/serverInfo' { return New-HttpResponse -StatusCode 200 -Content '{"buildVersion":"13.1.5.2"}' }
                 '/api/v1/jobs/states' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'jobs-states-escaping.json') }
                 '/api/v1/sessions' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'objects-edge-sessions.json') }
                 '/api/v1/taskSessions' { return New-HttpResponse -StatusCode 200 -Content (Get-FixtureText -Name 'objects-edge-taskSessions.json') }
@@ -43,6 +42,7 @@ Describe 'promtool check metrics' {
             }
             return New-HttpResponse -StatusCode 200
         }
+        Mock -ModuleName VeeamExporter Get-VeeamLocalServerVersion { '13.1.2.57' }
         $dir = Join-Path -Path $TestDrive -ChildPath 'promtool'
         New-Item -ItemType Directory -Path $dir | Out-Null
         $null = Invoke-VeeamExporterRun -TextfileDirectory $dir -Credential (New-TestCredential) -WarningAction SilentlyContinue

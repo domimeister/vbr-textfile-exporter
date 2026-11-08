@@ -45,6 +45,14 @@ function Invoke-VeeamExporterRun {
     $vbrVersion = ''
     $scriptVersion = [string]$MyInvocation.MyCommand.Module.Version
 
+    # Read locally, independent of the REST role (docs/metrics.md#OP-13).
+    try {
+        $vbrVersion = Get-VeeamLocalServerVersion
+    }
+    catch {
+        Write-Warning ('VBR version not readable: {0}' -f $_.Exception.Message)
+    }
+
     try {
         try {
             $session = Connect-VeeamServer -BaseUri $BaseUri -Credential $Credential -CertificateThumbprint $CertificateThumbprint -ApiVersion $ApiVersion -TimeoutSec $TimeoutSec
@@ -53,22 +61,6 @@ function Invoke-VeeamExporterRun {
             Write-Warning ('Logon failed: {0}' -f $_.Exception.Message)
         }
 
-        if ($null -ne $session) {
-            try {
-                $serverInfo = Get-VeeamServerInfo -Session $session
-                $vbrVersion = [string](Get-VeeamField -InputObject $serverInfo -Name 'buildVersion')
-            }
-            catch {
-                # serverInfo is for Backup Administrator only (docs/metrics.md#OP-13):
-                # with the Viewer role a 403 is expected, vbr_version stays empty.
-                if ($_.Exception.Message -match 'HTTP 403') {
-                    Write-Verbose ('serverInfo not permitted for this account: {0}' -f $_.Exception.Message)
-                }
-                else {
-                    Write-Warning ('serverInfo failed: {0}' -f $_.Exception.Message)
-                }
-            }
-        }
 
         foreach ($name in $Collector) {
             $sw = [System.Diagnostics.Stopwatch]::StartNew()

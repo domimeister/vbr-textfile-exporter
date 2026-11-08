@@ -9,7 +9,6 @@
     FunctionsToExport    = @(
         'Connect-VeeamServer'
         'Disconnect-VeeamServer'
-        'Get-VeeamServerInfo'
         'Get-VeeamJobMetric'
         'Get-VeeamObjectMetric'
         'Get-VeeamRepositoryMetric'
