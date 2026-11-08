@@ -124,11 +124,11 @@ It only deletes folders that look like an exporter installation.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `-CertificateThumbprint` | from `localhost:9419`, with confirmation | certificate of the REST API |
+| `-CertificateThumbprint` | from `localhost:9419`, with confirmation | certificate of the REST API: the 40 hex digits of the SHA-1 thumbprint; blanks, colons and hyphens are fine, anything else is refused |
 | `-Credential` | prompt | REST account, only needed on first installation or with `-UpdateCredential` |
 | `-UpdateCredential` | – | set the credential again |
 | `-TextfileDirectory` | from the windows_exporter service | target of the `.prom` files |
-| `-InstallPath` / `-DataPath` | `C:\Program Files\VeeamExporter` / `C:\ProgramData\VeeamExporter` | |
+| `-InstallPath` / `-DataPath` | `C:\Program Files\VeeamExporter` / `C:\ProgramData\VeeamExporter` | Relative paths (also for `-TextfileDirectory` and a `-VeeamModule` path) are made absolute against the current directory, because the tasks run in `C:\Windows\System32`. |
 | `-VeeamModule` | searched in PSModulePath and the console folder | name or path (`.psd1`) of the Veeam module |
 | `-SkipLicenseTask` | – | set up only the REST task |
 | `-RestIntervalMinutes` | `15` | interval of the REST task |
