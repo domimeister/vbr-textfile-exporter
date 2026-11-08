@@ -243,10 +243,10 @@ These points can only be settled in the lab; they change details, not the archit
 - [ ] **OP-13** According to the reference, `GET /api/v1/serverInfo` is only available to Backup Administrator. With the viewer account, `vbr_version` in `veeam_exporter_info` stays empty (HTTP 403, no warning). Alternative: read the version locally from the installation. Lab test with VBR 13.1 (November 2026): confirmed, HTTP 403 for Backup Viewer. Open: whether to read the version locally instead.
 - [ ] **OP-14** Socket licenses: `SocketLicenseSummary` (`LicensedSocketsNumber`, `UsedSocketsNumber` per platform) is not exported yet. Only needed if socket licenses are still in use.
 
-1. Script skeleton: auth, version probe, atomic writing, jobs collector.
+1. Script skeleton: auth, version probe, atomic writing, jobs collector. Done.
 2. Test against a v13 server, store example .prom files. Done in the lab with VBR 13.1; real responses and the resulting `veeam_objects.prom` are in `tests/fixtures/lab/vbr-13.1`.
-3. Add the object, repository and license collectors, load the alerts into Grafana.
-4. Rollout manually per server: install script, two tasks, encrypted credential (see `deploy/README.md`).
+3. Add the object, repository and license collectors, Grafana dashboard and alert rules. Done; the alert rules are a template in `alerting/`, users pick the ones they need.
+4. Rollout manually per server: install script, two tasks, encrypted credential (see `deploy/README.md`). Install, update and uninstallation work in the lab; no production server yet.
 
 ## Sources
 
