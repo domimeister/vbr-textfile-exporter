@@ -154,7 +154,7 @@ The same metric may appear in several files as long as the label values differ. 
 | --- | --- | --- | --- |
 | `veeam_exporter_collector_success` | collector | 1 last run ok, 0 failure | script |
 | `veeam_exporter_collector_duration_seconds` | collector | duration in seconds | script |
-| `veeam_exporter_info` | script_version, api_version, vbr_version | 1 | script; `vbr_version` is the file version of the VBR backup service binary (service `VeeamBackupSvc`), empty if it cannot be read (OP-13) |
+| `veeam_exporter_info` | script_version, api_version, vbr_version | 1 | script; `vbr_version` is the file version of the VBR backup service binary (service `VeeamBackupSvc`), empty if it cannot be read or if `-BaseUri` points to another machine than the one the exporter runs on (OP-13) |
 | `windows_textfile_mtime_seconds` | file | modification time of each .prom file | windows_exporter |
 | `windows_textfile_scrape_error` | – | 1 if a file cannot be read | windows_exporter |
 

@@ -50,6 +50,35 @@ function Get-VeeamFileVersion {
     return ($parts -join '.')
 }
 
+function Test-VeeamLocalBaseUri {
+    # $true if the REST address is this machine: localhost, a loopback
+    # address or the machine's own name (short or with its domain). Only then
+    # does the local file version belong to the server the data come from.
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param(
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$BaseUri
+    )
+    $uri = $null
+    if (-not [System.Uri]::TryCreate($BaseUri, [System.UriKind]::Absolute, [ref]$uri)) { return $false }
+    if ($uri.IsLoopback) { return $true }
+    $hostName = $uri.DnsSafeHost.TrimEnd('.')
+    $names = New-Object -TypeName System.Collections.Generic.List[string]
+    if ($env:COMPUTERNAME) { $names.Add($env:COMPUTERNAME) }
+    try {
+        $ip = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties()
+        if ($ip.HostName) {
+            $names.Add($ip.HostName)
+            if ($ip.DomainName) { $names.Add(('{0}.{1}' -f $ip.HostName, $ip.DomainName)) }
+        }
+    }
+    catch { Write-Verbose ('Host name not available: {0}' -f $_.Exception.Message) }
+    foreach ($n in $names) {
+        if ([string]::Equals($hostName, $n, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    return $false
+}
+
 function Get-VeeamLocalServerVersion {
     # Build number of the local VBR server, e.g. 13.1.2.57. Read on every run,
     # so an update shows up with the next run.
