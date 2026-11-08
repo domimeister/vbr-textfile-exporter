@@ -91,7 +91,7 @@ The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
-| `-Collector` | `jobs,objects,repositories` | Which collectors run (also as a comma-separated list). |
+| `-Collector` | `jobs,objects,repositories` | Which collectors run (also as a comma-separated list). The case does not matter; each collector runs once, and file names and labels are always lower case. |
 | `-ObjectLookbackDays` | `8` | How far back `objects` reads task sessions. |
 | `-ObjectSessionType` | `BackupJob,ReplicaJob` | Session types for `objects` (see OP-11 in `docs/metrics.md`). |
 | `-ApiVersion` | probe | Fixed `x-api-version`, skips the version probe. |

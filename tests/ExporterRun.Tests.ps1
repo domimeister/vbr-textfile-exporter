@@ -80,6 +80,17 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
     }
 
+    It 'takes collector names in any case and runs each one once' {
+        Set-VeeamApiMock
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'Jobs,jobs', 'OBJECTS' -WarningAction SilentlyContinue
+        $result.Success | Should -BeTrue
+        ($result.Collectors | ForEach-Object Collector) -join ',' | Should -BeExactly 'jobs,objects'
+        # File names and label values in lower case, as the alerts expect.
+        Get-SortedFileName -Directory $script:Dir | Should -BeExactly 'veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom'
+        $success = @((Get-FileText -Path $script:HealthFile) -split "`n" | Where-Object { $_ -clike 'veeam_exporter_collector_success*' })
+        ($success -join '|') | Should -BeExactly 'veeam_exporter_collector_success{collector="jobs"} 1|veeam_exporter_collector_success{collector="objects"} 1'
+    }
+
     It 'aborts on an unknown collector before logging in, after writing veeam_exporter.prom' {
         Set-VeeamApiMock
         { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs,licence' } | Should -Throw "*Unknown collector 'licence'*"
