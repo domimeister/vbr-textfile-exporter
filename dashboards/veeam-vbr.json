@@ -1528,7 +1528,7 @@
       "id": 16,
       "type": "table",
       "title": "Repositories",
-      "description": "Backup files is the space used by backups, not the volume usage (see docs/metrics.md). Components is missing under VBR 12.3.1.",
+      "description": "Backup files is the space used by backups, not the volume usage (see docs/metrics.md).",
       "gridPos": {
         "x": 0,
         "y": 34,

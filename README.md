@@ -2,7 +2,7 @@
 
 > **Status: experimental.** This exporter has not been run against a real Veeam Backup & Replication server yet. All tests run in CI against mocked REST responses taken from the Veeam documentation. Expect bugs and breaking changes, try it on a non-production VBR server first, and use it at your own risk. Feedback and issues are welcome.
 
-PowerShell exporter for Veeam Backup & Replication 12.3.1 and 13. Runs as a scheduled task on the VBR server, reads the REST API on `localhost:9419` (read-only) and writes `.prom` files into the textfile directory of the windows_exporter.
+PowerShell exporter for Veeam Backup & Replication 13. Runs as a scheduled task on the VBR server, reads the REST API on `localhost:9419` (read-only) and writes `.prom` files into the textfile directory of the windows_exporter.
 
 ## Purpose
 
@@ -22,9 +22,9 @@ The windows_exporter, which runs on the server anyway, serves the files to Prome
 
 | What | Details |
 | --- | --- |
-| Veeam Backup & Replication | 12.3.1 or 13, REST API on `localhost:9419` (REST revision 1.2-rev1 to 1.3-rev2, detected automatically) |
+| Veeam Backup & Replication | 13 (13.0 or later), REST API on `localhost:9419` (REST revision 1.3-rev0 to 1.3-rev2, detected automatically). VBR 12 is not supported. |
 | windows_exporter | as a service on the VBR server, textfile collector enabled (default) |
-| PowerShell | Windows PowerShell 5.1 (REST task, installation). License task under VBR 13: PowerShell 7 and the installed Veeam console |
+| PowerShell | Windows PowerShell 5.1 (REST task, installation). License task: PowerShell 7 and the installed Veeam console (both come with VBR 13) |
 | Veeam account | local Windows user with the VBR role **Backup Viewer** for the REST task |
 | Permissions | installation in a PowerShell **as Administrator** |
 | Prometheus | scrapes the windows_exporter (default port 9182) |
@@ -46,7 +46,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Health → `veeam_exporter.prom` | implemented |
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented |
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented |
-| Verified on a live VBR 12.3.1 and 13 server | open |
+| Verified on a live VBR 13 server | open |
 | Grafana dashboard (`dashboards/`) | implemented, tried against mocked data only |
 | Alert rules (`rules/`) | implemented, unit-tested with promtool |
 

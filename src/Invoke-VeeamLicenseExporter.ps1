@@ -5,8 +5,8 @@ Veeam license exporter for the windows_exporter textfile collector (own task, da
 Reads the installed license with Get-VBRInstalledLicense (Veeam PowerShell
 module) and writes veeam_license.prom plus veeam_exporter_license.prom into
 the textfile directory. Run as SYSTEM or as a local account with the Backup
-Administrator role; no stored password. VBR 13: run with pwsh.exe
-(PowerShell 7) on a server with the Veeam console. VBR 12: powershell.exe.
+Administrator role; no stored password. Run with pwsh.exe (PowerShell 7) on a
+VBR 13 server with the Veeam console; the Veeam module requires PowerShell 7.
 Exit code 0 on success, else 1.
 .PARAMETER LogPath
 Optional: transcript of the last run (overwritten each run).

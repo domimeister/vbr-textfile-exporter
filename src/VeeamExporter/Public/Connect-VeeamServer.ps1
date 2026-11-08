@@ -54,5 +54,5 @@ function Connect-VeeamServer {
 
         throw ('Logon failed (HTTP {0}, x-api-version {1}): {2}' -f $response.StatusCode, $version, (Get-VeeamErrorText -Content $response.Content))
     }
-    throw ('Server supports none of the API versions: {0}' -f ($rejected -join ', '))
+    throw ('Server supports none of the API versions: {0}. The exporter requires Veeam Backup & Replication 13 or later.' -f ($rejected -join ', '))
 }

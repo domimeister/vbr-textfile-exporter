@@ -33,7 +33,6 @@ param(
     [System.Management.Automation.PSCredential]$Credential,
     [switch]$UpdateCredential,
     [string]$VeeamModule,
-    [ValidateSet('Auto', 'WindowsPowerShell', 'PowerShell7')][string]$LicenseHost = 'Auto',
     [switch]$SkipLicenseTask,
     [ValidateRange(5, 60)][int]$RestIntervalMinutes = 15,
     [string]$LicenseTime = '06:17',

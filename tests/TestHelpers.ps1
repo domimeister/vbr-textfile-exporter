@@ -52,7 +52,7 @@ $script:TokenJson = '{"access_token":"access-123","token_type":"bearer","refresh
 $script:UnsupportedVersionJson = '{"errorCode":"BadRequest","message":"The specified API version is not supported."}'
 $script:InvalidGrantJson = '{"error":"invalid_grant","error_description":"Invalid username or password."}'
 
-$script:SupportedDocVersions = @('1.2-rev1', '1.3-rev0', '1.3-rev1', '1.3-rev2')
+$script:SupportedDocVersions = @('1.3-rev0', '1.3-rev1', '1.3-rev2')
 
 function Get-FixtureData {
     # data array of a fixture response

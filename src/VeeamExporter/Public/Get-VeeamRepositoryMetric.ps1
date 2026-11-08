@@ -40,7 +40,7 @@ function Get-VeeamRepositoryMetric {
 
         $isOnline = ConvertTo-VeeamBool -Value (Get-VeeamField -InputObject $state -Name 'isOnline')
         if ($null -ne $isOnline) { Add-PromSample -Metric $online -Labels ([ordered]@{ repository = $name }) -Value ([int]$isOnline) }
-        # isOutOfDate exists from 1.3 on; under 1.2-rev1 the series is missing.
+        # isOutOfDate is part of the 1.3 model; the series is skipped if the field is missing.
         $isOutOfDate = ConvertTo-VeeamBool -Value (Get-VeeamField -InputObject $state -Name 'isOutOfDate')
         if ($null -ne $isOutOfDate) { Add-PromSample -Metric $outOfDate -Labels ([ordered]@{ repository = $name }) -Value ([int]$isOutOfDate) }
     }

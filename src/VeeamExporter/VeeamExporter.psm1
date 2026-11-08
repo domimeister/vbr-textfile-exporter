@@ -5,8 +5,8 @@
 $ErrorActionPreference = 'Stop'
 
 # Highest revision first. 1.3-rev2 = VBR 13.1, 1.3-rev1 = 13.0.1,
-# 1.3-rev0 = 13.0, 1.2-rev1 = 12.3.1.
-$script:VeeamApiVersions = @('1.3-rev2', '1.3-rev1', '1.3-rev0', '1.2-rev1')
+# 1.3-rev0 = 13.0. VBR 12 (1.2-rev1) is not supported.
+$script:VeeamApiVersions = @('1.3-rev2', '1.3-rev1', '1.3-rev0')
 
 # The only POST endpoints this exporter may ever call (hard rule: read-only).
 $script:VeeamAllowedPostPaths = @('/api/oauth2/token', '/api/oauth2/logout')

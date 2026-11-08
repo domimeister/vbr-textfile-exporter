@@ -37,7 +37,7 @@ BeforeAll {
 
 Describe 'Objects collector: output' {
     It 'generates veeam_objects.prom line by line from the doc example <Version>' -TestCases @(
-        @{ Version = '1.2-rev1' }, @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
+        @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
     ) {
         param($Version)
         Assert-PromText -Actual (Get-DocObjectText -Version $Version) -Expected (Get-ExpectedText -Name "doc/$Version/veeam_objects.prom")
@@ -90,7 +90,7 @@ Describe 'Objects collector: REST queries' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Method -ne 'GET' }
     }
 
-    It 'queries each session type separately (1.2-rev1 accepts only one value)' {
+    It 'queries each session type separately' {
         $null = Get-VeeamObjectMetric -Session (New-TestSession)
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }

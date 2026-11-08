@@ -5,7 +5,7 @@ function Get-VeeamObjectMetric {
     .DESCRIPTION
     Follows docs/metrics.md, section "Unprotected VMs (per object)":
     jobs/states for the job names, sessions and taskSessions per session type
-    (one request per type, 1.2-rev1 accepts a single value only), all pages.
+    (one request per type), all pages.
     Pass -JobState, -JobSession and -TaskSession to build the metrics from
     already loaded data (tests).
     #>

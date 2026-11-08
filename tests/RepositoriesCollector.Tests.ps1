@@ -5,7 +5,7 @@ BeforeAll {
 
 Describe 'Repositories collector: output' {
     It 'generates veeam_repositories.prom line by line from the doc example <Version>' -TestCases @(
-        @{ Version = '1.2-rev1' }, @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
+        @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
     ) {
         param($Version)
         $metrics = Get-VeeamRepositoryMetric -RepositoryState (Get-FixtureData -Name "doc/$Version/repositories-states.json") -ScaleOutRepository $script:DocSobr
@@ -15,13 +15,6 @@ Describe 'Repositories collector: output' {
     It 'sets sobr for performance, archive and unknown extents and handles object storage' {
         $metrics = Get-VeeamRepositoryMetric -RepositoryState (Get-FixtureData -Name 'repositories-sobr-states.json') -ScaleOutRepository $script:DocSobr
         Assert-PromText -Actual (ConvertTo-PromText -Metric $metrics) -Expected (Get-ExpectedText -Name 'veeam_repositories_sobr.prom')
-    }
-
-    It 'omits out_of_date under 1.2-rev1 (field missing in the model)' {
-        $text = Get-ExpectedText -Name 'doc/1.2-rev1/veeam_repositories.prom'
-        $text | Should -Not -Match 'veeam_repository_out_of_date'
-        $metrics = Get-VeeamRepositoryMetric -RepositoryState (Get-FixtureData -Name 'doc/1.2-rev1/repositories-states.json') -ScaleOutRepository @()
-        ($metrics | Where-Object Name -EQ 'veeam_repository_out_of_date').Samples.Count | Should -Be 0
     }
 
     It 'does not read isOutOfDate as string "false" as true (1.3-rev0 example)' {

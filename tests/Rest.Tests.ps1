@@ -24,14 +24,16 @@ Describe 'Connect-VeeamServer (auth and version probe)' {
         ($script:TriedVersions -join ',') | Should -BeExactly '1.3-rev2,1.3-rev1,1.3-rev0'
     }
 
-    It 'tries 1.2-rev1 as the last version (VBR 12.3.1)' {
+    It 'does not try 1.2-rev1 and names VBR 13 as requirement (VBR 12 is not supported)' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
+            $script:TriedVersions.Add($Headers['x-api-version'])
             if ($Headers['x-api-version'] -ne '1.2-rev1') {
                 return New-HttpResponse -StatusCode 400 -Content $script:UnsupportedVersionJson
             }
             return New-HttpResponse -StatusCode 200 -Content $script:TokenJson
         }
-        (Connect-VeeamServer -Credential (New-TestCredential)).ApiVersion | Should -BeExactly '1.2-rev1'
+        { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*requires Veeam Backup & Replication 13 or later*'
+        ($script:TriedVersions -join ',') | Should -BeExactly '1.3-rev2,1.3-rev1,1.3-rev0'
     }
 
     It 'sends POST /api/oauth2/token as password grant with x-api-version' {
@@ -82,13 +84,13 @@ Describe 'Connect-VeeamServer (auth and version probe)' {
     It 'throws if no version is supported' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 400 -Content $script:UnsupportedVersionJson }
         { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*none of the API versions*'
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 4 -Exactly
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 3 -Exactly
     }
 
     It 'uses only this version with -ApiVersion' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 400 -Content $script:UnsupportedVersionJson }
-        { Connect-VeeamServer -Credential (New-TestCredential) -ApiVersion '1.2-rev1' } | Should -Throw
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Headers['x-api-version'] -eq '1.2-rev1' }
+        { Connect-VeeamServer -Credential (New-TestCredential) -ApiVersion '1.3-rev0' } | Should -Throw
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Headers['x-api-version'] -eq '1.3-rev0' }
     }
 
     It 'throws if the token response contains no access_token' {
