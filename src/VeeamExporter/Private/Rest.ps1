@@ -6,10 +6,10 @@ function Test-VeeamSuccessStatus {
 }
 
 function Test-VeeamUnsupportedApiVersion {
-    # ASSUMPTION: an unsupported x-api-version is answered with HTTP 400 and an
-    # error text mentioning "version", see docs/metrics.md#OP-7. Everything
-    # else (wrong password, 401, 403, 5xx) stops the probe immediately, so a
-    # wrong password is never tried once per version.
+    # An unsupported x-api-version is answered with HTTP 400 and an error text
+    # mentioning the API version (confirmed with VBR 13.1, docs/metrics.md#OP-7).
+    # Everything else (wrong password = 401, 403, 5xx) stops the probe
+    # immediately, so a wrong password is never tried once per version.
     [CmdletBinding()]
     [OutputType([bool])]
     param([Parameter(Mandatory = $true)][object]$Response)

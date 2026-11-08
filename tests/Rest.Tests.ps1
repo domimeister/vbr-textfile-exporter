@@ -97,6 +97,67 @@ Describe 'Connect-VeeamServer (auth and version probe)' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content '{}' }
         { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*access_token*'
     }
+
+    It 'moves on to the next revision on the real VBR 13.1 answer to an unsupported revision' {
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
+            $script:TriedVersions.Add($Headers['x-api-version'])
+            if ($Headers['x-api-version'] -eq '1.3-rev2') {
+                return New-HttpResponse -StatusCode 400 -Content $script:UnsupportedVersionJsonVbr131
+            }
+            return New-HttpResponse -StatusCode 200 -Content $script:TokenJson
+        }
+        (Connect-VeeamServer -Credential (New-TestCredential)).ApiVersion | Should -BeExactly '1.3-rev1'
+        ($script:TriedVersions -join ',') | Should -BeExactly '1.3-rev2,1.3-rev1'
+    }
+
+    It 'stops at once on the real VBR 13.1 answer to wrong credentials (HTTP 401)' {
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 401 -Content $script:AccessDeniedJsonVbr131 }
+        { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*HTTP 401*credentials are invalid*'
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly
+    }
+}
+
+Describe 'Error body under Windows PowerShell 5.1' {
+    # Invoke-WebRequest (5.1) has already read the error response into ErrorDetails,
+    # so the response stream is at its end when the exporter gets it.
+    It 'rewinds a response stream that has already been read' {
+        $text = InModuleScope VeeamExporter -Parameters @{ Json = $script:UnsupportedVersionJsonVbr131 } {
+            param($Json)
+            $stream = New-Object -TypeName System.IO.MemoryStream -ArgumentList (, [System.Text.Encoding]::UTF8.GetBytes($Json))
+            $stream.Position = $stream.Length
+            Read-VeeamErrorResponseBody -Stream $stream -ErrorDetailsMessage $null
+        }
+        $text | Should -BeExactly $script:UnsupportedVersionJsonVbr131
+    }
+
+    It 'decodes the body as UTF-8' {
+        $expected = '{"message":"Repository ' + [char]0x00C4 + 'nderung fehlgeschlagen"}'
+        $text = InModuleScope VeeamExporter -Parameters @{ Json = $expected } {
+            param($Json)
+            $stream = New-Object -TypeName System.IO.MemoryStream -ArgumentList (, (New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false).GetBytes($Json))
+            $stream.Position = $stream.Length
+            Read-VeeamErrorResponseBody -Stream $stream -ErrorDetailsMessage 'ignored'
+        }
+        $text | Should -BeExactly $expected
+    }
+
+    It 'falls back to ErrorDetails if the stream gives nothing (<Case>)' -TestCases @(
+        @{ Case = 'no stream'; Empty = $false }
+        @{ Case = 'empty stream'; Empty = $true }
+    ) {
+        param($Case, $Empty)
+        $text = InModuleScope VeeamExporter -Parameters @{ Empty = $Empty; Json = $script:AccessDeniedJsonVbr131 } {
+            param($Empty, $Json)
+            $stream = $null
+            if ($Empty) { $stream = New-Object -TypeName System.IO.MemoryStream }
+            Read-VeeamErrorResponseBody -Stream $stream -ErrorDetailsMessage $Json
+        }
+        $text | Should -BeExactly $script:AccessDeniedJsonVbr131
+    }
+
+    It 'returns an empty string without stream and ErrorDetails' {
+        InModuleScope VeeamExporter { Read-VeeamErrorResponseBody -Stream $null -ErrorDetailsMessage $null } | Should -BeExactly ''
+    }
 }
 
 Describe 'Disconnect-VeeamServer' {
