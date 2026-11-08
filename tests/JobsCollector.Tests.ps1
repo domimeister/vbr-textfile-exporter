@@ -48,6 +48,17 @@ Describe 'Jobs collector' {
         $actual | Should -Not -Match '[{,]instance='
     }
 
+    It 'reports a disabled job as disabled although its status stays Stopped (real VBR 13.1 state)' {
+        $metrics = Get-VeeamJobMetric -JobState (Get-FixtureData -Name 'lab/vbr-13.1/jobs-states-disabled.json')
+        $enabled = ($metrics | Where-Object Name -EQ 'veeam_job_enabled').Samples
+        $enabled.Count | Should -Be 4
+        foreach ($sample in $enabled) {
+            $expected = 1
+            if ($sample.Labels['job_name'] -eq 'FS TestData') { $expected = 0 }
+            $sample.Value | Should -Be $expected -Because $sample.Labels['job_name']
+        }
+    }
+
     It 'omits next_run for chained jobs and last_run for jobs that never ran' {
         $actual = Get-JobsPromText -Fixture 'jobs-states.json'
         $actual | Should -Not -Match 'veeam_job_next_run_timestamp_seconds\{job_name="Backup Copy Job 1"\}'

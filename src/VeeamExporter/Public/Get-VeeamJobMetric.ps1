@@ -41,8 +41,11 @@ function Get-VeeamJobMetric {
         Add-PromSample -Metric $lastResult -Labels ([ordered]@{ job_name = $name; job_type = $type }) `
             -Value (ConvertTo-VeeamResultCode -Result (Get-VeeamField -InputObject $job -Name 'lastResult'))
 
+        # A disabled job may keep status Stopped; then only nextRunPolicy says
+        # <Disabled> (VBR 13.1, docs/metrics.md, "Jobs & Results").
         $isEnabled = 1
-        if ($status -match '^(?i)disabled$') { $isEnabled = 0 }
+        $policy = ([string](Get-VeeamField -InputObject $job -Name 'nextRunPolicy')).Trim()
+        if ($status -match '^(?i)disabled$' -or $policy -eq '<Disabled>') { $isEnabled = 0 }
         Add-PromSample -Metric $enabled -Labels ([ordered]@{ job_name = $name }) -Value $isEnabled
 
         $isRunning = 0
