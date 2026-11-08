@@ -1,0 +1,463 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "veeam",
+      "folder": "Veeam",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "veeam-job-failed",
+          "title": "VeeamJobFailed",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_job_last_result and on(instance, job_name) veeam_job_running == 0",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        2
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "45m",
+          "isPaused": false,
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Job {{ $labels.job_name }} on {{ $labels.instance }} failed"
+          }
+        },
+        {
+          "uid": "veeam-job-warning",
+          "title": "VeeamJobWarning",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_job_last_result",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        1
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "45m",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Job {{ $labels.job_name }} on {{ $labels.instance }} ended with a warning"
+          }
+        },
+        {
+          "uid": "veeam-object-failed",
+          "title": "VeeamObjectFailed",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_object_last_result",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        2
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "45m",
+          "isPaused": false,
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "{{ $labels.object }} in {{ $labels.job_name }} on {{ $labels.instance }} not backed up"
+          }
+        },
+        {
+          "uid": "veeam-job-not-run",
+          "title": "VeeamJobNotRun",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "(time() - veeam_job_last_run_timestamp_seconds) / 3600 and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!=\"none\"}",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        26
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "1h",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Job {{ $labels.job_name }} on {{ $labels.instance }} has not run for {{ printf \"%.0f\" $values.A.Value }} hours"
+          }
+        },
+        {
+          "uid": "veeam-repository-full",
+          "title": "VeeamRepositoryFull",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "1 - veeam_repository_free_bytes / veeam_repository_capacity_bytes and veeam_repository_capacity_bytes > 0",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0.85
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "1h",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Repository {{ $labels.repository }} on {{ $labels.instance }} is {{ humanizePercentage $values.A.Value }} full"
+          }
+        },
+        {
+          "uid": "veeam-repository-offline",
+          "title": "VeeamRepositoryOffline",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_repository_online",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "15m",
+          "isPaused": false,
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Repository {{ $labels.repository }} on {{ $labels.instance }} is offline"
+          }
+        },
+        {
+          "uid": "veeam-license-expiring",
+          "title": "VeeamLicenseExpiring",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "(veeam_license_expiration_timestamp_seconds - time()) / 86400",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "lt",
+                      "params": [
+                        30
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "{{ if lt $values.A.Value 0.0 }}Veeam license on {{ $labels.instance }} has expired{{ else }}Veeam license on {{ $labels.instance }} expires in {{ printf \"%.0f\" $values.A.Value }} days{{ end }}"
+          }
+        },
+        {
+          "uid": "veeam-exporter-stale",
+          "title": "VeeamExporterStale",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "(time() - windows_textfile_mtime_seconds{file=~\".*veeam_(jobs|objects|repositories)\\\\.prom\"}) / 3600",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        1
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Veeam exporter file {{ $labels.file }} on {{ $labels.instance }} has not been updated for {{ printf \"%.1f\" $values.A.Value }} hours"
+          }
+        },
+        {
+          "uid": "veeam-exporter-license-stale",
+          "title": "VeeamExporterLicenseStale",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "(time() - windows_textfile_mtime_seconds{file=~\".*veeam_license\\\\.prom\"}) / 3600",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        48
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Veeam license file on {{ $labels.instance }} has not been updated for {{ printf \"%.0f\" $values.A.Value }} hours"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -161,52 +161,68 @@ Values for `collector`: jobs, objects, repositories, license. The textfile colle
 
 ## Example Alerts
 
-Nine rules cover the minimum requirements and the exporter itself. The thresholds are proposals. They are implemented in [`rules/veeam.rules.yml`](../rules/veeam.rules.yml), which adds a `summary` annotation to every rule; `tests/rules/veeam.rules.test.yml` covers each rule with `promtool test rules`. `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval; `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand.
+Nine Grafana-managed alert rules cover the minimum requirements and the exporter itself. The thresholds are proposals. They are implemented in [`alerting/veeam-alerts.json`](../alerting/veeam-alerts.json), a Grafana alerting provisioning file (folder `Veeam`, group `veeam`, evaluated every minute). The file is a template: nothing loads it automatically, users pick the rules they need (README, "Alert rules").
+
+Every rule has two steps: query `A` is an instant Prometheus query that returns the measured value per series, and the condition `B` is a threshold on `A`. The rule fires for each series of `A` that meets the threshold for the time given in `for`. Grafana shows the value of `A` in the alert and in `$values.A.Value` for the `summary` annotation, which every rule has.
+
+- `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval.
+- `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand. Jobs that never ran have no last run timestamp and do not fire (OP-10). Exporters older than the `schedule` label alert for all enabled jobs.
+- The fill level comes from free space and capacity, never from `veeam_repository_backup_bytes`, which counts backup files only.
+- `VeeamLicenseExpiring` also fires once the license has expired; `A` is negative then.
+- A collector replaces its file only on success, so an old file means failed or missing runs. The REST task runs every 15 minutes, the license task once a day; `VeeamExporterLicenseStale` therefore allows 48 hours instead of 1.
+- `noDataState` is `OK`: a query without series (no license file yet, no repositories) is not an alert. `execErrState` is `Error`, so a failing query shows up as a `DatasourceError` alert.
+- The data source of `A` is `${VEEAM_PROMETHEUS_DATASOURCE_UID}`; Grafana replaces it with the environment variable of that name when it loads the file.
+- Labels: `severity` (`critical` or `warning`) for the notification policies, plus the labels of the series.
 
 ```yaml
-groups:
-  - name: veeam
-    rules:
-      - alert: VeeamJobFailed
-        expr: veeam_job_last_result == 2 and on(instance, job_name) veeam_job_running == 0
-        for: 45m
-        labels: {severity: critical}
-        annotations:
-          summary: "Job {{ $labels.job_name }} on {{ $labels.instance }} failed"
-      - alert: VeeamJobWarning
-        expr: veeam_job_last_result == 1
-        for: 45m
-        labels: {severity: warning}
-      - alert: VeeamObjectFailed
-        expr: veeam_object_last_result == 2
-        for: 45m
-        labels: {severity: critical}
-        annotations:
-          summary: "{{ $labels.object }} in {{ $labels.job_name }} not backed up"
-      - alert: VeeamJobNotRun
-        expr: (time() - veeam_job_last_run_timestamp_seconds) > 26 * 3600 and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!="none"}
-        for: 1h
-        labels: {severity: warning}
-      - alert: VeeamRepositoryFull
-        expr: (1 - veeam_repository_free_bytes / veeam_repository_capacity_bytes) > 0.85 and veeam_repository_capacity_bytes > 0
-        for: 1h
-        labels: {severity: warning}
-      - alert: VeeamRepositoryOffline
-        expr: veeam_repository_online == 0
-        for: 15m
-        labels: {severity: critical}
-      - alert: VeeamLicenseExpiring
-        expr: (veeam_license_expiration_timestamp_seconds - time()) / 86400 < 30
-        labels: {severity: warning}
-      - alert: VeeamExporterStale
-        expr: time() - windows_textfile_mtime_seconds{file=~".*veeam_(jobs|objects|repositories)\\.prom"} > 3600
-        labels: {severity: warning}
-      - alert: VeeamExporterLicenseStale
-        expr: time() - windows_textfile_mtime_seconds{file=~".*veeam_license\\.prom"} > 2 * 86400
-        labels: {severity: warning}
+- alert: VeeamJobFailed
+  query: veeam_job_last_result and on(instance, job_name) veeam_job_running == 0
+  condition: A == 2
+  for: 45m
+  severity: critical
+- alert: VeeamJobWarning
+  query: veeam_job_last_result
+  condition: A == 1
+  for: 45m
+  severity: warning
+- alert: VeeamObjectFailed
+  query: veeam_object_last_result
+  condition: A == 2
+  for: 45m
+  severity: critical
+- alert: VeeamJobNotRun
+  query: (time() - veeam_job_last_run_timestamp_seconds) / 3600 and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!="none"}
+  condition: A > 26
+  for: 1h
+  severity: warning
+- alert: VeeamRepositoryFull
+  query: 1 - veeam_repository_free_bytes / veeam_repository_capacity_bytes and veeam_repository_capacity_bytes > 0
+  condition: A > 0.85
+  for: 1h
+  severity: warning
+- alert: VeeamRepositoryOffline
+  query: veeam_repository_online
+  condition: A == 0
+  for: 15m
+  severity: critical
+- alert: VeeamLicenseExpiring
+  query: (veeam_license_expiration_timestamp_seconds - time()) / 86400
+  condition: A < 30
+  for: 0s
+  severity: warning
+- alert: VeeamExporterStale
+  query: (time() - windows_textfile_mtime_seconds{file=~".*veeam_(jobs|objects|repositories)\\.prom"}) / 3600
+  condition: A > 1
+  for: 0s
+  severity: warning
+- alert: VeeamExporterLicenseStale
+  query: (time() - windows_textfile_mtime_seconds{file=~".*veeam_license\\.prom"}) / 3600
+  condition: A > 48
+  for: 0s
+  severity: warning
 ```
 
-`VeeamExporterLicenseStale` is the same rule for the license file with 2 days instead of 1 hour, because the license task runs only once a day.
+Units of `A`: result codes for the first three rules (0 Success, 1 Warning, 2 Failed, -1 None), hours for `VeeamJobNotRun` and the two exporter rules, a fraction from 0 to 1 for `VeeamRepositoryFull`, 1 or 0 for `VeeamRepositoryOffline`, days for `VeeamLicenseExpiring`.
 
 ## Open Points & Next Steps
 
@@ -229,7 +245,7 @@ These points can only be settled in the lab; they change details, not the archit
 
 1. Script skeleton: auth, version probe, atomic writing, jobs collector.
 2. Test against a v13 server, store example .prom files. Done in the lab with VBR 13.1; real responses and the resulting `veeam_objects.prom` are in `tests/fixtures/lab/vbr-13.1`.
-3. Add the object, repository and license collectors, load the alerts into Prometheus.
+3. Add the object, repository and license collectors, load the alerts into Grafana.
 4. Rollout manually per server: install script, two tasks, encrypted credential (see `deploy/README.md`).
 
 ## Sources
