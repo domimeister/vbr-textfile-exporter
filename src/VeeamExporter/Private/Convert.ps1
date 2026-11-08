@@ -59,6 +59,25 @@ function ConvertTo-VeeamDateTimeOffset {
     return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt, $offset)
 }
 
+function ConvertTo-VeeamFieldValue {
+    # Converts one field of one API item. A value that cannot be converted
+    # counts as missing: the caller leaves its series out and the run warns,
+    # instead of the whole collector failing for one bad value
+    # (docs/metrics.md, "Architecture & Data Source").
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][AllowNull()][AllowEmptyString()][object]$Value,
+        [Parameter(Mandatory = $true)][scriptblock]$Conversion,
+        [Parameter(Mandatory = $true)][string]$Field,
+        [Parameter(Mandatory = $true)][string]$Item
+    )
+    try { return (& $Conversion $Value) }
+    catch {
+        Write-Warning ('{0}: field {1} skipped: {2}' -f $Item, $Field, $_.Exception.Message)
+        return $null
+    }
+}
+
 function ConvertTo-UnixTimestamp {
     # API timestamp -> whole Unix seconds. Returns $null for empty input.
     [CmdletBinding()]

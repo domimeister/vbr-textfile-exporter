@@ -45,7 +45,8 @@ function Select-VeeamLatestObjectTask {
         $jid = Get-VeeamGuidKey -Value (Get-VeeamField -InputObject $s -Name 'jobId')
         if (-not $sid -or -not $jid) { continue }
         $sessionJob[$sid] = $jid
-        $created = ConvertTo-VeeamDateTimeOffset -Value (Get-VeeamField -InputObject $s -Name 'creationTime')
+        $created = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $s -Name 'creationTime') -Field 'creationTime' -Item ('Session {0}' -f $sid) `
+            -Conversion { param($v) ConvertTo-VeeamDateTimeOffset -Value $v }
         $name = [string](Get-VeeamField -InputObject $s -Name 'name')
         if (-not $name) { continue }
         $isNewer = -not $fallbackTime.ContainsKey($jid)
@@ -77,8 +78,13 @@ function Select-VeeamLatestObjectTask {
             continue
         }
 
-        $created = ConvertTo-VeeamDateTimeOffset -Value (Get-VeeamField -InputObject $task -Name 'creationTime')
-        $usn = Get-VeeamField -InputObject $task -Name 'usn'
+        # A creation time or usn that cannot be read only weakens the choice of
+        # the newest task; it is reported once with the object (Get-VeeamObjectMetric).
+        $created = $null
+        try { $created = ConvertTo-VeeamDateTimeOffset -Value (Get-VeeamField -InputObject $task -Name 'creationTime') }
+        catch { Write-Verbose ("Task '{0}' in job '{1}': creationTime not readable for ordering." -f $object, $jobName) }
+        $usn = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $task -Name 'usn') -Field 'usn' -Item ("Task '{0}' in job '{1}'" -f $object, $jobName) `
+            -Conversion { param($v) if ($null -ne $v) { [int64]$v } }
         if ($null -eq $usn) { $usn = -1 }
         $candidate = [pscustomobject]@{
             JobName = $jobName

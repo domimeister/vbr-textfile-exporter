@@ -67,14 +67,16 @@ function Get-VeeamObjectMetric {
         Add-PromSample -Metric $lastResult -Labels $labels -Value $code
 
         # End time, or the creation time while the task is still running.
-        $created = ConvertTo-UnixTimestamp -Value (Get-VeeamField -InputObject $task -Name 'creationTime')
-        $ended = ConvertTo-UnixTimestamp -Value (Get-VeeamField -InputObject $task -Name 'endTime')
+        $item = "Object '{0}' in job '{1}'" -f $entry.Object, $entry.JobName
+        $toUnix = { param($v) ConvertTo-UnixTimestamp -Value $v }
+        $created = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $task -Name 'creationTime') -Field 'creationTime' -Item $item -Conversion $toUnix
+        $ended = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $task -Name 'endTime') -Field 'endTime' -Item $item -Conversion $toUnix
         $runTime = $ended
         if ($null -eq $ended -or ($null -ne $created -and $ended -lt $created)) { $runTime = $created }
         Add-PromSample -Metric $lastRun -Labels $labels -Value $runTime
 
-        $size = Get-VeeamField -InputObject (Get-VeeamField -InputObject $task -Name 'progress') -Name 'processedSize'
-        if ($null -ne $size) { $size = [int64]$size }
+        $size = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject (Get-VeeamField -InputObject $task -Name 'progress') -Name 'processedSize') `
+            -Field 'processedSize' -Item $item -Conversion { param($v) if ($null -ne $v) { [int64]$v } }
         Add-PromSample -Metric $processed -Labels $labels -Value $size
 
         if ($code -eq 1 -or $code -eq 2) {

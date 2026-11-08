@@ -29,6 +29,13 @@ function Get-VeeamJobMetric {
         $name = [string](Get-VeeamField -InputObject $job -Name 'name')
         $type = [string](Get-VeeamField -InputObject $job -Name 'type')
         $status = [string](Get-VeeamField -InputObject $job -Name 'status')
+        $item = "Job '$name'"
+        $nextRunValue = Get-VeeamField -InputObject $job -Name 'nextRun'
+        $policyValue = [string](Get-VeeamField -InputObject $job -Name 'nextRunPolicy')
+        # A nextRun that cannot be read is reported once (below); the schedule is then unknown.
+        $schedule = 'unknown'
+        try { $schedule = ConvertTo-VeeamJobSchedule -NextRun $nextRunValue -NextRunPolicy $policyValue }
+        catch { Write-Verbose ('{0}: schedule unknown: {1}' -f $item, $_.Exception.Message) }
 
         Add-PromSample -Metric $info -Value 1 -Labels ([ordered]@{
                 job_name   = $name
@@ -36,7 +43,7 @@ function Get-VeeamJobMetric {
                 job_type   = $type
                 workload   = [string](Get-VeeamField -InputObject $job -Name 'workload')
                 repository = [string](Get-VeeamField -InputObject $job -Name 'repositoryName')
-                schedule   = (ConvertTo-VeeamJobSchedule -NextRun (Get-VeeamField -InputObject $job -Name 'nextRun') -NextRunPolicy ([string](Get-VeeamField -InputObject $job -Name 'nextRunPolicy')))
+                schedule   = $schedule
             })
 
         Add-PromSample -Metric $lastResult -Labels ([ordered]@{ job_name = $name; job_type = $type }) `
@@ -45,7 +52,7 @@ function Get-VeeamJobMetric {
         # A disabled job may keep status Stopped; then only nextRunPolicy says
         # <Disabled> (VBR 13.1, docs/metrics.md, "Jobs & Results").
         $isEnabled = 1
-        $policy = ([string](Get-VeeamField -InputObject $job -Name 'nextRunPolicy')).Trim()
+        $policy = $policyValue.Trim()
         if ($status -match '^(?i)disabled$' -or $policy -eq '<Disabled>') { $isEnabled = 0 }
         Add-PromSample -Metric $enabled -Labels ([ordered]@{ job_name = $name }) -Value $isEnabled
 
@@ -55,12 +62,11 @@ function Get-VeeamJobMetric {
 
         # A job that never ran has no lastRun; the series is then missing (confirmed with VBR 13.1, docs/metrics.md#OP-10).
         Add-PromSample -Metric $lastRun -Labels ([ordered]@{ job_name = $name }) `
-            -Value (ConvertTo-UnixTimestamp -Value (Get-VeeamField -InputObject $job -Name 'lastRun'))
+            -Value (ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $job -Name 'lastRun') -Field 'lastRun' -Item $item -Conversion { param($v) ConvertTo-UnixTimestamp -Value $v })
         Add-PromSample -Metric $nextRun -Labels ([ordered]@{ job_name = $name }) `
-            -Value (ConvertTo-UnixTimestamp -Value (Get-VeeamField -InputObject $job -Name 'nextRun'))
+            -Value (ConvertTo-VeeamFieldValue -Value $nextRunValue -Field 'nextRun' -Item $item -Conversion { param($v) ConvertTo-UnixTimestamp -Value $v })
 
-        $count = Get-VeeamField -InputObject $job -Name 'objectsCount'
-        if ($null -ne $count) { $count = [int64]$count }
+        $count = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $job -Name 'objectsCount') -Field 'objectsCount' -Item $item -Conversion { param($v) if ($null -ne $v) { [int64]$v } }
         Add-PromSample -Metric $objects -Labels ([ordered]@{ job_name = $name }) -Value $count
     }
 
