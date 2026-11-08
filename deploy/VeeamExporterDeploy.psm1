@@ -72,10 +72,14 @@ function Get-WindowsExporterTextfileDirectory {
         if (-not $directory) { $directory = $Matches[2] }
         $source = 'argument'
     }
-    elseif ($ConfigText -and $ConfigText -match '(?m)^\s*director(?:y|ies)\s*:\s*(?:"((?:[^"\\]|\\.)*)"|''([^'']*)''|(\S+))') {
+    elseif ($ConfigText -and $ConfigText -match '(?m)^\s*director(?:y|ies)\s*:[ \t]*(?:"((?:[^"\\]|\\.)*)"|''([^'']*)''|([^\r\n]+))') {
         if ($Matches[1]) { $directory = $Matches[1] -replace '\\\\', '\' }
         elseif ($Matches[2]) { $directory = $Matches[2] }
-        else { $directory = $Matches[3] }
+        else {
+            # Plain YAML value: the rest of the line, may contain spaces
+            # (C:\Program Files\...); a comment starts with " #".
+            $directory = ($Matches[3] -replace '\s+#.*$', '').Trim()
+        }
         $source = 'config'
     }
     if ($directory) { $directory = ($directory -split ',')[0].Trim() }
