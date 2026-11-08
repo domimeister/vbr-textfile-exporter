@@ -7,10 +7,19 @@ The install script sets up the exporter on a VBR server: files, encrypted creden
 | What | Details |
 | --- | --- |
 | VBR | 13 or later (REST API on `localhost:9419`). VBR 12 is not supported; the install script refuses a Veeam module older than 13. |
-| windows_exporter | installed as a service, textfile collector enabled (default) |
+| windows_exporter | installed as a service, with the **textfile collector enabled**. windows_exporter 0.32 does not enable it by default, see below. |
 | Veeam account for REST | local Windows user with the VBR role **Backup Viewer** (console: *Users and Roles*). It needs no Windows admin rights. |
 | License task | The Veeam PowerShell module, **PowerShell 7** and the installed Veeam console (VBR 13 setup installs all three). The task runs as SYSTEM; SYSTEM must be Backup Administrator in VBR (default via the local Administrators group). |
 | Execution | Windows PowerShell 5.1, **as Administrator** |
+
+Enabling the textfile collector, e.g. in the `config.yaml` that the MSI installs next to `windows_exporter.exe` (the quotes are needed because of `[`):
+
+```yaml
+collectors:
+  enabled: '[defaults],textfile'
+```
+
+Then `Restart-Service windows_exporter`. `(Invoke-WebRequest -UseBasicParsing http://localhost:9182/metrics).Content -split "`n" | Select-String 'collector="textfile"'` must show `windows_exporter_collector_success{collector="textfile"} 1`. The install script asks the running service the same way and warns if the collector is off or cannot be checked.
 
 Example for the REST account:
 

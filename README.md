@@ -23,7 +23,7 @@ The windows_exporter, which runs on the server anyway, serves the files to Prome
 | What | Details |
 | --- | --- |
 | Veeam Backup & Replication | 13 (13.0 or later), REST API on `localhost:9419` (REST revision 1.3-rev0 to 1.3-rev2, detected automatically). VBR 12 is not supported. |
-| windows_exporter | as a service on the VBR server, textfile collector enabled (default) |
+| windows_exporter | as a service on the VBR server, with the textfile collector enabled (not a default collector in windows_exporter 0.32, see [`deploy/README.md`](deploy/README.md#prerequisites)) |
 | PowerShell | Windows PowerShell 5.1 (REST task, installation). License task: PowerShell 7 and the installed Veeam console (both come with VBR 13) |
 | Veeam account | local Windows user with the VBR role **Backup Viewer** for the REST task |
 | Permissions | installation in a PowerShell **as Administrator** |
@@ -45,7 +45,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Collector `repositories` → `veeam_repositories.prom` | implemented | works, including SOBR extents (the SOBR itself has no row of its own) |
 | Health → `veeam_exporter.prom` | implemented | works; `vbr_version` stays empty for Backup Viewer (OP-13) |
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
-| Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented. Textfile collector detection is wrong for windows_exporter 0.32 ([#20](https://github.com/domimeister/vbr-textfile-exporter/issues/20)). Uninstall not tested yet |
+| Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter. Uninstall not tested yet |
 | Grafana dashboard (`dashboards/`) | implemented | not tried against lab data yet |
 | Alert rules (`rules/`) | implemented, unit-tested with promtool | not tried against lab data yet |
 | Test suite on a machine with VBR installed | - | one test depends on the machine ([#23](https://github.com/domimeister/vbr-textfile-exporter/issues/23)) |
