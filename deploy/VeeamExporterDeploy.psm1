@@ -88,26 +88,66 @@ function Get-WindowsExporterTextfileDirectory {
         else { $directory = 'C:\Program Files\windows_exporter\textfile_inputs' }
     }
 
-    # Textfile collector enabled? Default set includes it.
-    $enabled = $true
+    # Textfile collector enabled? $true/$false if the collector list says so,
+    # $null if it depends on the default set: windows_exporter 0.32 does not
+    # include textfile in its defaults any more (lab test, 0.32.1), older
+    # versions did. Find-WindowsExporterTextfileDirectory asks the running
+    # service instead whenever it can.
+    $enabled = $null
     $list = $null
-    if ($ImagePath -and $ImagePath -match '--collectors\.enabled(?:=|\s+)(?:"([^"]*)"|(\S+))') {
-        $list = $Matches[1]
-        if (-not $list) { $list = $Matches[2] }
+    if ($ImagePath -and $ImagePath -match '--collectors\.enabled(?:=|\s+)(?:"([^"]*)"|''([^'']*)''|(\S+))') {
+        $list = (@($Matches[1], $Matches[2], $Matches[3]) | Where-Object { $_ } | Select-Object -First 1)
     }
-    elseif ($ConfigText -and $ConfigText -match '(?m)^\s*enabled\s*:\s*"?([^"\r\n]+)"?') {
-        $list = $Matches[1]
+    elseif ($ConfigText -and $ConfigText -match '(?m)^\s*enabled\s*:\s*(?:"([^"\r\n]*)"|''([^''\r\n]*)''|([^\r\n#]+))') {
+        $list = (@($Matches[1], $Matches[2], $Matches[3]) | Where-Object { $_ } | Select-Object -First 1)
     }
     if ($list) {
         $names = @($list -split ',' | ForEach-Object { $_.Trim() })
-        $enabled = ($names -contains 'textfile') -or ($names -contains '[defaults]')
+        if ($names -contains 'textfile') { $enabled = $true }
+        elseif (-not ($names -contains '[defaults]')) { $enabled = $false }
+    }
+
+    # Address of /metrics: --web.listen-address or web.listen-address in the
+    # config file, default :9182. A wildcard host is reached via localhost.
+    $listen = ':9182'
+    if ($ImagePath -and $ImagePath -match '--web\.listen-address(?:=|\s+)(?:"([^"]*)"|(\S+))') {
+        $listen = (@($Matches[1], $Matches[2]) | Where-Object { $_ } | Select-Object -First 1)
+    }
+    elseif ($ConfigText -and $ConfigText -match '(?m)^\s*listen-address\s*:\s*(?:"([^"\r\n]*)"|''([^''\r\n]*)''|([^\r\n#\s]+))') {
+        $listen = (@($Matches[1], $Matches[2], $Matches[3]) | Where-Object { $_ } | Select-Object -First 1)
+    }
+    $listen = ($listen -split ',')[0].Trim()
+    $listenHost = 'localhost'
+    $port = '9182'
+    if ($listen -match '^(.*):(\d+)$') {
+        $port = $Matches[2]
+        if ($Matches[1] -and $Matches[1] -notin @('0.0.0.0', '[::]', '::')) { $listenHost = $Matches[1] }
     }
 
     return [pscustomobject]@{
         Directory       = $directory.TrimEnd('\')
         Source          = $source
         TextfileEnabled = $enabled
+        MetricsUri      = ('http://{0}:{1}/metrics' -f $listenHost, $port)
     }
+}
+
+function Test-WindowsExporterTextfileCollector {
+    <#
+    Asks the running windows_exporter whether the textfile collector is active:
+    $true if /metrics has windows_exporter_collector_success{collector="textfile"},
+    $false if /metrics answers without it, $null if /metrics is not reachable.
+    #>
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$MetricsUri)
+    try {
+        $response = Invoke-WebRequest -Uri $MetricsUri -UseBasicParsing -TimeoutSec 10 -MaximumRedirection 0 -ErrorAction Stop
+    }
+    catch {
+        Write-Verbose ('{0} not reachable: {1}' -f $MetricsUri, $_.Exception.Message)
+        return $null
+    }
+    return ([string]$response.Content -match '(?m)^windows_exporter_collector_success\{collector="textfile"\}\s')
 }
 
 function Find-WindowsExporterTextfileDirectory {
@@ -127,6 +167,14 @@ function Find-WindowsExporterTextfileDirectory {
     }
     $result = Get-WindowsExporterTextfileDirectory -ImagePath $imagePath -ConfigText $configText
     $result | Add-Member -NotePropertyName ServiceFound -NotePropertyValue ([bool]$imagePath)
+    # The running service is the reliable source: the default collector set
+    # depends on the windows_exporter version.
+    $check = 'config'
+    if ($imagePath) {
+        $live = Test-WindowsExporterTextfileCollector -MetricsUri $result.MetricsUri
+        if ($null -ne $live) { $result.TextfileEnabled = $live; $check = 'metrics' }
+    }
+    $result | Add-Member -NotePropertyName TextfileCheck -NotePropertyValue $check
     return $result
 }
 
@@ -1031,7 +1079,12 @@ function Install-VeeamExporter {
     if (-not $TextfileDirectory) {
         $found = Find-WindowsExporterTextfileDirectory
         if (-not $found.ServiceFound) { Write-Warning 'Service windows_exporter not found; using the default textfile directory.' }
-        if (-not $found.TextfileEnabled) { Write-Warning 'windows_exporter runs without the textfile collector (--collectors.enabled). Enable it, otherwise the .prom files are not exported.' }
+        if ($found.TextfileEnabled -eq $false) {
+            Write-Warning "windows_exporter runs without the textfile collector, so the .prom files are not exported. Enable it, e.g. in config.yaml: collectors: enabled: '[defaults],textfile' (windows_exporter 0.32 does not enable it by default), then restart the service."
+        }
+        elseif ($null -eq $found.TextfileEnabled) {
+            Write-Warning ('Could not verify that windows_exporter runs the textfile collector ({0} not reachable). windows_exporter 0.32 does not enable it by default; check that /metrics contains windows_exporter_collector_success{{collector="textfile"}}.' -f $found.MetricsUri)
+        }
         $TextfileDirectory = $found.Directory
         Write-Information ('Textfile directory ({0}): {1}' -f $found.Source, $TextfileDirectory)
     }

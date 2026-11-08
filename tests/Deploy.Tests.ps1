@@ -84,17 +84,87 @@ Describe 'windows_exporter: textfile directory' {
         $result.Source | Should -BeExactly $Source
     }
 
-    It 'detects whether the textfile collector is enabled (<Enabled>)' -TestCases @(
-        @{ Image = 'x.exe --collectors.enabled "cpu,cs,net"'; Enabled = $false }
-        @{ Image = 'x.exe --collectors.enabled=[defaults],mssql'; Enabled = $true }
-        @{ Image = 'x.exe --collectors.enabled cpu,textfile'; Enabled = $true }
-        @{ Image = 'x.exe --log.file eventlog'; Enabled = $true }
+    It 'reads from the collector list whether textfile is enabled: <Case>' -TestCases @(
+        @{ Case = 'explicit list without textfile'; Image = 'x.exe --collectors.enabled "cpu,cs,net"'; Config = $null; Enabled = $false }
+        @{ Case = 'explicit list with textfile'; Image = 'x.exe --collectors.enabled cpu,textfile'; Config = $null; Enabled = $true }
+        @{ Case = '[defaults] plus textfile'; Image = 'x.exe --collectors.enabled=[defaults],textfile'; Config = $null; Enabled = $true }
+        @{ Case = 'config, single quotes (YAML needs them for [defaults])'; Image = 'x.exe --config.file c.yaml'; Config = "collectors:`n  enabled: '[defaults],textfile'`n"; Enabled = $true }
+        @{ Case = 'config, double quotes without textfile'; Image = 'x.exe --config.file c.yaml'; Config = "collectors:`n  enabled: `"cpu,net`"`n"; Enabled = $false }
+        @{ Case = 'config, unquoted list'; Image = 'x.exe --config.file c.yaml'; Config = "collectors:`n  enabled: cpu,textfile # comment`n"; Enabled = $true }
     ) {
-        param($Image, $Enabled)
-        InModuleScope VeeamExporterDeploy -Parameters @{ Image = $Image } {
-            param($Image)
-            (Get-WindowsExporterTextfileDirectory -ImagePath $Image).TextfileEnabled
+        param($Case, $Image, $Config, $Enabled)
+        InModuleScope VeeamExporterDeploy -Parameters @{ Image = $Image; Config = $Config } {
+            param($Image, $Config)
+            (Get-WindowsExporterTextfileDirectory -ImagePath $Image -ConfigText $Config).TextfileEnabled
         } | Should -Be $Enabled
+    }
+
+    It 'leaves it open when it depends on the default set: <Case>' -TestCases @(
+        @{ Case = 'no collector list'; Image = 'x.exe --log.file eventlog'; Config = $null }
+        @{ Case = '[defaults] without textfile'; Image = 'x.exe --collectors.enabled=[defaults],mssql'; Config = $null }
+        @{ Case = 'empty config file'; Image = 'x.exe --config.file c.yaml'; Config = '' }
+    ) {
+        param($Case, $Image, $Config)
+        $result = InModuleScope VeeamExporterDeploy -Parameters @{ Image = $Image; Config = $Config } {
+            param($Image, $Config)
+            Get-WindowsExporterTextfileDirectory -ImagePath $Image -ConfigText $Config
+        }
+        $result.TextfileEnabled | Should -BeNullOrEmpty
+    }
+
+    It 'derives the metrics URI from <Case>' -TestCases @(
+        @{ Case = 'the default'; Image = 'x.exe --log.file eventlog'; Config = $null; Uri = 'http://localhost:9182/metrics' }
+        @{ Case = 'a listen-address argument'; Image = 'x.exe --web.listen-address=:9999'; Config = $null; Uri = 'http://localhost:9999/metrics' }
+        @{ Case = 'a wildcard host'; Image = 'x.exe --web.listen-address "0.0.0.0:9182"'; Config = $null; Uri = 'http://localhost:9182/metrics' }
+        @{ Case = 'a specific host'; Image = 'x.exe --web.listen-address=10.0.0.5:9182'; Config = $null; Uri = 'http://10.0.0.5:9182/metrics' }
+        @{ Case = 'the config file'; Image = 'x.exe --config.file c.yaml'; Config = "web:`n  listen-address: `":9100`"`n"; Uri = 'http://localhost:9100/metrics' }
+    ) {
+        param($Case, $Image, $Config, $Uri)
+        InModuleScope VeeamExporterDeploy -Parameters @{ Image = $Image; Config = $Config } {
+            param($Image, $Config)
+            (Get-WindowsExporterTextfileDirectory -ImagePath $Image -ConfigText $Config).MetricsUri
+        } | Should -BeExactly $Uri
+    }
+}
+
+Describe 'windows_exporter: service lookup' {
+    BeforeEach {
+        $script:Key = 'HKLM:\SYSTEM\CurrentControlSet\Services\windows_exporter'
+        Mock -ModuleName VeeamExporterDeploy Test-Path { $true } -ParameterFilter { $LiteralPath -eq $script:Key }
+        Mock -ModuleName VeeamExporterDeploy Get-ItemProperty { [pscustomobject]@{ ImagePath = '"C:\Program Files\windows_exporter\windows_exporter.exe" --collectors.enabled "[defaults],textfile"' } }
+    }
+
+    It 'prefers the answer of the running service over the command line' {
+        Mock -ModuleName VeeamExporterDeploy Test-WindowsExporterTextfileCollector { $false }
+        $result = InModuleScope VeeamExporterDeploy { Find-WindowsExporterTextfileDirectory }
+        $result.TextfileEnabled | Should -BeFalse
+        $result.TextfileCheck | Should -BeExactly 'metrics'
+        $result.ServiceFound | Should -BeTrue
+    }
+
+    It 'falls back to the command line if /metrics is not reachable' {
+        Mock -ModuleName VeeamExporterDeploy Test-WindowsExporterTextfileCollector { $null }
+        $result = InModuleScope VeeamExporterDeploy { Find-WindowsExporterTextfileDirectory }
+        $result.TextfileEnabled | Should -BeTrue
+        $result.TextfileCheck | Should -BeExactly 'config'
+    }
+}
+
+Describe 'windows_exporter: asking the running service' {
+    It 'is <Expected> when /metrics <Case>' -TestCases @(
+        @{ Case = 'has the textfile collector'; Content = "# HELP x`nwindows_exporter_collector_success{collector=`"cpu`"} 1`nwindows_exporter_collector_success{collector=`"textfile`"} 1`n"; Expected = $true }
+        @{ Case = 'lists it as failed'; Content = "windows_exporter_collector_success{collector=`"textfile`"} 0`n"; Expected = $true }
+        @{ Case = 'lacks it (windows_exporter 0.32 defaults)'; Content = "windows_exporter_collector_success{collector=`"cpu`"} 1`nwindows_exporter_collector_success{collector=`"system`"} 1`n"; Expected = $false }
+    ) {
+        param($Case, $Content, $Expected)
+        Mock -ModuleName VeeamExporterDeploy Invoke-WebRequest { [pscustomobject]@{ StatusCode = 200; Content = $Content } }
+        InModuleScope VeeamExporterDeploy { Test-WindowsExporterTextfileCollector -MetricsUri 'http://localhost:9182/metrics' } | Should -Be $Expected
+        Should -Invoke -ModuleName VeeamExporterDeploy Invoke-WebRequest -Times 1 -Exactly -ParameterFilter { $Uri -eq 'http://localhost:9182/metrics' -and $UseBasicParsing }
+    }
+
+    It 'returns nothing if /metrics is not reachable' {
+        Mock -ModuleName VeeamExporterDeploy Invoke-WebRequest { throw 'Unable to connect to the remote server' }
+        InModuleScope VeeamExporterDeploy { Test-WindowsExporterTextfileCollector -MetricsUri 'http://localhost:9182/metrics' } | Should -BeNullOrEmpty
     }
 }
 
@@ -331,6 +401,22 @@ Describe 'Install-VeeamExporter' {
         Mock -ModuleName VeeamExporterDeploy Start-ScheduledTask { }
         Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask { [pscustomobject]@{ LastTaskResult = 0 } }
         $script:Cred = New-TestCredential
+    }
+
+    It 'warns about the textfile collector when it is <Case>' -TestCases @(
+        @{ Case = 'off'; Enabled = $false; Pattern = '*runs without the textfile collector*' }
+        @{ Case = 'unknown'; Enabled = $null; Pattern = '*Could not verify*textfile*' }
+    ) {
+        param($Case, $Enabled, $Pattern)
+        $script:TfEnabled = $Enabled
+        Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { [pscustomobject]@{ Directory = $script:Textfile; Source = 'default'; TextfileEnabled = $script:TfEnabled; ServiceFound = $true; MetricsUri = 'http://localhost:9182/metrics'; TextfileCheck = 'config' } }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+        (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -BeLike $Pattern
+    }
+
+    It 'does not warn about the textfile collector when it runs' {
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+        (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -Not -BeLike '*textfile collector*'
     }
 
     It 'installs files, credential and both tasks and starts them once' {
