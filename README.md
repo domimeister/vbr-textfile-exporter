@@ -48,7 +48,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter; uninstallation removes tasks, `veeam_*.prom` files, installation and data; a data directory created beforehand by a normal user aborts the installation; under an `AllSigned` policy the scripts do not run (see [`deploy/README.md`](deploy/README.md#to-verify-in-the-lab)) |
 | Grafana dashboard (`dashboards/`) | implemented | works in Grafana 13.3: every panel shows the lab data; status tiles, jobs with result, schedule (scheduled, chained, manual) and next run, the failed object with its message, repositories including the SOBR extents, license and exporter health |
-| Grafana alert rules (`alerting/`) | implemented, logic unit-tested with promtool | works in Grafana 13.3: all nine rules evaluate without errors; the failed job and object (after 45 minutes) and the expiring trial license alert; `VeeamJobNotRun` leaves out jobs without a schedule (also one whose schedule is disabled) and a job that never ran; a test webhook got the notifications. Disabled jobs only in the promtool tests (no disabled job in the lab at the time) |
+| Grafana alert rules (`alerting/`) | implemented, logic unit-tested with promtool | works in Grafana 13.3: all rules evaluate without errors; the failed job and object (after 45 minutes) and the expiring trial license alert; `VeeamJobNotRun` leaves out jobs without a schedule (also one whose schedule is disabled) and a job that never ran; a test webhook got the notifications. Disabled jobs only in the promtool tests (no disabled job in the lab at the time) |
 | Test suite on the VBR server | - | passes under Windows PowerShell 5.1 and PowerShell 7 with VBR 13.1 and its PowerShell module installed: 341 passed, 0 failed; skipped are the tests that need promtool or openssl and the edition-specific certificate test of the other edition |
 
 ## Grafana dashboard
@@ -102,7 +102,7 @@ The license task runs as SYSTEM without a stored password and reads the license 
 
 ## Alert rules
 
-`alerting/veeam-alerts.json` holds nine Grafana alert rules, specified in [`docs/metrics.md`](docs/metrics.md#example-alerts): failed jobs and objects, jobs with warnings, jobs not run for 26 hours, full and offline repositories, expiring license, and stale exporter files. They are a template: neither the exporter nor the install script touches Grafana, and nothing is imported automatically. Pick the rules you need. The thresholds are proposals; `for: 45m` on the job and object rules covers the Veeam retry window.
+`alerting/veeam-alerts.json` holds ten Grafana alert rules, specified in [`docs/metrics.md`](docs/metrics.md#example-alerts): failed jobs and objects, jobs with warnings, jobs not run for 26 hours, scheduled jobs that never ran, full and offline repositories, expiring license, and stale exporter files. They are a template: neither the exporter nor the install script touches Grafana, and nothing is imported automatically. Pick the rules you need. The thresholds are proposals; `for: 45m` on the job and object rules covers the Veeam retry window.
 
 Each rule queries Prometheus (`A`, an instant query that returns the value, e.g. hours since the last run) and fires when the threshold `B` is met. Rules come with the label `severity` (`critical` or `warning`) and a `summary` annotation. Contact points and notification policies stay with you: route by `severity`.
 
@@ -116,7 +116,7 @@ Two ways to get them into Grafana:
 
 Earlier versions of this repo shipped Prometheus rules (`rules/veeam.rules.yml`); remove them from `rule_files` in Prometheus if you loaded them, otherwise both alert.
 
-`tests/alerting/veeam-alerts.test.yml` tests the logic of every rule with `promtool test rules`, including the cases that must not fire (a failed job that is retrying, a disabled job, a job without a schedule, object storage without capacity). `tests/Alerts.Tests.ps1` builds an equivalent Prometheus rule for each Grafana rule for this (query `A` combined with the threshold of `B`) and checks the file against the spec.
+`tests/alerting/veeam-alerts.test.yml` tests the logic of every rule with `promtool test rules`, including the cases that must not fire (a failed job that is retrying, a disabled job, a job without a schedule, a job that ran with an unknown result, object storage without capacity). `tests/Alerts.Tests.ps1` builds an equivalent Prometheus rule for each Grafana rule for this (query `A` combined with the threshold of `B`) and checks the file against the spec.
 
 ## Tests
 

@@ -182,3 +182,64 @@ tests:
         alertname: VeeamExporterLicenseStale
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, file: 'C:\Program Files\windows_exporter\textfile_inputs\veeam_license.prom'}
+
+  - name: scheduled jobs that never ran
+    interval: 1m
+    input_series:
+      # Enabled, scheduled, never ran (no last run timestamp): fires after 26h.
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="New Job",job_type="VSphereBackup"}'
+        values: '-1x1600'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="New Job"}'
+        values: '1x1600'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="New Job",schedule="scheduled"}'
+        values: '1x1600'
+      # Chained after a job that never runs: fires as well.
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Chained Job",job_type="FileBackup"}'
+        values: '-1x1600'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Chained Job"}'
+        values: '1x1600'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Chained Job",schedule="chained"}'
+        values: '1x1600'
+      # Without a schedule (started by hand): no alert.
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Manual Job",job_type="FileBackup"}'
+        values: '-1x1600'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Manual Job"}'
+        values: '1x1600'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Manual Job",schedule="none"}'
+        values: '1x1600'
+      # Disabled: no alert.
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Disabled Job",job_type="VSphereBackup"}'
+        values: '-1x1600'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Disabled Job"}'
+        values: '0x1600'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Disabled Job",schedule="scheduled"}'
+        values: '1x1600'
+      # Ran recently, result unknown (-1): has a last run timestamp, no alert from either rule.
+      - series: 'veeam_job_last_result{instance="vbr01:9182",job="windows",job_name="Unknown Result Job",job_type="VSphereBackup"}'
+        values: '-1x1600'
+      - series: 'veeam_job_last_run_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Unknown Result Job"}'
+        values: '0+60x1600'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Unknown Result Job"}'
+        values: '1x1600'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Unknown Result Job",schedule="scheduled"}'
+        values: '1x1600'
+      # From an exporter without the schedule label: alerts like a scheduled job.
+      - series: 'veeam_job_last_result{instance="vbr02:9182",job="windows",job_name="Old Exporter Job",job_type="VSphereBackup"}'
+        values: '-1x1600'
+      - series: 'veeam_job_enabled{instance="vbr02:9182",job="windows",job_name="Old Exporter Job"}'
+        values: '1x1600'
+      - series: 'veeam_job_info{instance="vbr02:9182",job="windows",job_name="Old Exporter Job"}'
+        values: '1x1600'
+    alert_rule_test:
+      - eval_time: 25h59m
+        alertname: VeeamJobNeverRun
+        exp_alerts: []
+      - eval_time: 26h1m
+        alertname: VeeamJobNeverRun
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: New Job, job_type: VSphereBackup}
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Chained Job, job_type: FileBackup}
+          - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, job_name: Old Exporter Job, job_type: VSphereBackup}
+      - eval_time: 26h1m
+        alertname: VeeamJobNotRun
+        exp_alerts: []
