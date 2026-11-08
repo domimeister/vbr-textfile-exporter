@@ -113,12 +113,14 @@ C:\Program Files\VeeamExporter\deploy\Uninstall-VeeamExporter.ps1
 ```
 
 The script removes the following:
-- all tasks under `\VeeamExporter\`,
-- the `veeam_*.prom` files in the textfile directory, so Prometheus no longer sees stale values,
+- all tasks under `\VeeamExporter\`; a running instance is stopped first,
+- the `veeam_*.prom` files in the textfile directory the tasks write to (from their `-TextfileDirectory` argument; `-TextfileDirectory` overrides it, the windows_exporter service config is the fallback), so Prometheus no longer sees stale values,
 - the installation,
 - credential and logs, unless `-KeepData` is given.
 
 It only deletes folders that look like an exporter installation.
+
+A re-installation removes the files that no task writes any more: those of collectors dropped from `-Collector`, the license files with `-SkipLicenseTask`, and all exporter files in a previous textfile directory.
 
 ## Parameters of Install-VeeamExporter.ps1
 

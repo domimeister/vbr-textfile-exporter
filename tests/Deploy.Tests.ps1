@@ -16,6 +16,7 @@ BeforeAll {
         'Unregister-ScheduledTask'     = '[CmdletBinding(SupportsShouldProcess = $true)] param($TaskPath, $TaskName)'
         'Get-ScheduledTask'            = '[CmdletBinding()] param($TaskPath, $TaskName)'
         'Start-ScheduledTask'          = 'param($TaskPath, $TaskName)'
+        'Stop-ScheduledTask'           = 'param($TaskPath, $TaskName)'
         'Get-ScheduledTaskInfo'        = 'param($TaskPath, $TaskName)'
         'Set-Acl'                      = 'param($LiteralPath, $AclObject)'
     }
@@ -441,6 +442,32 @@ Describe 'Install-VeeamExporter' {
         @($result.FirstRun | Where-Object Ok).Count | Should -Be 2
     }
 
+    It 'removes the files of dropped parts on a re-install (<Case>)' -TestCases @(
+        @{ Case = '-SkipLicenseTask'; Extra = @{ SkipLicenseTask = $true }; Left = 'other_app.prom,veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom,veeam_repositories.prom' }
+        @{ Case = '-Collector jobs'; Extra = @{ Collector = @('jobs') }; Left = 'other_app.prom,veeam_exporter.prom,veeam_exporter_license.prom,veeam_jobs.prom,veeam_license.prom' }
+        @{ Case = 'all parts'; Extra = @{}; Left = 'other_app.prom,veeam_exporter.prom,veeam_exporter_license.prom,veeam_jobs.prom,veeam_license.prom,veeam_objects.prom,veeam_repositories.prom' }
+    ) {
+        param($Extra, $Left)
+        foreach ($n in 'veeam_jobs.prom', 'veeam_objects.prom', 'veeam_repositories.prom', 'veeam_license.prom', 'veeam_exporter.prom', 'veeam_exporter_license.prom', 'other_app.prom') {
+            [System.IO.File]::WriteAllText((Join-Path $script:Textfile $n), "x 1`n")
+        }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue @Extra
+        Get-SortedFileName -Directory $script:Textfile | Should -BeExactly $Left
+    }
+
+    It 'removes the exporter files in the textfile directory the tasks used before' {
+        $old = New-TestDirectory -Name 'old-textfile'
+        foreach ($n in 'veeam_jobs.prom', 'veeam_exporter.prom', 'other_app.prom') { [System.IO.File]::WriteAllText((Join-Path $old $n), "x 1`n") }
+        $previous = InModuleScope VeeamExporterDeploy -Parameters @{ Old = $old } {
+            param($Old)
+            Get-VeeamExporterTaskDefinition -Kind Rest -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory $Old -CertificateThumbprint ('AA' * 20)
+        }
+        $script:PreviousTask = [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Ready'; Actions = @([pscustomobject]@{ Arguments = $previous.Argument }) }
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { $script:PreviousTask }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+        Get-SortedFileName -Directory $old | Should -BeExactly 'other_app.prom'
+    }
+
     It 'refuses to install on VBR 12' {
         $script:ModuleVersion = [version]'12.3.1.1139'
         { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } |
@@ -762,6 +789,60 @@ Describe 'Uninstall-VeeamExporter' {
         Should -Invoke -ModuleName VeeamExporterDeploy Unregister-ScheduledTask -Times 0 -Exactly
         Test-Path -LiteralPath $script:Install | Should -BeTrue
         Test-Path -LiteralPath (Join-Path $script:Textfile 'veeam_jobs.prom') | Should -BeTrue
+    }
+
+    It 'takes the textfile directory from the installed tasks, not from the service' {
+        $decoy = New-TestDirectory -Name 'service-textfile'
+        [System.IO.File]::WriteAllText((Join-Path $decoy 'veeam_jobs.prom'), "x 1`n")
+        $script:Decoy = $decoy
+        Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { [pscustomobject]@{ Directory = $script:Decoy } }
+        $definition = InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $script:Textfile } {
+            param($Dir)
+            Get-VeeamExporterTaskDefinition -Kind Rest -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory $Dir -CertificateThumbprint ('AA' * 20)
+        }
+        $script:Task = [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Ready'; Actions = @([pscustomobject]@{ Arguments = $definition.Argument }) }
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { $script:Task }
+        $null = Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -Confirm:$false
+        Get-SortedFileName -Directory $script:Textfile | Should -BeExactly 'node_custom.prom'
+        Get-SortedFileName -Directory $decoy | Should -BeExactly 'veeam_jobs.prom'
+        Should -Invoke -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory -Times 0 -Exactly
+    }
+
+    It 'stops a running task before it unregisters it' {
+        $script:Order = New-Object System.Collections.Generic.List[string]
+        $script:Stopped = $false
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask {
+            if ($TaskName) { return [pscustomobject]@{ TaskPath = $TaskPath; TaskName = $TaskName; State = $(if ($script:Stopped) { 'Ready' } else { 'Running' }) } }
+            @([pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Running' }, [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter License'; State = 'Ready' })
+        }
+        Mock -ModuleName VeeamExporterDeploy Stop-ScheduledTask { $script:Order.Add('stop ' + $TaskName); $script:Stopped = $true }
+        Mock -ModuleName VeeamExporterDeploy Unregister-ScheduledTask { $script:Order.Add('unregister ' + $TaskName) }
+        Mock -ModuleName VeeamExporterDeploy Start-Sleep { }
+        $null = Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -Confirm:$false
+        ($script:Order -join ',') | Should -BeExactly 'stop Veeam Exporter REST,unregister Veeam Exporter REST,unregister Veeam Exporter License'
+    }
+}
+
+Describe 'Task arguments: reading them back' {
+    It 'Split-TaskArgument inverts Join-TaskArgument' {
+        $values = @('-File', 'C:\Program Files\VeeamExporter\Invoke-VeeamExporter.ps1', 'C:\plain', 'C:\with space\', 'C:\trailing\', 'a"b', 'back\\"slash', 'jobs,objects', '-CertificateThumbprint')
+        InModuleScope VeeamExporterDeploy -Parameters @{ Values = $values } {
+            param($Values)
+            $line = Join-TaskArgument -Argument $Values
+            (Split-TaskArgument -CommandLine $line) -join '|'
+        } | Should -BeExactly ($values -join '|')
+    }
+
+    It 'reads the textfile directories of the tasks' {
+        $dirs = InModuleScope VeeamExporterDeploy {
+            $rest = Get-VeeamExporterTaskDefinition -Kind Rest -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs' -CertificateThumbprint ('AA' * 20)
+            $license = Get-VeeamExporterTaskDefinition -Kind License -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory 'D:\tf'
+            $tasks = @($rest, $license, $null, [pscustomobject]@{ TaskName = 'no actions' }) | ForEach-Object {
+                if ($_ -and $_.PSObject.Properties['Argument']) { [pscustomobject]@{ Actions = @([pscustomobject]@{ Arguments = $_.Argument }) } } else { $_ }
+            }
+            Get-VeeamExporterTaskTextfileDirectory -Task $tasks
+        }
+        ($dirs -join '|') | Should -BeExactly 'C:\Program Files\windows_exporter\textfile_inputs|D:\tf'
     }
 }
 

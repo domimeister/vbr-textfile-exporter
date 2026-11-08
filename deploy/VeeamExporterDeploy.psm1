@@ -421,6 +421,61 @@ function Join-TaskArgument {
     return ((@($Argument) | ForEach-Object { ConvertTo-TaskArgument -Value $_ }) -join ' ')
 }
 
+function Split-TaskArgument {
+    # Inverse of Join-TaskArgument: splits a command line by the
+    # CommandLineToArgvW rules (2n backslashes + quote: n backslashes and the
+    # quote toggles; 2n+1: n backslashes and a literal quote; other
+    # backslashes are literal).
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$CommandLine)
+    $result = New-Object -TypeName System.Collections.Generic.List[string]
+    $current = New-Object -TypeName System.Text.StringBuilder
+    $inQuotes = $false
+    $hasToken = $false
+    $backslashes = 0
+    foreach ($c in $CommandLine.ToCharArray()) {
+        if ($c -eq '\') { $backslashes++; continue }
+        if ($c -eq '"') {
+            [void]$current.Append([char]'\', [math]::Floor($backslashes / 2))
+            if ($backslashes % 2 -eq 1) { [void]$current.Append('"') }
+            else { $inQuotes = -not $inQuotes }
+            $backslashes = 0
+            $hasToken = $true
+            continue
+        }
+        if ($backslashes -gt 0) { [void]$current.Append([char]'\', $backslashes); $backslashes = 0; $hasToken = $true }
+        if (-not $inQuotes -and [char]::IsWhiteSpace($c)) {
+            if ($hasToken) { $result.Add($current.ToString()); [void]$current.Clear(); $hasToken = $false }
+            continue
+        }
+        [void]$current.Append($c)
+        $hasToken = $true
+    }
+    if ($backslashes -gt 0) { [void]$current.Append([char]'\', $backslashes); $hasToken = $true }
+    if ($hasToken) { $result.Add($current.ToString()) }
+    return [string[]]$result.ToArray()
+}
+
+function Get-VeeamExporterTaskTextfileDirectory {
+    # Textfile directories the given tasks write to, from their -TextfileDirectory argument.
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][AllowNull()][object[]]$Task)
+    $directories = New-Object -TypeName System.Collections.Generic.List[string]
+    foreach ($t in @($Task)) {
+        if ($null -eq $t -or -not $t.PSObject.Properties['Actions']) { continue }
+        foreach ($action in @($t.Actions)) {
+            if ($null -eq $action) { continue }
+            $arguments = @(Split-TaskArgument -CommandLine ([string]$action.Arguments))
+            for ($i = 0; $i -lt $arguments.Count - 1; $i++) {
+                if ($arguments[$i] -eq '-TextfileDirectory' -and -not $directories.Contains($arguments[$i + 1])) { $directories.Add($arguments[$i + 1]) }
+            }
+        }
+    }
+    return [string[]]$directories.ToArray()
+}
+
 function Get-VeeamExporterTaskDefinition {
     <#
     Definition of one scheduled task (pure data, no system change):
@@ -1041,13 +1096,18 @@ function Save-VeeamExporterCredentialAsSystem {
 # ----------------------------------------------------------------- uninstall --
 
 function Remove-VeeamExporterPromFile {
-    # Removes only the exporter's own .prom files (and their .tmp files).
+    # Removes only the exporter's own .prom files (and their .tmp files);
+    # -Name narrows it to some of them.
     [CmdletBinding(SupportsShouldProcess = $true)]
     [OutputType([string[]])]
-    param([Parameter(Mandatory = $true)][string]$TextfileDirectory)
+    param(
+        [Parameter(Mandatory = $true)][string]$TextfileDirectory,
+        [string[]]$Name = $script:PromFiles
+    )
+    foreach ($n in $Name) { if ($script:PromFiles -notcontains $n) { throw "Not an exporter file: $n" } }
     $removed = New-Object -TypeName System.Collections.Generic.List[string]
-    foreach ($name in $script:PromFiles) {
-        foreach ($candidate in @($name, ($name + '.tmp'))) {
+    foreach ($promFile in $Name) {
+        foreach ($candidate in @($promFile, ($promFile + '.tmp'))) {
             $path = Join-Path -Path $TextfileDirectory -ChildPath $candidate
             if (Test-Path -LiteralPath $path -PathType Container) {
                 Write-Warning "Not removing ${path}: it is a directory, not a .prom file."
@@ -1228,6 +1288,8 @@ function Install-VeeamExporter {
     }
 
     # tasks
+    # Where the installed tasks wrote so far, before they are replaced.
+    $previousDirectories = @(Get-VeeamExporterTaskTextfileDirectory -Task @(Get-ScheduledTask -TaskPath $script:TaskPath -ErrorAction SilentlyContinue))
     $definitions = @(Get-VeeamExporterTaskDefinition -Kind Rest -HostPath $restHost -InstallPath $InstallPath -DataPath $DataPath `
             -TextfileDirectory $TextfileDirectory -CertificateThumbprint $CertificateThumbprint -Collector $Collector `
             -ObjectLookbackDays $ObjectLookbackDays -RestIntervalMinutes $RestIntervalMinutes)
@@ -1241,6 +1303,23 @@ function Install-VeeamExporter {
         }
     }
     foreach ($d in $definitions) { Register-VeeamExporterTask -Definition $d -Confirm:$false }
+
+    # Files that no task writes any more would stay exported with frozen
+    # values (and the stale alerts would fire on them for good): those of
+    # dropped collectors, the license files with -SkipLicenseTask, and all
+    # exporter files in a previous textfile directory.
+    $collectorNames = @(@($Collector) -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
+    $outdated = @(foreach ($c in 'jobs', 'objects', 'repositories') { if ($collectorNames -notcontains $c) { 'veeam_{0}.prom' -f $c } })
+    if ($SkipLicenseTask) { $outdated += @('veeam_license.prom', 'veeam_exporter_license.prom') }
+    $removedOutdated = @()
+    if ($outdated.Count -gt 0) { $removedOutdated += @(Remove-VeeamExporterPromFile -TextfileDirectory $TextfileDirectory -Name $outdated) }
+    foreach ($previous in $previousDirectories) {
+        $same = [string]::Equals([System.IO.Path]::GetFullPath($previous).TrimEnd('\', '/'), [System.IO.Path]::GetFullPath($TextfileDirectory).TrimEnd('\', '/'), [System.StringComparison]::OrdinalIgnoreCase)
+        if (-not $same -and (Test-Path -LiteralPath $previous -PathType Container)) {
+            $removedOutdated += @(Remove-VeeamExporterPromFile -TextfileDirectory $previous | ForEach-Object { Join-Path -Path $previous -ChildPath $_ })
+        }
+    }
+    if ($removedOutdated.Count -gt 0) { Write-Information ('Removed files no task writes any more: {0}' -f ($removedOutdated -join ', ')) }
 
     # first run
     $results = New-Object -TypeName System.Collections.Generic.List[object]
@@ -1304,17 +1383,30 @@ function Uninstall-VeeamExporter {
     if (-not $InstallPath) { $InstallPath = Join-Path -Path $env:ProgramFiles -ChildPath 'VeeamExporter' }
     if (-not $DataPath) { $DataPath = Join-Path -Path $env:ProgramData -ChildPath 'VeeamExporter' }
     if (-not (Test-VeeamExporterAdministrator)) { throw 'Run the uninstallation in an elevated PowerShell (Administrator).' }
-    if (-not $TextfileDirectory) { $TextfileDirectory = (Find-WindowsExporterTextfileDirectory).Directory }
+    $tasks = @(Get-ScheduledTask -TaskPath $script:TaskPath -ErrorAction SilentlyContinue | Where-Object { $null -ne $_ })
+    # The directories the installed tasks write to; the service config only as fallback.
+    if ($TextfileDirectory) { $textfileDirectories = @($TextfileDirectory) }
+    else {
+        $textfileDirectories = @(Get-VeeamExporterTaskTextfileDirectory -Task $tasks)
+        if ($textfileDirectories.Count -eq 0) { $textfileDirectories = @((Find-WindowsExporterTextfileDirectory).Directory) }
+    }
 
-    foreach ($task in @(Get-ScheduledTask -TaskPath $script:TaskPath -ErrorAction SilentlyContinue)) {
-        if ($null -eq $task) { continue }
-        if ($PSCmdlet.ShouldProcess(($task.TaskPath + $task.TaskName), 'Unregister scheduled task')) {
+    foreach ($task in $tasks) {
+        if ($PSCmdlet.ShouldProcess(($task.TaskPath + $task.TaskName), 'Stop and unregister scheduled task')) {
+            # A running instance would write its .prom files again or keep its log open.
+            if ([string]$task.State -eq 'Running') {
+                Stop-ScheduledTask -TaskPath $task.TaskPath -TaskName $task.TaskName
+                $deadline = (Get-Date).AddSeconds(30)
+                while ([string](Get-ScheduledTask -TaskPath $task.TaskPath -TaskName $task.TaskName -ErrorAction SilentlyContinue).State -eq 'Running' -and (Get-Date) -lt $deadline) { Start-Sleep -Seconds 1 }
+            }
             Unregister-ScheduledTask -TaskPath $task.TaskPath -TaskName $task.TaskName -Confirm:$false
         }
     }
 
     $removedProm = @()
-    if (Test-Path -LiteralPath $TextfileDirectory) { $removedProm = Remove-VeeamExporterPromFile -TextfileDirectory $TextfileDirectory }
+    foreach ($directory in $textfileDirectories) {
+        if (Test-Path -LiteralPath $directory) { $removedProm += @(Remove-VeeamExporterPromFile -TextfileDirectory $directory) }
+    }
 
     if (Test-Path -LiteralPath $InstallPath) {
         if (-not (Test-VeeamExporterInstallDirectory -Path $InstallPath)) { throw "Refusing to delete ${InstallPath}: it does not look like an exporter installation." }
