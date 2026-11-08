@@ -70,7 +70,7 @@ Hard rules (CLAUDE.md), what to look for:
 
 Spec (`docs/metrics.md`): every metric name, label, value code and alert the code adds or changes matches the spec. If the spec has to change, the change to `docs/metrics.md` is in the same PR. New assumptions are marked `# ASSUMPTION:` in the code and linked to an open point (OP-n).
 
-Tests: behaviour changes come with tests in the same PR; REST calls are mocked; fixtures come from the Veeam docs examples; `.prom` output is checked line by line (escaping, no BOM, LF).
+Tests: behaviour changes come with tests in the same PR; REST calls are mocked; fixtures come from the Veeam docs examples or real responses recorded in the lab (`tests/fixtures/lab/`); `.prom` output is checked line by line (escaping, no BOM, LF).
 
 Git workflow (CLAUDE.md, "Git-Workflow"): branch name `feat/`, `fix/` or `chore/`; one issue per PR, linked with `Closes #n`; small PR with one concern; PR template filled in (what/why, checklist, test evidence); everything in English; no claude.ai session links in commits or the description.
 

@@ -1,6 +1,6 @@
 # Veeam Prometheus Exporter (windows_exporter Textfile)
 
-> **Status: experimental.** Tested in a lab against a real Veeam Backup & Replication 13.1 server, not yet in production. The lab test found open issues, see [Status](#status). CI runs against mocked REST responses taken from the Veeam documentation. Expect bugs and breaking changes, try it on a non-production VBR server first, and use it at your own risk. Feedback and issues are welcome.
+> **Status: experimental.** Tested in a lab against a real Veeam Backup & Replication 13.1 server, not yet in production. The issues the lab test found are fixed, see [Status](#status); open points are listed in [`docs/metrics.md`](docs/metrics.md#open-points--next-steps). CI runs against mocked REST responses taken from the Veeam documentation and recorded in the lab. Expect bugs and breaking changes, try it on a non-production VBR server first, and use it at your own risk. Feedback and issues are welcome.
 
 PowerShell exporter for Veeam Backup & Replication 13. Runs as a scheduled task on the VBR server, reads the REST API on `localhost:9419` (read-only) and writes `.prom` files into the textfile directory of the windows_exporter.
 
@@ -46,10 +46,10 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Collector `repositories` → `veeam_repositories.prom` | implemented | works, including SOBR extents (the SOBR itself has no row of its own) |
 | Health → `veeam_exporter.prom` | implemented | works; `vbr_version` stays empty for Backup Viewer (OP-13) |
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
-| Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter. Uninstall not tested yet |
+| Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter; uninstallation removes tasks, `veeam_*.prom` files, installation and data; a data directory created beforehand by a normal user aborts the installation; under an `AllSigned` policy the scripts do not run (see [`deploy/README.md`](deploy/README.md#to-verify-in-the-lab)) |
 | Grafana dashboard (`dashboards/`) | implemented | works in Grafana 13.3: every panel shows the lab data; status tiles, jobs with result, schedule (scheduled, chained, manual) and next run, the failed object with its message, repositories including the SOBR extents, license and exporter health |
 | Grafana alert rules (`alerting/`) | implemented, logic unit-tested with promtool | works in Grafana 13.3: all nine rules evaluate without errors; the failed job and object (after 45 minutes) and the expiring trial license alert; `VeeamJobNotRun` leaves out jobs without a schedule (also one whose schedule is disabled) and a job that never ran; a test webhook got the notifications. Disabled jobs only in the promtool tests (no disabled job in the lab at the time) |
-| Test suite on a machine with VBR installed | - | one test depends on the machine ([#23](https://github.com/domimeister/vbr-textfile-exporter/issues/23)) |
+| Test suite on the VBR server | - | passes under Windows PowerShell 5.1 and PowerShell 7 with VBR 13.1 and its PowerShell module installed: 341 passed, 0 failed; skipped are the tests that need promtool or openssl and the edition-specific certificate test of the other edition |
 
 ## Grafana dashboard
 
