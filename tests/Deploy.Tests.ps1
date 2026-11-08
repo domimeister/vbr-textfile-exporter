@@ -438,6 +438,32 @@ Describe 'Install-VeeamExporter' {
         @($result.FirstRun | Where-Object Ok).Count | Should -Be 2
     }
 
+    It 'removes the files of dropped parts on a re-install (<Case>)' -TestCases @(
+        @{ Case = '-SkipLicenseTask'; Extra = @{ SkipLicenseTask = $true }; Left = 'other_app.prom,veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom,veeam_repositories.prom' }
+        @{ Case = '-Collector jobs'; Extra = @{ Collector = @('jobs') }; Left = 'other_app.prom,veeam_exporter.prom,veeam_exporter_license.prom,veeam_jobs.prom,veeam_license.prom' }
+        @{ Case = 'all parts'; Extra = @{}; Left = 'other_app.prom,veeam_exporter.prom,veeam_exporter_license.prom,veeam_jobs.prom,veeam_license.prom,veeam_objects.prom,veeam_repositories.prom' }
+    ) {
+        param($Extra, $Left)
+        foreach ($n in 'veeam_jobs.prom', 'veeam_objects.prom', 'veeam_repositories.prom', 'veeam_license.prom', 'veeam_exporter.prom', 'veeam_exporter_license.prom', 'other_app.prom') {
+            [System.IO.File]::WriteAllText((Join-Path $script:Textfile $n), "x 1`n")
+        }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue @Extra
+        Get-SortedFileName -Directory $script:Textfile | Should -BeExactly $Left
+    }
+
+    It 'removes the exporter files in the textfile directory the tasks used before' {
+        $old = New-TestDirectory -Name 'old-textfile'
+        foreach ($n in 'veeam_jobs.prom', 'veeam_exporter.prom', 'other_app.prom') { [System.IO.File]::WriteAllText((Join-Path $old $n), "x 1`n") }
+        $previous = InModuleScope VeeamExporterDeploy -Parameters @{ Old = $old } {
+            param($Old)
+            Get-VeeamExporterTaskDefinition -Kind Rest -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory $Old -CertificateThumbprint ('AA' * 20)
+        }
+        $script:PreviousTask = [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Ready'; Actions = @([pscustomobject]@{ Arguments = $previous.Argument }) }
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { $script:PreviousTask }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+        Get-SortedFileName -Directory $old | Should -BeExactly 'other_app.prom'
+    }
+
     It 'refuses to install on VBR 12' {
         $script:ModuleVersion = [version]'12.3.1.1139'
         { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } |
@@ -487,32 +513,6 @@ Describe 'Install-VeeamExporter' {
     It 'aborts if the textfile directory is missing' {
         { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory (Join-Path $TestDrive 'missing') -Force -InformationAction SilentlyContinue } | Should -Throw '*does not exist*'
         Test-Path -LiteralPath $script:Install | Should -BeFalse
-    }
-
-    It 'removes the files of dropped parts on a re-install (<Case>)' -TestCases @(
-        @{ Case = '-SkipLicenseTask'; Extra = @{ SkipLicenseTask = $true }; Left = 'other_app.prom,veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom,veeam_repositories.prom' }
-        @{ Case = '-Collector jobs'; Extra = @{ Collector = @('jobs') }; Left = 'other_app.prom,veeam_exporter.prom,veeam_exporter_license.prom,veeam_jobs.prom,veeam_license.prom' }
-        @{ Case = 'all parts'; Extra = @{}; Left = 'other_app.prom,veeam_exporter.prom,veeam_exporter_license.prom,veeam_jobs.prom,veeam_license.prom,veeam_objects.prom,veeam_repositories.prom' }
-    ) {
-        param($Extra, $Left)
-        foreach ($n in 'veeam_jobs.prom', 'veeam_objects.prom', 'veeam_repositories.prom', 'veeam_license.prom', 'veeam_exporter.prom', 'veeam_exporter_license.prom', 'other_app.prom') {
-            [System.IO.File]::WriteAllText((Join-Path $script:Textfile $n), "x 1`n")
-        }
-        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue @Extra
-        Get-SortedFileName -Directory $script:Textfile | Should -BeExactly $Left
-    }
-
-    It 'removes the exporter files in the textfile directory the tasks used before' {
-        $old = New-TestDirectory -Name 'old-textfile'
-        foreach ($n in 'veeam_jobs.prom', 'veeam_exporter.prom', 'other_app.prom') { [System.IO.File]::WriteAllText((Join-Path $old $n), "x 1`n") }
-        $previous = InModuleScope VeeamExporterDeploy -Parameters @{ Old = $old } {
-            param($Old)
-            Get-VeeamExporterTaskDefinition -Kind Rest -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory $Old -CertificateThumbprint ('AA' * 20)
-        }
-        $script:PreviousTask = [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Ready'; Actions = @([pscustomobject]@{ Arguments = $previous.Argument }) }
-        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { $script:PreviousTask }
-        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
-        Get-SortedFileName -Directory $old | Should -BeExactly 'other_app.prom'
     }
 
     It 'warns if a task reports an error on its first run' {
