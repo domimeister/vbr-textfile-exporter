@@ -34,7 +34,7 @@ param(
     [switch]$UpdateCredential,
     [string]$VeeamModule,
     [switch]$SkipLicenseTask,
-    [ValidateRange(5, 60)][int]$RestIntervalMinutes = 15,
+    [ValidateRange(5, 30)][int]$RestIntervalMinutes = 15,
     [string]$LicenseTime = '06:17',
     [string[]]$Collector = @('jobs', 'objects', 'repositories'),
     [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,

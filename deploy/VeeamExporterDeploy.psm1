@@ -1185,7 +1185,8 @@ function Install-VeeamExporter {
         [switch]$UpdateCredential,
         [string]$VeeamModule,
         [switch]$SkipLicenseTask,
-        [ValidateRange(5, 60)][int]$RestIntervalMinutes = 15,
+        # At most 30: VeeamExporterStale fires once a REST file is older than 1 hour.
+        [ValidateRange(5, 30)][int]$RestIntervalMinutes = 15,
         [ValidatePattern('^([01][0-9]|2[0-3]):[0-5][0-9]$')][string]$LicenseTime = '06:17',
         [string[]]$Collector = @('jobs', 'objects', 'repositories'),
         [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
