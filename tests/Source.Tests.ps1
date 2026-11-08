@@ -119,6 +119,30 @@ Describe 'Source code rules' {
         ($output -join ' ') | Should -Match 'missing.cred.xml'
     }
 
+    It 'refers every # ASSUMPTION: to an open point of docs/metrics.md' {
+        $docs = [System.IO.File]::ReadAllText((Join-Path -Path (Join-Path -Path $script:RepoRoot -ChildPath 'docs') -ChildPath 'metrics.md'))
+        $open = @([regex]::Matches($docs, '(?m)^- \[ \] \*\*(OP-[0-9]+)\*\*') | ForEach-Object { $_.Groups[1].Value })
+        $open.Count | Should -BeGreaterThan 0
+        $markers = 0
+        $bad = foreach ($f in $script:AllCodeFiles) {
+            $lines = [System.IO.File]::ReadAllLines($f.FullName)
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+                if ($lines[$i] -cnotmatch '#\s*ASSUMPTION:') { continue }
+                $markers++
+                $link = [regex]::Match($lines[$i], 'docs/metrics\.md#(OP-[0-9]+)\b')
+                if (-not $link.Success) { '{0}:{1} links no open point' -f $f.Name, ($i + 1) }
+                elseif ($open -notcontains $link.Groups[1].Value) { '{0}:{1} {2} is not an open point' -f $f.Name, ($i + 1), $link.Groups[1].Value }
+            }
+        }
+        @($bad) | Should -BeNullOrEmpty
+        $markers | Should -BeGreaterThan 0
+    }
+
+    It 'marks the OP-3 assumption for MinValue/MaxValue where timestamps are converted' {
+        $text = [System.IO.File]::ReadAllText((Join-Path -Path $script:SrcRoot -ChildPath 'VeeamExporter/Private/Convert.ps1'))
+        $text | Should -Match '# ASSUMPTION: MinValue/MaxValue mean "not set".*docs/metrics\.md#OP-3'
+    }
+
     It 'exports the functions from the manifest' {
         $manifest = Import-PowerShellDataFile -Path $script:ModuleManifest
         $exported = @((Get-Command -Module VeeamExporter).Name | Sort-Object)

@@ -13,7 +13,9 @@ function Get-VeeamField {
 
 function ConvertTo-VeeamDateTimeOffset {
     # Converts an API timestamp (ISO 8601 string, DateTime or DateTimeOffset)
-    # to a DateTimeOffset. Returns $null for empty input.
+    # to a DateTimeOffset. Returns $null for empty input and for
+    # DateTime.MinValue/MaxValue, as text or as DateTime(Offset).
+    # ASSUMPTION: MinValue/MaxValue mean "not set" (e.g. endTime of a running task, expiration of a perpetual license), see docs/metrics.md#OP-3
     # PowerShell 7 ConvertFrom-Json already turns ISO strings into DateTime:
     # Utc for "Z", Local for an explicit offset, Unspecified without offset.
     [CmdletBinding()]
@@ -34,8 +36,7 @@ function ConvertTo-VeeamDateTimeOffset {
     else {
         $text = ([string]$Value).Trim()
         if ($text.Length -eq 0) { return $null }
-        # DateTime.MinValue/MaxValue as "not set" (e.g. endTime of a running
-        # task, expiration of a perpetual license, docs/metrics.md#OP-3).
+        # MinValue/MaxValue as text: "not set" (ASSUMPTION above, OP-3).
         if ($text.StartsWith('0001-01-01') -or $text.StartsWith('9999-12-31')) { return $null }
         if ($text -match '(?i)(z|[+-][0-9]{2}:?[0-9]{2})$') {
             $parsedOffset = [System.DateTimeOffset]::MinValue
