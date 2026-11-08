@@ -5,12 +5,18 @@ function Invoke-VeeamExporterRun {
     .DESCRIPTION
     Each collector writes its own file (veeam_<collector>.prom) and replaces it
     only on success. veeam_exporter.prom is written on every run, also when the
-    logon fails. Returns an object with Success and the per-collector results.
+    credential cannot be read, the logon fails or the collector list is
+    invalid (then the error is raised after writing it). Returns an object
+    with Success and the per-collector results.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(DefaultParameterSetName = 'Credential')]
     param(
         [Parameter(Mandatory = $true)][string]$TextfileDirectory,
-        [Parameter(Mandatory = $true)][System.Management.Automation.PSCredential]$Credential,
+        [Parameter(Mandatory = $true, ParameterSetName = 'Credential')][System.Management.Automation.PSCredential]$Credential,
+        # Clixml file with the PSCredential (DPAPI, created by the task account).
+        # Read inside the run, so a credential that cannot be read is reported
+        # like a failed logon and veeam_exporter.prom is still written.
+        [Parameter(Mandatory = $true, ParameterSetName = 'CredentialPath')][string]$CredentialPath,
         [string]$BaseUri = 'https://localhost:9419',
         [AllowNull()][AllowEmptyString()][string]$CertificateThumbprint,
         [AllowNull()][AllowEmptyString()][string]$ApiVersion,
@@ -25,64 +31,95 @@ function Invoke-VeeamExporterRun {
         objects      = 'Get-VeeamObjectMetric'
         repositories = 'Get-VeeamRepositoryMetric'
     }
-    $Collector = @(Split-VeeamListParameter -Value $Collector)
-    $ObjectSessionType = @(Split-VeeamListParameter -Value $ObjectSessionType)
-    foreach ($name in $Collector) {
-        if (-not $collectorCommands.ContainsKey($name)) {
-            throw ("Unknown collector '{0}'. Valid: {1}" -f $name, (($collectorCommands.Keys | Sort-Object) -join ', '))
-        }
-    }
-    if ($Collector.Count -eq 0) { throw 'No collector selected.' }
-    if ($ObjectSessionType.Count -eq 0) { throw 'No session type for the objects collector.' }
-    $collectorArguments = @{
-        jobs         = @{}
-        objects      = @{ LookbackDays = $ObjectLookbackDays; SessionType = $ObjectSessionType }
-        repositories = @{}
-    }
-
+    $knownCollectors = @('jobs', 'objects', 'repositories')
     $results = New-Object -TypeName System.Collections.Generic.List[object]
     $session = $null
     $vbrVersion = ''
     $scriptVersion = [string]$MyInvocation.MyCommand.Module.Version
+    $configError = $null
 
-    # Read locally, independent of the REST role (docs/metrics.md#OP-13).
-    try {
-        $vbrVersion = Get-VeeamLocalServerVersion
-    }
-    catch {
-        Write-Warning ('VBR version not readable: {0}' -f $_.Exception.Message)
-    }
-
+    # Everything that can fail runs inside this try, so the finally block
+    # writes veeam_exporter.prom on every run (CLAUDE.md).
     try {
         try {
-            $session = Connect-VeeamServer -BaseUri $BaseUri -Credential $Credential -CertificateThumbprint $CertificateThumbprint -ApiVersion $ApiVersion -TimeoutSec $TimeoutSec
+            $Collector = @(Split-VeeamListParameter -Value $Collector)
+            $ObjectSessionType = @(Split-VeeamListParameter -Value $ObjectSessionType)
+            foreach ($name in $Collector) {
+                if (-not $collectorCommands.ContainsKey($name)) {
+                    throw ("Unknown collector '{0}'. Valid: {1}" -f $name, ($knownCollectors -join ', '))
+                }
+            }
+            if ($Collector.Count -eq 0) { throw 'No collector selected.' }
+            if ($ObjectSessionType.Count -eq 0) { throw 'No session type for the objects collector.' }
         }
         catch {
-            Write-Warning ('Logon failed: {0}' -f $_.Exception.Message)
+            # Configuration error: no collector runs. The requested known
+            # collectors (all of them if none is known) count as failed; the
+            # error is raised again after the health file is written.
+            $configError = $_
+            $failed = @($knownCollectors | Where-Object { @($Collector) -contains $_ })
+            if ($failed.Count -eq 0) { $failed = $knownCollectors }
+            foreach ($name in $failed) { $results.Add([pscustomobject]@{ Collector = $name; Success = $false; DurationSeconds = 0 }) }
         }
 
+        # Read locally, independent of the REST role (docs/metrics.md#OP-13).
+        try {
+            $vbrVersion = Get-VeeamLocalServerVersion
+        }
+        catch {
+            Write-Warning ('VBR version not readable: {0}' -f $_.Exception.Message)
+        }
 
-        foreach ($name in $Collector) {
-            $sw = [System.Diagnostics.Stopwatch]::StartNew()
-            $ok = $false
-            try {
-                if ($null -eq $session) { throw 'No session (logon failed).' }
-                $extra = $collectorArguments[$name]
-                $metrics = & $collectorCommands[$name] -Session $session @extra
-                $text = ConvertTo-PromText -Metric $metrics
-                Write-PromFile -Directory $TextfileDirectory -Name ('veeam_{0}.prom' -f $name) -Content $text
-                $ok = $true
+        if ($null -eq $configError) {
+            $collectorArguments = @{
+                jobs         = @{}
+                objects      = @{ LookbackDays = $ObjectLookbackDays; SessionType = $ObjectSessionType }
+                repositories = @{}
             }
-            catch {
-                Write-Warning ('Collector {0} failed: {1}' -f $name, $_.Exception.Message)
+            if ($PSCmdlet.ParameterSetName -eq 'CredentialPath') {
+                $Credential = $null
+                try {
+                    $imported = Import-Clixml -LiteralPath $CredentialPath
+                    if (-not ($imported -is [System.Management.Automation.PSCredential])) {
+                        throw "$CredentialPath does not contain a PSCredential."
+                    }
+                    $Credential = $imported
+                }
+                catch {
+                    Write-Warning ('Cannot read credential {0}: {1}' -f $CredentialPath, $_.Exception.Message)
+                }
             }
-            finally {
-                $sw.Stop()
-                $results.Add([pscustomobject]@{
-                        Collector       = $name
-                        Success         = $ok
-                        DurationSeconds = [math]::Round($sw.Elapsed.TotalSeconds, 3)
-                    })
+            if ($null -ne $Credential) {
+                try {
+                    $session = Connect-VeeamServer -BaseUri $BaseUri -Credential $Credential -CertificateThumbprint $CertificateThumbprint -ApiVersion $ApiVersion -TimeoutSec $TimeoutSec
+                }
+                catch {
+                    Write-Warning ('Logon failed: {0}' -f $_.Exception.Message)
+                }
+            }
+
+            foreach ($name in $Collector) {
+                $sw = [System.Diagnostics.Stopwatch]::StartNew()
+                $ok = $false
+                try {
+                    if ($null -eq $session) { throw 'No session (logon failed).' }
+                    $extra = $collectorArguments[$name]
+                    $metrics = & $collectorCommands[$name] -Session $session @extra
+                    $text = ConvertTo-PromText -Metric $metrics
+                    Write-PromFile -Directory $TextfileDirectory -Name ('veeam_{0}.prom' -f $name) -Content $text
+                    $ok = $true
+                }
+                catch {
+                    Write-Warning ('Collector {0} failed: {1}' -f $name, $_.Exception.Message)
+                }
+                finally {
+                    $sw.Stop()
+                    $results.Add([pscustomobject]@{
+                            Collector       = $name
+                            Success         = $ok
+                            DurationSeconds = [math]::Round($sw.Elapsed.TotalSeconds, 3)
+                        })
+                }
             }
         }
     }
@@ -108,6 +145,8 @@ function Invoke-VeeamExporterRun {
             Write-Warning ('Writing veeam_exporter.prom failed: {0}' -f $_.Exception.Message)
         }
     }
+
+    if ($null -ne $configError) { throw $configError }
 
     $allOk = ($results.Count -gt 0)
     foreach ($r in $results) { if (-not $r.Success) { $allOk = $false } }

@@ -71,10 +71,61 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
     }
 
-    It 'aborts on an unknown collector before logging in' {
+    It 'aborts on an unknown collector before logging in, after writing veeam_exporter.prom' {
         Set-VeeamApiMock
         { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs,licence' } | Should -Throw "*Unknown collector 'licence'*"
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
+        # Only the known requested collector is reported, as failed.
+        $health = Get-FileText -Path $script:HealthFile
+        $health | Should -Match 'veeam_exporter_collector_success\{collector="jobs"\} 0'
+        $health | Should -Not -Match 'collector="licence"'
+        $health | Should -Not -Match 'collector="objects"'
+        $health | Should -Match ([regex]::Escape('api_version="",vbr_version="13.0.1.180"} 1'))
+    }
+
+    It 'reports all collectors as failed if none of the requested names is known' {
+        Set-VeeamApiMock
+        { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'repository' } | Should -Throw "*Unknown collector 'repository'*"
+        $health = Get-FileText -Path $script:HealthFile
+        foreach ($c in 'jobs', 'objects', 'repositories') { $health | Should -Match ('veeam_exporter_collector_success\{collector="' + $c + '"\} 0') }
+    }
+
+    It 'writes veeam_exporter.prom also when no session type is given' {
+        Set-VeeamApiMock
+        { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -ObjectSessionType ',' } | Should -Throw '*No session type*'
+        Get-FileText -Path $script:HealthFile | Should -Match 'veeam_exporter_collector_success\{collector="objects"\} 0'
+    }
+
+    It 'writes veeam_exporter.prom also when a warning is turned into an error (-WarningAction Stop)' {
+        Set-VeeamApiMock -VbrVersionFails
+        { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction Stop } | Should -Throw
+        Test-Path -LiteralPath $script:HealthFile | Should -BeTrue
+    }
+
+    It 'reads the credential from -CredentialPath' {
+        Set-VeeamApiMock
+        $path = Join-Path -Path $script:Dir -ChildPath 'veeam.cred.xml'
+        Mock -ModuleName VeeamExporter Import-Clixml { New-TestCredential } -ParameterFilter { $LiteralPath -eq $path }
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -CredentialPath $path -WarningAction SilentlyContinue
+        $result.Success | Should -BeTrue
+        Get-FileText -Path $script:JobsFile | Should -BeExactly (Get-ExpectedText -Name 'veeam_jobs.prom')
+    }
+
+    It 'treats a credential that cannot be read like a failed logon (<Case>)' -TestCases @(
+        @{ Case = 'missing file'; Content = $null }
+        @{ Case = 'no PSCredential in the file'; Content = 'just a string' }
+    ) {
+        param($Case, $Content)
+        Set-VeeamApiMock
+        $path = Join-Path -Path $script:Dir -ChildPath 'veeam.cred.xml'
+        if ($null -ne $Content) { $Content | Export-Clixml -LiteralPath $path }
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -CredentialPath $path -WarningVariable warnings -WarningAction SilentlyContinue
+        $result.Success | Should -BeFalse
+        @($warnings | Where-Object { "$_" -like 'Cannot read credential*veeam.cred.xml*' }).Count | Should -Be 1
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
+        $health = Get-FileText -Path $script:HealthFile
+        foreach ($c in 'jobs', 'objects', 'repositories') { $health | Should -Match ('veeam_exporter_collector_success\{collector="' + $c + '"\} 0') }
+        $health | Should -Match ([regex]::Escape('vbr_version="13.0.1.180"} 1'))
     }
 
     It 'runs only the jobs collector with -Collector jobs' {
@@ -162,5 +213,77 @@ Describe 'Invoke-VeeamExporterRun' {
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
         @(Get-ChildItem -LiteralPath $script:Dir -Filter '*.tmp').Count | Should -Be 0
         Get-SortedFileName -Directory $script:Dir | Should -BeExactly 'veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom,veeam_repositories.prom'
+    }
+}
+
+Describe 'Health file without the module' {
+    It 'Format-VeeamFailedHealthText equals the module output for failed collectors (<Name>)' -TestCases @(
+        @{ Name = 'REST'; Requested = @('jobs,objects', 'repositories'); Known = @('jobs', 'objects', 'repositories'); Expected = @('jobs', 'objects', 'repositories') }
+        @{ Name = 'subset and unknown names'; Requested = @('Objects, licence'); Known = @('jobs', 'objects', 'repositories'); Expected = @('objects') }
+        @{ Name = 'nothing known'; Requested = @('typo'); Known = @('jobs', 'objects', 'repositories'); Expected = @('jobs', 'objects', 'repositories') }
+        @{ Name = 'license'; Requested = @('license'); Known = @('license'); Expected = @('license') }
+    ) {
+        param($Name, $Requested, $Known, $Expected)
+        InModuleScope VeeamExporter -Parameters @{ Requested = $Requested; Known = $Known; Expected = $Expected } {
+            param($Requested, $Known, $Expected)
+            $results = @($Expected | ForEach-Object { [pscustomobject]@{ Collector = $_; Success = $false; DurationSeconds = 0 } })
+            $module = ConvertTo-PromText -Metric (New-VeeamCollectorHealthMetric -Result $results)
+            Format-VeeamFailedHealthText -Collector $Requested -Known $Known | Should -BeExactly $module
+        }
+    }
+}
+
+Describe 'Entry scripts write the health file in any case' {
+    BeforeAll {
+        # Child processes with the PowerShell edition of this test run.
+        $script:Exe = (Get-Process -Id $PID).Path
+        function Invoke-EntryScript {
+            param([string]$Script, [string[]]$Arguments)
+            # Windows PowerShell 5.1 turns redirected stderr of a child process into a
+            # terminating error when $ErrorActionPreference is Stop (GitHub Actions sets it).
+            $ErrorActionPreference = 'Continue'
+            $output = & $script:Exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $Script @Arguments 2>&1
+            return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = ($output | Out-String) }
+        }
+    }
+
+    BeforeEach {
+        $script:Root = Join-Path -Path $TestDrive -ChildPath ([guid]::NewGuid().ToString('N'))
+        $script:Out = Join-Path -Path $script:Root -ChildPath 'textfile'
+        $script:App = Join-Path -Path $script:Root -ChildPath 'app'
+        $null = New-Item -ItemType Directory -Path $script:Out
+        Copy-Item -LiteralPath $script:SrcRoot -Destination $script:App -Recurse
+    }
+
+    It 'REST task: a missing credential file still gives veeam_exporter.prom with all collectors 0' {
+        $r = Invoke-EntryScript -Script (Join-Path $script:App 'Invoke-VeeamExporter.ps1') -Arguments @('-CredentialPath', (Join-Path $script:Root 'missing.cred.xml'), '-TextfileDirectory', $script:Out)
+        $r.ExitCode | Should -Be 1
+        $health = Get-FileText -Path (Join-Path $script:Out 'veeam_exporter.prom')
+        foreach ($c in 'jobs', 'objects', 'repositories') { $health | Should -Match ('veeam_exporter_collector_success\{collector="' + $c + '"\} 0') }
+        $health | Should -Match 'veeam_exporter_info\{'
+    }
+
+    It 'REST task: a module that cannot be loaded still gives veeam_exporter.prom with the requested collectors 0' {
+        [System.IO.File]::WriteAllText((Join-Path (Join-Path $script:App 'VeeamExporter') 'VeeamExporter.psd1'), '@{ this is not a manifest')
+        $r = Invoke-EntryScript -Script (Join-Path $script:App 'Invoke-VeeamExporter.ps1') -Arguments @('-CredentialPath', 'x', '-TextfileDirectory', $script:Out, '-Collector', 'jobs,repositories')
+        $r.ExitCode | Should -Be 1
+        $r.Output | Should -Match 'Veeam exporter aborted'
+        Get-FileText -Path (Join-Path $script:Out 'veeam_exporter.prom') | Should -BeExactly ("# HELP veeam_exporter_collector_success 1 last collector run ok, 0 failure`n" +
+            "# TYPE veeam_exporter_collector_success gauge`n" +
+            "veeam_exporter_collector_success{collector=`"jobs`"} 0`n" +
+            "veeam_exporter_collector_success{collector=`"repositories`"} 0`n" +
+            "# HELP veeam_exporter_collector_duration_seconds Collector duration in seconds`n" +
+            "# TYPE veeam_exporter_collector_duration_seconds gauge`n" +
+            "veeam_exporter_collector_duration_seconds{collector=`"jobs`"} 0`n" +
+            "veeam_exporter_collector_duration_seconds{collector=`"repositories`"} 0`n")
+    }
+
+    It 'license task: a module that cannot be loaded still gives veeam_exporter_license.prom with license 0' {
+        [System.IO.File]::WriteAllText((Join-Path (Join-Path $script:App 'VeeamExporter') 'VeeamExporter.psd1'), '@{ this is not a manifest')
+        $r = Invoke-EntryScript -Script (Join-Path $script:App 'Invoke-VeeamLicenseExporter.ps1') -Arguments @('-TextfileDirectory', $script:Out)
+        $r.ExitCode | Should -Be 1
+        $health = Get-FileText -Path (Join-Path $script:Out 'veeam_exporter_license.prom')
+        $health | Should -Match 'veeam_exporter_collector_success\{collector="license"\} 0'
+        Test-Path -LiteralPath (Join-Path $script:Out 'veeam_exporter.prom') | Should -BeFalse
     }
 }

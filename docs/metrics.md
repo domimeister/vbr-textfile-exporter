@@ -145,7 +145,7 @@ Fields according to [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/
 
 ## Exporter Health
 
-Each collector writes its own file and replaces it only on success. The age of the file therefore shows since when a collector has been stuck; no extra state files are needed. `veeam_exporter.prom` (REST task) and `veeam_exporter_license.prom` (license task) are written on every run, including on failure.
+Each collector writes its own file and replaces it only on success. The age of the file therefore shows since when a collector has been stuck; no extra state files are needed. `veeam_exporter.prom` (REST task) and `veeam_exporter_license.prom` (license task) are written on every run, including on failure: when the logon fails or the credential cannot be read, when the collector list is invalid, and even when the exporter's own module cannot be loaded. The collectors that could not run then report `veeam_exporter_collector_success` 0; without the module `veeam_exporter_info` is missing from the file.
 
 The same metric may appear in several files as long as the label values differ. An identical series in two files, however, makes the windows_exporter (v0.25.1) discard **all** textfile metrics (`windows_textfile_scrape_error` = 1). The HELP text and label names of a metric must be identical in all files. A test checks both across the files of both tasks.
 

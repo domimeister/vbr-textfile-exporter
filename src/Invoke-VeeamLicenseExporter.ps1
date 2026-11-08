@@ -33,13 +33,27 @@ if ($LogPath) {
     catch { Write-Warning ('Cannot start transcript {0}: {1}' -f $LogPath, $_.Exception.Message) }
 }
 
+$moduleRoot = Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporter'
+$moduleLoaded = $false
 try {
-    Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporter\VeeamExporter.psd1') -Force
+    Import-Module -Name (Join-Path -Path $moduleRoot -ChildPath 'VeeamExporter.psd1') -Force
+    $moduleLoaded = $true
     $result = Invoke-VeeamLicenseExporterRun -TextfileDirectory $TextfileDirectory -ModuleName $ModuleName
     if ($result.Success) { $exitCode = 0 }
 }
 catch {
     Write-Error -Message ('Veeam license exporter aborted: {0}' -f $_.Exception.Message) -ErrorAction Continue
+}
+
+if (-not $moduleLoaded) {
+    # Without the module: still replace the health file, collector license 0.
+    try {
+        . (Join-Path -Path (Join-Path -Path $moduleRoot -ChildPath 'Private') -ChildPath 'FallbackHealth.ps1')
+        . (Join-Path -Path (Join-Path -Path $moduleRoot -ChildPath 'Public') -ChildPath 'Write-PromFile.ps1')
+        Write-PromFile -Directory $TextfileDirectory -Name 'veeam_exporter_license.prom' `
+            -Content (Format-VeeamFailedHealthText -Collector @('license') -Known @('license'))
+    }
+    catch { Write-Warning ('Writing veeam_exporter_license.prom without the module failed: {0}' -f $_.Exception.Message) }
 }
 
 if ($transcript) { try { $null = Stop-Transcript } catch { Write-Verbose 'Stop-Transcript failed.' } }
