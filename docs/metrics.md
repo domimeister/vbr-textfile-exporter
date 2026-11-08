@@ -57,8 +57,8 @@ A single call to `GET /api/v1/jobs/states` returns all values. The Veeam Backup 
 
 All metrics are gauges.
 
-- **Disabled jobs:** on VBR 13.1 a disabled file share job keeps `status` `Stopped` and keeps its `nextRun`; only `nextRunPolicy` becomes `<Disabled>` (lab test, #36). `veeam_job_enabled` therefore checks both fields.
 - **Label `job_name` instead of `job`:** Prometheus sets `job` itself on scrape; a label with the same name would be renamed to `exported_job`.
+- **Disabled jobs:** on VBR 13.1 a disabled file share job keeps `status` `Stopped` and keeps its `nextRun`; only `nextRunPolicy` becomes `<Disabled>` (lab test, #36). `veeam_job_enabled` therefore checks both fields.
 - **Retries:** REST does not show whether a retry follows a failure ([Veeam Forum](https://forums.veeam.com/viewtopic.php?p=453319)). A Failed inside the retry window is therefore normal. Alerts need a `for` covering the window (Veeam default: 3 retries of 10 minutes each).
 - **Covered job types** according to the API enum: vSphere and Hyper-V backup, vSphere replica, backup copy, agent (Windows, Linux), Cloud Director, Entra ID. Tape, file share and SureBackup are not in the enum, see open points.
 
