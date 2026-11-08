@@ -50,14 +50,14 @@ if ($LogPath) {
     catch { Write-Warning ('Cannot start transcript {0}: {1}' -f $LogPath, $_.Exception.Message) }
 }
 
+$moduleRoot = Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporter'
+$moduleLoaded = $false
 try {
-    Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporter\VeeamExporter.psd1') -Force
-    $credential = Import-Clixml -LiteralPath $CredentialPath
-    if (-not ($credential -is [System.Management.Automation.PSCredential])) {
-        throw "$CredentialPath does not contain a PSCredential."
-    }
-
-    $result = Invoke-VeeamExporterRun -TextfileDirectory $TextfileDirectory -Credential $credential `
+    Import-Module -Name (Join-Path -Path $moduleRoot -ChildPath 'VeeamExporter.psd1') -Force
+    $moduleLoaded = $true
+    # The run reads the credential itself, so a credential that cannot be read
+    # still ends with veeam_exporter.prom (all collectors 0).
+    $result = Invoke-VeeamExporterRun -TextfileDirectory $TextfileDirectory -CredentialPath $CredentialPath `
         -BaseUri $BaseUri -CertificateThumbprint $CertificateThumbprint -ApiVersion $ApiVersion `
         -Collector $Collector -ObjectLookbackDays $ObjectLookbackDays -ObjectSessionType $ObjectSessionType `
         -TimeoutSec $TimeoutSec
@@ -65,6 +65,17 @@ try {
 }
 catch {
     Write-Error -Message ('Veeam exporter aborted: {0}' -f $_.Exception.Message) -ErrorAction Continue
+}
+
+if (-not $moduleLoaded) {
+    # Without the module: still replace the health file, every collector 0.
+    try {
+        . (Join-Path -Path (Join-Path -Path $moduleRoot -ChildPath 'Private') -ChildPath 'FallbackHealth.ps1')
+        . (Join-Path -Path (Join-Path -Path $moduleRoot -ChildPath 'Public') -ChildPath 'Write-PromFile.ps1')
+        Write-PromFile -Directory $TextfileDirectory -Name 'veeam_exporter.prom' `
+            -Content (Format-VeeamFailedHealthText -Collector $Collector -Known @('jobs', 'objects', 'repositories'))
+    }
+    catch { Write-Warning ('Writing veeam_exporter.prom without the module failed: {0}' -f $_.Exception.Message) }
 }
 
 if ($transcript) { try { $null = Stop-Transcript } catch { Write-Verbose 'Stop-Transcript failed.' } }
