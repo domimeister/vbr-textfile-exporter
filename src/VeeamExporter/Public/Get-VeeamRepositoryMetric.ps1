@@ -34,9 +34,11 @@ function Get-VeeamRepositoryMetric {
             host            = [string](Get-VeeamField -InputObject $state -Name 'hostName')
             sobr            = (Get-VeeamRepositorySobrName -State $state -SobrMap $sobrMap)
         }
-        Add-PromSample -Metric $capacity -Labels $labels -Value (ConvertTo-VeeamByteCount -GB (Get-VeeamField -InputObject $state -Name 'capacityGB'))
-        Add-PromSample -Metric $free -Labels $labels -Value (ConvertTo-VeeamByteCount -GB (Get-VeeamField -InputObject $state -Name 'freeGB'))
-        Add-PromSample -Metric $backup -Labels $labels -Value (ConvertTo-VeeamByteCount -GB (Get-VeeamField -InputObject $state -Name 'usedSpaceGB'))
+        $item = "Repository '$name'"
+        $toBytes = { param($v) ConvertTo-VeeamByteCount -GB $v }
+        Add-PromSample -Metric $capacity -Labels $labels -Value (ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $state -Name 'capacityGB') -Field 'capacityGB' -Item $item -Conversion $toBytes)
+        Add-PromSample -Metric $free -Labels $labels -Value (ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $state -Name 'freeGB') -Field 'freeGB' -Item $item -Conversion $toBytes)
+        Add-PromSample -Metric $backup -Labels $labels -Value (ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $state -Name 'usedSpaceGB') -Field 'usedSpaceGB' -Item $item -Conversion $toBytes)
 
         $isOnline = ConvertTo-VeeamBool -Value (Get-VeeamField -InputObject $state -Name 'isOnline')
         if ($null -ne $isOnline) { Add-PromSample -Metric $online -Labels ([ordered]@{ repository = $name }) -Value ([int]$isOnline) }

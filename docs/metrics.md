@@ -39,6 +39,7 @@ Both tasks run locally on the backup server. The only outside traffic is the exi
 - **API version:** `x-api-version` in every request. The script picks the highest revision the server offers: 1.3-rev2 (13.1), 1.3-rev1 (13.0.1), 1.3-rev0 (13.0). VBR 12 (1.2-rev1) is not supported; if the server accepts none of these revisions, the exporter fails with a message that VBR 13 is required.
 - **Credential:** local Veeam user, password encrypted with DPAPI (`Export-Clixml`) for the task account; it exists only on the server itself.
 - **Role:** Veeam Backup Viewer is enough for jobs, sessions and repositories. REST returns the license only to Veeam Backup Administrator, see the license section; the same applies to `/api/v1/serverInfo`, so the exporter reads the VBR version locally instead (OP-13).
+- **Faulty values:** if one field of an API item cannot be converted (a timestamp, a size or a count), only the series of that field is left out, and the run writes a warning naming the item and the field (e.g. `Job 'Backup Job 1': field lastRun skipped: Invalid timestamp: '...'`). All other series of that item and all other items are written, and the collector counts as successful. A job whose `nextRun` cannot be read gets `schedule="unknown"`.
 - **Writing files:** write `<name>.prom.tmp` first, then rename (atomic). UTF-8 without BOM, LF line endings, newline at end of file. Do not use `Out-File` under 5.1, it writes UTF-16.
 
 ## Jobs & Results
