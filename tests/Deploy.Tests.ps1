@@ -741,6 +741,30 @@ Describe 'Format-CertificateThumbprint' {
             { Format-CertificateThumbprint -Thumbprint $In } | Should -Throw $Message
         }
     }
+
+    It 'gives the same result as the check of the exporter for <Case>' -TestCases @(
+        @{ Case = 'upper case'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00' }
+        @{ Case = 'blanks, colons, hyphens, lower case'; In = 'c0 ff:ee-00 c0ff ee00c0ffee00c0ffee00c0ffee00' }
+        @{ Case = 'U+200E in front'; In = ([string][char]0x200E + 'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00') }
+        @{ Case = 'a tab and a line break'; In = "C0FFEE00C0FFEE00C0FF`tEE00C0FFEE00C0FFEE00`r`n" }
+        @{ Case = 'a label'; In = 'SHA1: C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00' }
+        @{ Case = 'SHA-256'; In = ('3F2A' * 16) }
+        @{ Case = '39 digits'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE0' }
+        @{ Case = 'an empty value'; In = '' }
+        @{ Case = 'non-ASCII digits'; In = ([string][char]0x0661 + 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE0') }
+    ) {
+        param($Case, $In)
+        # Installer and exporter each have their own copy (separate modules); they must not drift.
+        $deploy = InModuleScope VeeamExporterDeploy -Parameters @{ In = $In } {
+            param($In)
+            try { 'ok:' + (Format-CertificateThumbprint -Thumbprint $In) } catch { 'error:' + $_.Exception.Message }
+        }
+        $exporter = InModuleScope VeeamExporter -Parameters @{ In = $In } {
+            param($In)
+            try { 'ok:' + (ConvertTo-VeeamCertificateThumbprint -Thumbprint $In) } catch { 'error:' + $_.Exception.Message }
+        }
+        $exporter | Should -BeExactly $deploy
+    }
 }
 
 Describe 'Uninstall-VeeamExporter' {
@@ -1051,6 +1075,16 @@ Describe 'Permissions: directories' {
         if (-not (New-TestLink -Path (Join-Path $dir 'veeam_jobs.prom.tmp') -Target (Join-Path $dir 'node_custom.prom'))) { Set-ItResult -Skipped -Because 'symbolic links not permitted'; return }
         $problems = InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) @(Get-VeeamExporterTextfileProblem -Directory $Dir) }
         $problems | Should -BeLike '*veeam_jobs.prom.tmp: junction or symbolic link'
+    }
+
+    It 'textfile directory: asks for the trusted accounts once, not per file' {
+        $dir = New-TestDirectory -Name 'textfile'
+        foreach ($n in 'veeam_jobs.prom', 'veeam_objects.prom', 'veeam_exporter.prom', 'veeam_jobs.prom.tmp') { [System.IO.File]::WriteAllText((Join-Path $dir $n), "x 1`n") }
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterTrustedSid { @('S-1-5-18', 'S-1-5-32-544') }
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
+        InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) @(Get-VeeamExporterTextfileProblem -Directory $Dir) } | Should -BeNullOrEmpty
+        Should -Invoke -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity -Times 5 -Exactly
+        Should -Invoke -ModuleName VeeamExporterDeploy Get-VeeamExporterTrustedSid -Times 1 -Exactly
     }
 }
 

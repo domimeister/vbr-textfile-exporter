@@ -14,7 +14,7 @@ function Get-VeeamJobMetric {
         [Parameter(Mandatory = $true, ParameterSetName = 'State')][AllowEmptyCollection()][object[]]$JobState
     )
     if ($PSCmdlet.ParameterSetName -eq 'Session') {
-        $JobState = @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/jobs/states')
+        $JobState = @(Get-VeeamJobState -Session $Session)
     }
 
     $info = New-PromMetric -Name 'veeam_job_info' -Help 'Veeam job (value always 1)'
