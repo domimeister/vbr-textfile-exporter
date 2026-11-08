@@ -258,11 +258,37 @@ function Get-TlsCertificateInfo {
 }
 
 function Format-CertificateThumbprint {
-    # Hex digits only, upper case.
+    # The 40 hex digits of a SHA-1 thumbprint, upper case. Blanks, colons and
+    # hyphens are dropped as separators, and so are invisible format
+    # characters (the certificate dialog prepends U+200E when copying).
+    # Anything else, e.g. a label like "SHA1:", or a length other than 40
+    # (SHA-256) is refused: the task would pin a value that never matches.
     [CmdletBinding()]
     [OutputType([string])]
     param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Thumbprint)
-    return (($Thumbprint -replace '[^0-9A-Fa-f]', '').ToUpperInvariant())
+    $hex = New-Object -TypeName System.Text.StringBuilder
+    foreach ($c in $Thumbprint.ToCharArray()) {
+        if ([char]::GetUnicodeCategory($c) -eq [System.Globalization.UnicodeCategory]::Format) { continue }
+        if ([char]::IsWhiteSpace($c) -or $c -eq ':' -or $c -eq '-') { continue }
+        if ("$c" -notmatch '^[0-9A-Fa-f]$') {
+            throw ("Certificate thumbprint contains '{0}'. Give only the 40 hex digits of the SHA-1 thumbprint (blanks and colons are fine)." -f $c)
+        }
+        $null = $hex.Append($c)
+    }
+    if ($hex.Length -ne 40) {
+        throw ('Certificate thumbprint has {0} hex digits, expected the 40 of a SHA-1 thumbprint.' -f $hex.Length)
+    }
+    return $hex.ToString().ToUpperInvariant()
+}
+
+function ConvertTo-VeeamExporterFullPath {
+    # Absolute path, relative to the current PowerShell location. The SYSTEM
+    # tasks run in C:\Windows\System32, so a relative path in their arguments
+    # would point somewhere else.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Path)
 }
 
 # ---------------------------------------------------- PowerShell / Veeam module --
@@ -1084,6 +1110,11 @@ function Install-VeeamExporter {
     )
     if (-not $InstallPath) { $InstallPath = Join-Path -Path $env:ProgramFiles -ChildPath 'VeeamExporter' }
     if (-not $DataPath) { $DataPath = Join-Path -Path $env:ProgramData -ChildPath 'VeeamExporter' }
+    # The paths go into the SYSTEM tasks: absolute before anything uses them.
+    $InstallPath = ConvertTo-VeeamExporterFullPath -Path $InstallPath
+    $DataPath = ConvertTo-VeeamExporterFullPath -Path $DataPath
+    if ($TextfileDirectory) { $TextfileDirectory = ConvertTo-VeeamExporterFullPath -Path $TextfileDirectory }
+    if ($VeeamModule -and ($VeeamModule -match '[\\/]' -or $VeeamModule -like '*.psd1')) { $VeeamModule = ConvertTo-VeeamExporterFullPath -Path $VeeamModule }
     if (-not (Test-VeeamExporterAdministrator)) { throw 'Run the installation in an elevated PowerShell (Administrator).' }
 
     # Existing installation and data directory: refuse an untrusted one before

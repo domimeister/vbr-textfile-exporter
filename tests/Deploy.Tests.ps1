@@ -210,14 +210,14 @@ Describe 'Task arguments' {
         $d = InModuleScope VeeamExporterDeploy -Parameters @{ WinPs = $script:WinPs } {
             param($WinPs)
             Get-VeeamExporterTaskDefinition -Kind Rest -HostPath $WinPs -InstallPath 'C:\Program Files\VeeamExporter' -DataPath 'C:\ProgramData\VeeamExporter' `
-                -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs\' -CertificateThumbprint 'ab:cd ef' -Collector 'jobs', 'objects'
+                -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs\' -CertificateThumbprint 'ab:cd ef 01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef 01' -Collector 'jobs', 'objects'
         }
         $d.TaskPath | Should -BeExactly '\VeeamExporter\'
         $d.TaskName | Should -BeExactly 'Veeam Exporter REST'
         $d.Execute | Should -BeExactly $script:WinPs
         $d.Argument | Should -BeExactly ('-NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File "C:\Program Files\VeeamExporter\Invoke-VeeamExporter.ps1"' +
             ' -CredentialPath C:\ProgramData\VeeamExporter\veeam.cred.xml -TextfileDirectory "C:\Program Files\windows_exporter\textfile_inputs"' +
-            ' -Collector jobs,objects -ObjectLookbackDays 8 -LogPath C:\ProgramData\VeeamExporter\logs\rest.log -CertificateThumbprint ABCDEF')
+            ' -Collector jobs,objects -ObjectLookbackDays 8 -LogPath C:\ProgramData\VeeamExporter\logs\rest.log -CertificateThumbprint ABCDEF0123456789ABCDEF0123456789ABCDEF01')
         $d.Trigger.Type | Should -BeExactly 'Repeat'
         $d.Trigger.IntervalMinutes | Should -Be 15
         $d.ExecutionTimeLimit.TotalMinutes | Should -Be 10
@@ -263,7 +263,7 @@ Describe 'Task arguments' {
         Mock -ModuleName VeeamExporterDeploy Register-ScheduledTask { }
         InModuleScope VeeamExporterDeploy {
             foreach ($kind in 'Rest', 'License') {
-                $d = Get-VeeamExporterTaskDefinition -Kind $kind -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory 'C:\t' -CertificateThumbprint 'AA'
+                $d = Get-VeeamExporterTaskDefinition -Kind $kind -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory 'C:\t' -CertificateThumbprint ('AA' * 20)
                 Register-VeeamExporterTask -Definition $d -Confirm:$false
             }
         }
@@ -459,9 +459,34 @@ Describe 'Install-VeeamExporter' {
     }
 
     It 'takes a given thumbprint without a TLS query' {
-        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -CertificateThumbprint 'ab cd:ef' -NoStart -InformationAction SilentlyContinue
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -CertificateThumbprint 'ab cd:ef 01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef 01' -NoStart -InformationAction SilentlyContinue
         Should -Invoke -ModuleName VeeamExporterDeploy Get-TlsCertificateInfo -Times 0 -Exactly
-        $script:Registered[0].Argument | Should -Match '-CertificateThumbprint ABCDEF$'
+        $script:Registered[0].Argument | Should -Match '-CertificateThumbprint ABCDEF0123456789ABCDEF0123456789ABCDEF01$'
+    }
+
+    It 'refuses an invalid thumbprint before it changes anything' {
+        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -CertificateThumbprint 'SHA256: 3F:2A' -NoStart -InformationAction SilentlyContinue } | Should -Throw "*contains 'S'*"
+        Test-Path -LiteralPath $script:Install | Should -BeFalse
+        $script:Registered.Count | Should -Be 0
+    }
+
+    It 'makes relative paths absolute before they go into the tasks' {
+        $module = Join-Path -Path $TestDrive -ChildPath 'Veeam.Backup.PowerShell.psd1'
+        [System.IO.File]::WriteAllText($module, "@{ ModuleVersion = '13.0.1.1' }")
+        Push-Location -LiteralPath $TestDrive
+        try {
+            $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath (Split-Path -Leaf $script:Install) -DataPath (Split-Path -Leaf $script:Data) `
+                -TextfileDirectory (Split-Path -Leaf $script:Textfile) -VeeamModule (Join-Path '.' 'Veeam.Backup.PowerShell.psd1') `
+                -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+        }
+        finally { Pop-Location }
+        $result.InstallPath | Should -BeExactly $script:Install
+        $result.DataPath | Should -BeExactly $script:Data
+        $result.TextfileDirectory | Should -BeExactly $script:Textfile
+        # Join-TaskArgument quotes only arguments with blanks; TestDrive has none.
+        $script:Registered[0].Argument | Should -BeLike ('* -File {0}*' -f $script:Install)
+        $script:Registered[0].Argument | Should -BeLike ('* -TextfileDirectory {0} *' -f $script:Textfile)
+        $script:Registered[1].Argument | Should -BeLike ('* -ModuleName {0}*' -f $module)
     }
 
     It 'registers only the REST task with -SkipLicenseTask' {
@@ -840,7 +865,7 @@ Describe 'Permissions: install and uninstall' {
         Mock -ModuleName VeeamExporterDeploy Unregister-ScheduledTask { }
         $script:InstallArgs = @{
             SourceRoot = $script:RepoRoot; InstallPath = $script:Install; DataPath = $script:Data; TextfileDirectory = $script:Textfile
-            Credential = (New-TestCredential); CertificateThumbprint = 'AB'; SkipLicenseTask = $true; NoStart = $true; InformationAction = 'SilentlyContinue'
+            Credential = (New-TestCredential); CertificateThumbprint = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00'; SkipLicenseTask = $true; NoStart = $true; InformationAction = 'SilentlyContinue'
         }
     }
 
@@ -946,5 +971,35 @@ Describe 'Reading the certificate from localhost:9419' {
 
     It 'reports a closed port with host and port' {
         { Get-TlsCertificateInfo -HostName '127.0.0.1' -Port 9 -TimeoutSeconds 3 } | Should -Throw '*127.0.0.1:9*'
+    }
+}
+
+Describe 'Format-CertificateThumbprint' {
+    It 'normalizes <Case>' -TestCases @(
+        @{ Case = 'upper case without separators'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00' }
+        @{ Case = 'lower case with blanks'; In = 'c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00' }
+        @{ Case = 'colons and hyphens'; In = 'C0:FF:EE:00:C0:FF:EE:00:C0:FF-EE-00-C0-FF-EE-00-C0-FF-EE-00' }
+        @{ Case = 'copied from the certificate dialog (U+200E in front)'; In = ([string][char]0x200E + 'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00') }
+    ) {
+        param($In)
+        InModuleScope VeeamExporterDeploy -Parameters @{ In = $In } {
+            param($In)
+            Format-CertificateThumbprint -Thumbprint $In
+        } | Should -BeExactly 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00'
+    }
+
+    It 'refuses <Case>' -TestCases @(
+        @{ Case = 'a label from certutil'; In = 'Cert Hash(sha1): c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00'; Message = "*contains 'r'*" }
+        @{ Case = 'a SHA-256 fingerprint'; In = ('3F2A' * 16); Message = '*64 hex digits*' }
+        @{ Case = 'a SHA-256 label'; In = 'SHA256: 3F:2A'; Message = "*contains 'S'*" }
+        @{ Case = 'a value without hex digits'; In = ' : - '; Message = '*0 hex digits*' }
+        @{ Case = 'an empty value'; In = ''; Message = '*0 hex digits*' }
+        @{ Case = 'one digit too few'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE0'; Message = '*39 hex digits*' }
+    ) {
+        param($In, $Message)
+        InModuleScope VeeamExporterDeploy -Parameters @{ In = $In; Message = $Message } {
+            param($In, $Message)
+            { Format-CertificateThumbprint -Thumbprint $In } | Should -Throw $Message
+        }
     }
 }
