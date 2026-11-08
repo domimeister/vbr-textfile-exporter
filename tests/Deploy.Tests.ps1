@@ -592,6 +592,36 @@ Describe 'Credential handover file' {
     }
 }
 
+Describe 'Format-CertificateThumbprint' {
+    It 'normalizes <Case>' -TestCases @(
+        @{ Case = 'upper case without separators'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00' }
+        @{ Case = 'lower case with blanks'; In = 'c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00' }
+        @{ Case = 'colons and hyphens'; In = 'C0:FF:EE:00:C0:FF:EE:00:C0:FF-EE-00-C0-FF-EE-00-C0-FF-EE-00' }
+        @{ Case = 'copied from the certificate dialog (U+200E in front)'; In = ([string][char]0x200E + 'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00') }
+    ) {
+        param($In)
+        InModuleScope VeeamExporterDeploy -Parameters @{ In = $In } {
+            param($In)
+            Format-CertificateThumbprint -Thumbprint $In
+        } | Should -BeExactly 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00'
+    }
+
+    It 'refuses <Case>' -TestCases @(
+        @{ Case = 'a label from certutil'; In = 'Cert Hash(sha1): c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00'; Message = "*contains 'r'*" }
+        @{ Case = 'a SHA-256 fingerprint'; In = ('3F2A' * 16); Message = '*64 hex digits*' }
+        @{ Case = 'a SHA-256 label'; In = 'SHA256: 3F:2A'; Message = "*contains 'S'*" }
+        @{ Case = 'a value without hex digits'; In = ' : - '; Message = '*0 hex digits*' }
+        @{ Case = 'an empty value'; In = ''; Message = '*0 hex digits*' }
+        @{ Case = 'one digit too few'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE0'; Message = '*39 hex digits*' }
+    ) {
+        param($In, $Message)
+        InModuleScope VeeamExporterDeploy -Parameters @{ In = $In; Message = $Message } {
+            param($In, $Message)
+            { Format-CertificateThumbprint -Thumbprint $In } | Should -Throw $Message
+        }
+    }
+}
+
 Describe 'Uninstall-VeeamExporter' {
     BeforeEach {
         $script:Textfile = New-TestDirectory -Name 'textfile'
@@ -971,35 +1001,5 @@ Describe 'Reading the certificate from localhost:9419' {
 
     It 'reports a closed port with host and port' {
         { Get-TlsCertificateInfo -HostName '127.0.0.1' -Port 9 -TimeoutSeconds 3 } | Should -Throw '*127.0.0.1:9*'
-    }
-}
-
-Describe 'Format-CertificateThumbprint' {
-    It 'normalizes <Case>' -TestCases @(
-        @{ Case = 'upper case without separators'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00' }
-        @{ Case = 'lower case with blanks'; In = 'c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00' }
-        @{ Case = 'colons and hyphens'; In = 'C0:FF:EE:00:C0:FF:EE:00:C0:FF-EE-00-C0-FF-EE-00-C0-FF-EE-00' }
-        @{ Case = 'copied from the certificate dialog (U+200E in front)'; In = ([string][char]0x200E + 'c0ffee00c0ffee00c0ffee00c0ffee00c0ffee00') }
-    ) {
-        param($In)
-        InModuleScope VeeamExporterDeploy -Parameters @{ In = $In } {
-            param($In)
-            Format-CertificateThumbprint -Thumbprint $In
-        } | Should -BeExactly 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00'
-    }
-
-    It 'refuses <Case>' -TestCases @(
-        @{ Case = 'a label from certutil'; In = 'Cert Hash(sha1): c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00 c0 ff ee 00'; Message = "*contains 'r'*" }
-        @{ Case = 'a SHA-256 fingerprint'; In = ('3F2A' * 16); Message = '*64 hex digits*' }
-        @{ Case = 'a SHA-256 label'; In = 'SHA256: 3F:2A'; Message = "*contains 'S'*" }
-        @{ Case = 'a value without hex digits'; In = ' : - '; Message = '*0 hex digits*' }
-        @{ Case = 'an empty value'; In = ''; Message = '*0 hex digits*' }
-        @{ Case = 'one digit too few'; In = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE0'; Message = '*39 hex digits*' }
-    ) {
-        param($In, $Message)
-        InModuleScope VeeamExporterDeploy -Parameters @{ In = $In; Message = $Message } {
-            param($In, $Message)
-            { Format-CertificateThumbprint -Thumbprint $In } | Should -Throw $Message
-        }
     }
 }
