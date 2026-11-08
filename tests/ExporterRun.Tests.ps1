@@ -44,20 +44,23 @@ Describe 'Invoke-VeeamExporterRun' {
         $lines[13] | Should -BeExactly ''
     }
 
-    It 'leaves vbr_version empty on HTTP 403 from serverInfo, without a warning (Viewer role)' {
-        Set-VeeamApiMock -ServerInfoStatus 403
+    It 'reads vbr_version locally and never calls serverInfo (Backup Viewer may not, OP-13)' {
+        Set-VeeamApiMock -VbrVersion '13.1.2.57'
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningVariable warnings -WarningAction SilentlyContinue
-        Export-GeneratedPromFile -Directory $script:Dir -Name 'ExporterRun/serverinfo-403'
         $result.Success | Should -BeTrue
         @($warnings).Count | Should -Be 0
-        Get-FileText -Path $script:HealthFile | Should -Match ([regex]::Escape('api_version="1.3-rev2",vbr_version=""} 1'))
+        Get-FileText -Path $script:HealthFile | Should -Match ([regex]::Escape('api_version="1.3-rev2",vbr_version="13.1.2.57"} 1'))
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Path -like '*serverInfo*' }
     }
 
-    It 'warns on other errors from serverInfo' {
-        Set-VeeamApiMock -ServerInfoStatus 500
+    It 'leaves vbr_version empty and warns once if the local version cannot be read; collectors still run' {
+        Set-VeeamApiMock -VbrVersionFails
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningVariable warnings -WarningAction SilentlyContinue
+        Export-GeneratedPromFile -Directory $script:Dir -Name 'ExporterRun/vbr-version-unreadable'
         $result.Success | Should -BeTrue
-        @($warnings | Where-Object { "$_" -like '*serverInfo*' }).Count | Should -Be 1
+        @($warnings | Where-Object { "$_" -like 'VBR version not readable*' }).Count | Should -Be 1
+        @($warnings).Count | Should -Be 1
+        Get-FileText -Path $script:HealthFile | Should -Match ([regex]::Escape('api_version="1.3-rev2",vbr_version=""} 1'))
     }
 
     It 'accepts collectors as a comma-separated list (powershell.exe -File)' {
@@ -138,7 +141,8 @@ Describe 'Invoke-VeeamExporterRun' {
         $health | Should -Match 'veeam_exporter_collector_success\{collector="jobs"\} 0'
         $health | Should -Match 'veeam_exporter_collector_success\{collector="objects"\} 0'
         $health | Should -Match 'veeam_exporter_collector_success\{collector="repositories"\} 0'
-        $health | Should -Match ([regex]::Escape('api_version="",vbr_version=""} 1'))
+        # The VBR version is read locally and does not need the login (OP-13).
+        $health | Should -Match ([regex]::Escape('api_version="",vbr_version="13.0.1.180"} 1'))
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Path -eq '/api/v1/jobs/states' }
     }
 

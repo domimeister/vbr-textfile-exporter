@@ -38,7 +38,7 @@ Both tasks run locally on the backup server. The only outside traffic is the exi
 - **Auth:** OAuth2 password grant on `/api/oauth2/token`; access token valid for 15 minutes, refresh token for 24 hours. Log in on every run, call `/api/oauth2/logout` at the end ([Veeam REST Overview](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview)).
 - **API version:** `x-api-version` in every request. The script picks the highest revision the server offers: 1.3-rev2 (13.1), 1.3-rev1 (13.0.1), 1.3-rev0 (13.0). VBR 12 (1.2-rev1) is not supported; if the server accepts none of these revisions, the exporter fails with a message that VBR 13 is required.
 - **Credential:** local Veeam user, password encrypted with DPAPI (`Export-Clixml`) for the task account; it exists only on the server itself.
-- **Role:** Veeam Backup Viewer is enough for jobs, sessions and repositories. REST returns the license only to Veeam Backup Administrator, see the license section; the same applies to `/api/v1/serverInfo` (OP-13).
+- **Role:** Veeam Backup Viewer is enough for jobs, sessions and repositories. REST returns the license only to Veeam Backup Administrator, see the license section; the same applies to `/api/v1/serverInfo`, so the exporter reads the VBR version locally instead (OP-13).
 - **Writing files:** write `<name>.prom.tmp` first, then rename (atomic). UTF-8 without BOM, LF line endings, newline at end of file. Do not use `Out-File` under 5.1, it writes UTF-16.
 
 ## Jobs & Results
@@ -153,7 +153,7 @@ The same metric may appear in several files as long as the label values differ. 
 | --- | --- | --- | --- |
 | `veeam_exporter_collector_success` | collector | 1 last run ok, 0 failure | script |
 | `veeam_exporter_collector_duration_seconds` | collector | duration in seconds | script |
-| `veeam_exporter_info` | script_version, api_version, vbr_version | 1 | script, `/api/v1/serverInfo` (`vbr_version` only with Backup Administrator, see OP-13) |
+| `veeam_exporter_info` | script_version, api_version, vbr_version | 1 | script; `vbr_version` is the file version of the VBR backup service binary (service `VeeamBackupSvc`), empty if it cannot be read (OP-13) |
 | `windows_textfile_mtime_seconds` | file | modification time of each .prom file | windows_exporter |
 | `windows_textfile_scrape_error` | – | 1 if a file cannot be read | windows_exporter |
 
@@ -240,7 +240,7 @@ These points can only be settled in the lab; they change details, not the archit
 - [ ] **OP-10** Jobs without `lastRun` (never run): `veeam_job_last_run_timestamp_seconds` is then missing. `VeeamJobNotRun` does not fire for these jobs; consider a separate alert on `veeam_job_last_result == -1`. Lab test with VBR 13.1 (November 2026): a job created but never started has no `lastRun`; the exporter writes `veeam_job_last_result -1` and no `veeam_job_last_run_timestamp_seconds`, as assumed. Open: whether a separate alert is wanted.
 - [ ] **OP-11** Which session type do agent jobs run under? From 1.3 on there are also `AgentBackup`, `AgentPolicy`, `EndpointBackup` and `BackupCopyJob`. If agent tasks end up there, they are missing from `veeam_objects.prom` with the default `BackupJob,ReplicaJob` and have to be added via parameter.
 - [x] **OP-12** Does a SOBR itself appear as a row in `repositories/states` (type `ExtendableRepository` in the enum)? Then sums over all repositories count the extents twice; build sums over `sobr=""` plus extents, or exclude the SOBR row. For now the exporter outputs the row unchanged. Lab test with VBR 13.1 (November 2026): no. Only the two extents appear, each with the `sobr` label; a sum over all rows counts every extent once.
-- [ ] **OP-13** According to the reference, `GET /api/v1/serverInfo` is only available to Backup Administrator. With the viewer account, `vbr_version` in `veeam_exporter_info` stays empty (HTTP 403, no warning). Alternative: read the version locally from the installation. Lab test with VBR 13.1 (November 2026): confirmed, HTTP 403 for Backup Viewer. Open: whether to read the version locally instead.
+- [x] **OP-13** According to the reference, `GET /api/v1/serverInfo` is only available to Backup Administrator. With the viewer account, `vbr_version` in `veeam_exporter_info` stays empty (HTTP 403, no warning). Alternative: read the version locally from the installation. Lab test with VBR 13.1 (November 2026): confirmed, HTTP 403 for Backup Viewer. Settled: the exporter runs on the VBR server and reads the version locally, as the file version of the binary of the service `VeeamBackupSvc` (`ImagePath` in `HKLM:\SYSTEM\CurrentControlSet\Services\VeeamBackupSvc`). In the lab `Veeam.Backup.Service.exe` has file version 13.1.2.57, the same as `buildVersion` from `serverInfo` with a Backup Administrator account and the `DisplayVersion` of "Veeam Backup & Replication Server". The exporter no longer calls `serverInfo`.
 - [ ] **OP-14** Socket licenses: `SocketLicenseSummary` (`LicensedSocketsNumber`, `UsedSocketsNumber` per platform) is not exported yet. Only needed if socket licenses are still in use.
 
 1. Script skeleton: auth, version probe, atomic writing, jobs collector. Done.

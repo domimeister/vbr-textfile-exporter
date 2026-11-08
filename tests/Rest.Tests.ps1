@@ -184,7 +184,7 @@ Describe 'Disconnect-VeeamServer' {
 }
 
 Describe 'Read-only' {
-    It 'allows GET on <Path>' -TestCases @(@{ Path = '/api/v1/jobs/states' }, @{ Path = '/api/v1/serverInfo' }) {
+    It 'allows GET on <Path>' -TestCases @(@{ Path = '/api/v1/jobs/states' }, @{ Path = '/api/v1/sessions' }) {
         param($Path)
         InModuleScope VeeamExporter -Parameters @{ Path = $Path } {
             param($Path)

@@ -85,20 +85,28 @@ function Assert-PromText {
 }
 
 # REST API mock for complete runs (all collectors). Parameters switch
-# single endpoints to an error status.
+# single endpoints to an error status. The VBR version is read locally
+# (docs/metrics.md#OP-13); -VbrVersionFails makes that lookup throw.
 function Set-VeeamApiMock {
     param(
         [int]$TokenStatus = 200,
         [string]$TokenContent = $script:TokenJson,
         [int]$JobsStatus = 200,
         [int]$TaskSessionsStatus = 200,
-        [int]$ServerInfoStatus = 200
+        [string]$VbrVersion = '13.0.1.180',
+        [switch]$VbrVersionFails
     )
     $script:MockTokenStatus = $TokenStatus
     $script:MockTokenContent = $TokenContent
     $script:MockJobsStatus = $JobsStatus
     $script:MockTaskSessionsStatus = $TaskSessionsStatus
-    $script:MockServerInfoStatus = $ServerInfoStatus
+    $script:MockVbrVersion = $VbrVersion
+    if ($VbrVersionFails) {
+        Mock -ModuleName VeeamExporter Get-VeeamLocalServerVersion { throw 'Cannot find path HKLM:\SYSTEM\CurrentControlSet\Services\VeeamBackupSvc' }
+    }
+    else {
+        Mock -ModuleName VeeamExporter Get-VeeamLocalServerVersion { $script:MockVbrVersion }
+    }
     $script:MockRepositoryStates = Get-FixtureText -Name 'repositories-sobr-states.json'
     $script:MockSobrs = Get-FixtureText -Name 'doc/1.3-rev2/scaleOutRepositories.json'
     $script:MockJobsContent = Get-FixtureText -Name 'jobs-states.json'
@@ -109,10 +117,6 @@ function Set-VeeamApiMock {
         switch ($Path) {
             '/api/oauth2/token' { return New-HttpResponse -StatusCode $script:MockTokenStatus -Content $script:MockTokenContent }
             '/api/oauth2/logout' { return New-HttpResponse -StatusCode 200 }
-            '/api/v1/serverInfo' {
-                if ($script:MockServerInfoStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockServerInfoStatus -Content '{"errorCode":"AccessDenied","message":"Access is denied."}' }
-                return New-HttpResponse -StatusCode 200 -Content '{"vbrId":"b3b2c6e0","name":"vbr01","buildVersion":"13.0.1.180","patches":[]}'
-            }
             '/api/v1/backupInfrastructure/repositories/states' { return New-HttpResponse -StatusCode 200 -Content $script:MockRepositoryStates }
             '/api/v1/backupInfrastructure/scaleOutRepositories' { return New-HttpResponse -StatusCode 200 -Content $script:MockSobrs }
             '/api/v1/jobs/states' {
