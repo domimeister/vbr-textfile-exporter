@@ -2,3 +2,4 @@
 *.cred.xml
 testResults.xml
 coverage.xml
+.cache/
