@@ -23,11 +23,9 @@ BeforeAll {
                     return New-HttpResponse -StatusCode 200 -Content $script:Empty
                 }
                 '/api/v1/taskSessions' {
-                    if ($Query['sessionTypeFilter'] -eq 'BackupJob') {
-                        # the doc example reports total 52 for 6 items; serve one complete page
-                        return New-HttpResponse -StatusCode 200 -Content ($script:DocTasks -replace '"total": 52', '"total": 6')
-                    }
-                    return New-HttpResponse -StatusCode 200 -Content $script:Empty
+                    if ($Query.Contains('sessionTypeFilter')) { throw 'sessionTypeFilter must not be used (#21)' }
+                    # the doc example reports total 52 for 6 items; serve one complete page
+                    return New-HttpResponse -StatusCode 200 -Content ($script:DocTasks -replace '"total": 52', '"total": 6')
                 }
             }
             throw "Unexpected request: $Method $Path"
@@ -90,15 +88,39 @@ Describe 'Objects collector: REST queries' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Method -ne 'GET' }
     }
 
-    It 'queries each session type separately' {
+    It 'queries sessions per type and task sessions once without a type filter' {
         $null = Get-VeeamObjectMetric -Session (New-TestSession)
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' }
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' -and $Query['typeFilter'] -eq 'BackupJob' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' -and $Query['typeFilter'] -eq 'ReplicaJob' }
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' -and $Query['sessionTypeFilter'] -eq 'BackupJob' }
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' -and $Query['sessionTypeFilter'] -eq 'ReplicaJob' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Query -and $Query.Contains('sessionTypeFilter') }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Query -and $Query['typeFilter'] -like '*,*' }
+    }
+
+    It 'keeps file share tasks and drops tasks of other session types (real VBR 13.1 responses)' {
+        $script:LabSessions = Get-FixtureData -Name 'lab/vbr-13.1/sessions.json'
+        $script:LabTasks = Get-FixtureText -Name 'lab/vbr-13.1/taskSessions.json'
+        $script:LabJobs = Get-FixtureText -Name 'lab/vbr-13.1/jobs-states.json'
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
+            switch ($Path) {
+                '/api/v1/jobs/states' { return New-HttpResponse -StatusCode 200 -Content $script:LabJobs }
+                '/api/v1/sessions' {
+                    # the server filters by type
+                    $data = @($script:LabSessions | Where-Object { $_.sessionType -eq $Query['typeFilter'] })
+                    $body = ConvertTo-Json -Depth 8 -InputObject @{ data = $data; pagination = @{ total = $data.Count; count = $data.Count; skip = 0; limit = 200 } }
+                    return New-HttpResponse -StatusCode 200 -Content $body
+                }
+                '/api/v1/taskSessions' {
+                    # VBR 13.1: sessionTypeFilter=BackupJob matches no file share task
+                    if ($Query.Contains('sessionTypeFilter')) { return New-HttpResponse -StatusCode 200 -Content '{"data":[],"pagination":{"total":0,"count":0,"skip":0,"limit":200}}' }
+                    return New-HttpResponse -StatusCode 200 -Content $script:LabTasks
+                }
+            }
+            throw "Unexpected request: $Method $Path"
+        }
+        $text = ConvertTo-PromText -Metric (Get-VeeamObjectMetric -Session (New-TestSession))
+        Assert-PromText -Actual $text -Expected (Get-ExpectedText -Name 'lab/vbr-13.1/veeam_objects.prom')
     }
 
     It 'uses only the given session types' {

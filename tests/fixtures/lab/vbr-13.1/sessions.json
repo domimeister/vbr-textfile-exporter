@@ -1,0 +1,478 @@
+{
+  "data": [
+    {
+      "sessionType": "MalwareDetection",
+      "state": "Working",
+      "id": "0ec7c002-08bf-4ee6-9720-904bb62afbed",
+      "name": "Malware Detection",
+      "jobId": "a856b3a6-3956-46f5-ae2d-9b05fef19a5c",
+      "creationTime": "2026-11-08T09:24:37.506083+01:00",
+      "progressPercent": 0,
+      "result": {
+        "result": "None",
+        "message": "",
+        "isCanceled": false
+      },
+      "usn": 3141,
+      "initiatedBy": "SYSTEM",
+      "originalSessionId": "0ec7c002-08bf-4ee6-9720-904bb62afbed"
+    },
+    {
+      "sessionType": "VolumesDiscover",
+      "state": "Stopped",
+      "id": "f736cf79-68b7-4809-8f02-9fd280a68559",
+      "name": "Host Discovery",
+      "jobId": "7ae19d43-3a7c-41ab-8ccf-a1761ed3b96f",
+      "creationTime": "2026-11-08T09:21:54.917418+01:00",
+      "endTime": "2026-11-08T09:22:45.583512+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 3038,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "f736cf79-68b7-4809-8f02-9fd280a68559"
+    },
+    {
+      "sessionType": "VeeamUpdaterSettingsSync",
+      "state": "Stopped",
+      "id": "a5530b77-0a33-4139-825c-ea7f20d76f4c",
+      "name": "Update Settings Synchronization",
+      "jobId": "a5530b77-0a33-4139-825c-ea7f20d76f4c",
+      "creationTime": "2026-11-08T09:21:54.417176+01:00",
+      "endTime": "2026-11-08T09:25:57.910394+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 3163,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "a5530b77-0a33-4139-825c-ea7f20d76f4c"
+    },
+    {
+      "sessionType": "ConfigurationBackup",
+      "state": "Stopped",
+      "id": "3f9796df-45e5-4b14-b92d-ada4473eadd7",
+      "name": "Backup Configuration Job",
+      "jobId": "99d1bf3d-e2e0-4bec-b2b3-820c0b87d212",
+      "creationTime": "2026-11-08T09:12:53.743544+01:00",
+      "endTime": "2026-11-08T09:13:31.962066+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Warning",
+        "message": "Warning",
+        "isCanceled": false
+      },
+      "usn": 2279,
+      "initiatedBy": "VBRTEST\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "3f9796df-45e5-4b14-b92d-ada4473eadd7"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "platformName": "UnstructuredData",
+      "algorithm": "None",
+      "id": "2a84eddf-63d6-40be-9f60-709e3535c560",
+      "name": "FS Broken (Full)",
+      "jobId": "3eb8464b-debb-4a69-89f2-66d6c663afc1",
+      "creationTime": "2026-11-08T09:12:53.302018+01:00",
+      "endTime": "2026-11-08T09:14:54.890858+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Failed",
+        "message": "Processing VBRTEST",
+        "isCanceled": false
+      },
+      "resourceId": "a07db8a5-a347-4b67-9ccd-1b072440fafc",
+      "resourceReference": "/api/v1/backups/a07db8a5-a347-4b67-9ccd-1b072440fafc",
+      "usn": 2641,
+      "platformId": "00000000-0000-0000-0000-000000000000",
+      "initiatedBy": ".\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "progress": {
+        "bottleneck": "Target",
+        "duration": "00:02:01",
+        "processingRate": "N/A",
+        "processedSize": 0,
+        "readSize": 0,
+        "transferredSize": 755,
+        "progressPercent": 100
+      },
+      "originalSessionId": "2a84eddf-63d6-40be-9f60-709e3535c560"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "platformName": "UnstructuredData",
+      "algorithm": "None",
+      "id": "c6d4719c-d974-47c6-90cf-04026adc1af9",
+      "name": "FS TestData SOBR (Full)",
+      "jobId": "daf413a9-f9d6-4c42-a16d-8fb64d978a23",
+      "creationTime": "2026-11-08T09:12:53.048843+01:00",
+      "endTime": "2026-11-08T09:15:41.308112+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "resourceId": "f14eeeab-1525-4ad9-a173-0f7eb08b7a71",
+      "resourceReference": "/api/v1/backups/f14eeeab-1525-4ad9-a173-0f7eb08b7a71",
+      "usn": 2863,
+      "platformId": "00000000-0000-0000-0000-000000000000",
+      "initiatedBy": ".\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:02:48",
+        "processingRate": "2 MB",
+        "processedSize": 20971520,
+        "readSize": 20971520,
+        "transferredSize": 21067973,
+        "progressPercent": 100
+      },
+      "originalSessionId": "c6d4719c-d974-47c6-90cf-04026adc1af9"
+    },
+    {
+      "sessionType": "BackupJob",
+      "state": "Stopped",
+      "platformName": "UnstructuredData",
+      "algorithm": "None",
+      "id": "05e3e1ce-fe9d-44be-9fa5-16cb9bc44882",
+      "name": "FS TestData (Full)",
+      "jobId": "329b62b7-b962-406a-865c-b4b75fc9345c",
+      "creationTime": "2026-11-08T09:12:52.673366+01:00",
+      "endTime": "2026-11-08T09:15:12.158133+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "resourceId": "03b3f37e-0550-4013-8dad-8e669d6a2646",
+      "resourceReference": "/api/v1/backups/03b3f37e-0550-4013-8dad-8e669d6a2646",
+      "usn": 2752,
+      "platformId": "00000000-0000-0000-0000-000000000000",
+      "initiatedBy": ".\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "progress": {
+        "bottleneck": "Proxy",
+        "duration": "00:02:19",
+        "processingRate": "2 MB",
+        "processedSize": 20971520,
+        "readSize": 20971520,
+        "transferredSize": 21067973,
+        "progressPercent": 100
+      },
+      "originalSessionId": "05e3e1ce-fe9d-44be-9fa5-16cb9bc44882"
+    },
+    {
+      "sessionType": "VolumesDiscover",
+      "state": "Stopped",
+      "id": "27524938-cedb-4102-87e0-5228182429d6",
+      "name": "Host Discovery",
+      "jobId": "1014cd7d-7d4c-487c-9cb8-f2aa61b5df00",
+      "creationTime": "2026-11-08T09:11:34.96859+01:00",
+      "endTime": "2026-11-08T09:11:45.969498+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 1697,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "27524938-cedb-4102-87e0-5228182429d6"
+    },
+    {
+      "sessionType": "FileServerSave",
+      "state": "Stopped",
+      "id": "1569033a-2d14-457d-9d57-2420f63eaeb8",
+      "name": "File Share Update",
+      "jobId": "1569033a-2d14-457d-9d57-2420f63eaeb8",
+      "creationTime": "2026-11-08T09:11:30.277061+01:00",
+      "endTime": "2026-11-08T09:11:46.143411+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "resourceId": "6321d14b-b0e7-41f4-9530-029a24952b0d",
+      "resourceReference": "/api/v1/inventory/entraId/tenants/6321d14b-b0e7-41f4-9530-029a24952b0d",
+      "usn": 1700,
+      "initiatedBy": "VBRTEST\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "1569033a-2d14-457d-9d57-2420f63eaeb8"
+    },
+    {
+      "sessionType": "Infrastructure",
+      "state": "Stopped",
+      "id": "89d26a1b-0105-4202-91f0-8302951e0e48",
+      "name": "Infrastructure Item Saving",
+      "jobId": "89d26a1b-0105-4202-91f0-8302951e0e48",
+      "creationTime": "2026-11-08T08:28:56.948073+01:00",
+      "endTime": "2026-11-08T08:29:06.684289+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "resourceId": "e6aa2761-c224-46ff-a1ea-2ae5bc063f30",
+      "resourceReference": "/api/v1/backupInfrastructure/scaleOutRepositories/e6aa2761-c224-46ff-a1ea-2ae5bc063f30",
+      "usn": 1425,
+      "initiatedBy": "VBRTEST\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "89d26a1b-0105-4202-91f0-8302951e0e48"
+    },
+    {
+      "sessionType": "Infrastructure",
+      "state": "Stopped",
+      "id": "99b6dd47-168d-4b17-a873-025426437679",
+      "name": "Infrastructure Item Saving",
+      "jobId": "99b6dd47-168d-4b17-a873-025426437679",
+      "creationTime": "2026-11-08T08:28:47.778851+01:00",
+      "endTime": "2026-11-08T08:28:55.044386+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "resourceId": "e85c867a-1f5d-416e-a0b0-d6c2866e2a56",
+      "resourceReference": "/api/v1/backupInfrastructure/repositories/e85c867a-1f5d-416e-a0b0-d6c2866e2a56",
+      "usn": 1403,
+      "initiatedBy": "VBRTEST\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "99b6dd47-168d-4b17-a873-025426437679"
+    },
+    {
+      "sessionType": "Infrastructure",
+      "state": "Stopped",
+      "id": "30919ef7-315b-44de-8bd4-202d08ee1243",
+      "name": "Infrastructure Item Saving",
+      "jobId": "30919ef7-315b-44de-8bd4-202d08ee1243",
+      "creationTime": "2026-11-08T08:28:38.849519+01:00",
+      "endTime": "2026-11-08T08:28:45.964555+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "resourceId": "c64c1463-c857-4c00-84fe-162eee3d0baf",
+      "resourceReference": "/api/v1/backupInfrastructure/repositories/c64c1463-c857-4c00-84fe-162eee3d0baf",
+      "usn": 1355,
+      "initiatedBy": "VBRTEST\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "30919ef7-315b-44de-8bd4-202d08ee1243"
+    },
+    {
+      "sessionType": "Infrastructure",
+      "state": "Stopped",
+      "id": "af97e44a-c153-405c-b253-5b65cffde117",
+      "name": "Infrastructure Item Saving",
+      "jobId": "af97e44a-c153-405c-b253-5b65cffde117",
+      "creationTime": "2026-11-08T08:28:21.091245+01:00",
+      "endTime": "2026-11-08T08:28:37.242835+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "resourceId": "c9d4e009-22f1-44d6-aad0-95f9e364307e",
+      "resourceReference": "/api/v1/backupInfrastructure/repositories/c9d4e009-22f1-44d6-aad0-95f9e364307e",
+      "usn": 1308,
+      "initiatedBy": "VBRTEST\\Administrator",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "af97e44a-c153-405c-b253-5b65cffde117"
+    },
+    {
+      "sessionType": "MalwareDetection",
+      "state": "Stopped",
+      "id": "94d375fb-9353-4412-bc47-8bb156f8e0a3",
+      "name": "Malware Detection",
+      "jobId": "a856b3a6-3956-46f5-ae2d-9b05fef19a5c",
+      "creationTime": "2026-11-08T08:25:32.138441+01:00",
+      "endTime": "2026-11-08T09:24:37.833294+01:00",
+      "progressPercent": 0,
+      "result": {
+        "result": "Failed",
+        "message": "Malware Detection failed, check session log for details.",
+        "isCanceled": false
+      },
+      "usn": 3136,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "94d375fb-9353-4412-bc47-8bb156f8e0a3"
+    },
+    {
+      "sessionType": "VolumesDiscover",
+      "state": "Stopped",
+      "id": "6d16ad1e-9873-4f58-8adb-7bdee53a2a53",
+      "name": "Host Discovery",
+      "jobId": "3fd2f419-e052-4243-9a23-fb224a12cefa",
+      "creationTime": "2026-11-08T08:23:15.560888+01:00",
+      "endTime": "2026-11-08T08:24:02.997408+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 1193,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "6d16ad1e-9873-4f58-8adb-7bdee53a2a53"
+    },
+    {
+      "sessionType": "VeeamUpdaterSettingsSync",
+      "state": "Stopped",
+      "id": "b9e47e60-4bad-4198-bb7b-0c4ea6c54de3",
+      "name": "Update Settings Synchronization",
+      "jobId": "b9e47e60-4bad-4198-bb7b-0c4ea6c54de3",
+      "creationTime": "2026-11-08T08:23:15.100742+01:00",
+      "endTime": "2026-11-08T08:27:03.090944+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 1248,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "b9e47e60-4bad-4198-bb7b-0c4ea6c54de3"
+    },
+    {
+      "sessionType": "MalwareDetection",
+      "state": "Stopped",
+      "id": "4cedb3a5-8e08-4a05-9da0-0a07f3d0156f",
+      "name": "Malware Detection",
+      "jobId": "a856b3a6-3956-46f5-ae2d-9b05fef19a5c",
+      "creationTime": "2026-11-08T08:14:11.526676+01:00",
+      "endTime": "2026-11-08T08:25:32.577598+01:00",
+      "progressPercent": 0,
+      "result": {
+        "result": "Failed",
+        "message": "Malware Detection failed, check session log for details.",
+        "isCanceled": false
+      },
+      "usn": 1225,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "4cedb3a5-8e08-4a05-9da0-0a07f3d0156f"
+    },
+    {
+      "sessionType": "VolumesDiscover",
+      "state": "Stopped",
+      "id": "b616ccd9-e926-4667-9878-061d0f5c44d1",
+      "name": "Host Discovery",
+      "jobId": "00afbff4-4f2f-4fa6-a40a-7ba31e07572e",
+      "creationTime": "2026-11-08T08:13:08.231807+01:00",
+      "endTime": "2026-11-08T08:13:46.968187+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 1030,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "b616ccd9-e926-4667-9878-061d0f5c44d1"
+    },
+    {
+      "sessionType": "VeeamUpdaterSettingsSync",
+      "state": "Stopped",
+      "id": "9e5208a0-982f-42a5-8203-fa08e1268316",
+      "name": "Update Settings Synchronization",
+      "jobId": "9e5208a0-982f-42a5-8203-fa08e1268316",
+      "creationTime": "2026-11-08T08:13:07.97607+01:00",
+      "endTime": "2026-11-08T08:13:25.183621+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 983,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "9e5208a0-982f-42a5-8203-fa08e1268316"
+    },
+    {
+      "sessionType": "VolumesDiscover",
+      "state": "Stopped",
+      "id": "9bcddaf7-dfa3-432a-af2e-fea7902fe076",
+      "name": "Host Discovery",
+      "jobId": "4814cdae-7479-4804-98b4-29fda3e014a1",
+      "creationTime": "2026-11-08T08:12:54.989282+01:00",
+      "endTime": "2026-11-08T08:13:05.681725+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 940,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "9bcddaf7-dfa3-432a-af2e-fea7902fe076"
+    },
+    {
+      "sessionType": "VeeamUpdaterSettingsSync",
+      "state": "Stopped",
+      "id": "5c81afed-0a0d-455c-83a2-a59de49ab94b",
+      "name": "Update Settings Synchronization",
+      "jobId": "5c81afed-0a0d-455c-83a2-a59de49ab94b",
+      "creationTime": "2026-11-08T08:12:37.780161+01:00",
+      "endTime": "2026-11-08T08:12:54.631971+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 899,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "5c81afed-0a0d-455c-83a2-a59de49ab94b"
+    },
+    {
+      "sessionType": "HostComponentsUpdate",
+      "state": "Stopped",
+      "id": "ee095a96-e2af-469d-909a-9b54f81571a4",
+      "name": "Host Upgrade",
+      "jobId": "ee095a96-e2af-469d-909a-9b54f81571a4",
+      "creationTime": "2026-11-08T08:11:35.79763+01:00",
+      "endTime": "2026-11-08T08:13:07.024419+01:00",
+      "progressPercent": 100,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "usn": 948,
+      "initiatedBy": "SYSTEM",
+      "relatedSessionId": "00000000-0000-0000-0000-000000000000",
+      "originalSessionId": "ee095a96-e2af-469d-909a-9b54f81571a4"
+    }
+  ],
+  "pagination": {
+    "total": 22,
+    "count": 22,
+    "skip": 0,
+    "limit": 50
+  }
+}

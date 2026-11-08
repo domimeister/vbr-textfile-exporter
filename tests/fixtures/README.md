@@ -22,6 +22,10 @@ Notable: depending on the version, the examples write enum values in lower or up
 - `jobs-states.json`: hand-made, covers Success/Warning/Failed/None, running/disabled, chained jobs without `nextRun` and never-run jobs without `lastRun`.
 - `jobs-states-escaping.json`: edge cases for label values (quotes, backslashes, line break, umlauts) and unknown values in `lastResult`/`status`. The German names with umlauts are intentional test data for UTF-8 handling.
 
+## `lab/vbr-13.1/` - real responses
+
+Responses of a real VBR 13.1 server (lab, Backup Viewer account, REST 1.3-rev2), reformatted with indentation, content unchanged: `jobs-states.json` (four file share jobs: Success, Success to a SOBR, Failed, never run), `sessions.json` (all session types of that day, including malware detection and the configuration backup), `taskSessions.json` (three file share tasks and one malware detection task). Expected output in `expected/lab/vbr-13.1/`.
+
 ## `license/`
 
 License objects as returned by `Get-VBRInstalledLicense`, as JSON. Built from the documented properties of [VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/vbrinstalledlicense.html) and the examples of [Get-VBRInstalledLicense](https://helpcenter.veeam.com/docs/vbr/powershell/get-vbrinstalledlicense.html) (instances 1000/2, socket summary). The docs contain no real output; compare with `Get-VBRInstalledLicense | ConvertTo-Json -Depth 3` during the first lab test.

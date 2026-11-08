@@ -1,0 +1,18 @@
+# HELP veeam_object_last_result Last task run: 0 Success, 1 Warning, 2 Failed, -1 None
+# TYPE veeam_object_last_result gauge
+veeam_object_last_result{job_name="FS Broken",object="VBRTEST"} 2
+veeam_object_last_result{job_name="FS TestData",object="VBRTEST"} 0
+veeam_object_last_result{job_name="FS TestData SOBR",object="VBRTEST"} 0
+# HELP veeam_object_last_run_timestamp_seconds End of the last task run as Unix time (start while it is running)
+# TYPE veeam_object_last_run_timestamp_seconds gauge
+veeam_object_last_run_timestamp_seconds{job_name="FS Broken",object="VBRTEST"} 1794125690
+veeam_object_last_run_timestamp_seconds{job_name="FS TestData",object="VBRTEST"} 1794125709
+veeam_object_last_run_timestamp_seconds{job_name="FS TestData SOBR",object="VBRTEST"} 1794125737
+# HELP veeam_object_last_processed_bytes Bytes processed in the last task run
+# TYPE veeam_object_last_processed_bytes gauge
+veeam_object_last_processed_bytes{job_name="FS Broken",object="VBRTEST"} 0
+veeam_object_last_processed_bytes{job_name="FS TestData",object="VBRTEST"} 20971520
+veeam_object_last_processed_bytes{job_name="FS TestData SOBR",object="VBRTEST"} 20971520
+# HELP veeam_object_last_failure_info Message of the last task run on Warning or Failed (value always 1)
+# TYPE veeam_object_last_failure_info gauge
+veeam_object_last_failure_info{job_name="FS Broken",object="VBRTEST",message="0 files and 1 folders (0 B) transferred at 0 KB/s"} 1

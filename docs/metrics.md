@@ -67,10 +67,10 @@ For each job and object, the most recent task run counts. A successful retry thu
 
 1. `GET /api/v1/jobs/states`: map jobId → job name, so that `job_name` matches the value in `veeam_jobs.prom` exactly (also after a job is renamed).
 2. `GET /api/v1/sessions` with `typeFilter=<type>` and `createdAfterFilter=<now − lookback − 1 day>`, one request per session type: map sessionId → jobId. The extra day catches sessions that started before the boundary but whose tasks started after it.
-3. `GET /api/v1/taskSessions` with `sessionTypeFilter=<type>` and `createdAfterFilter=<now − lookback>`, one request per session type, paged via `skip`/`limit`: one entry per object and run with name, result, sessionId, creationTime, endTime, progress.
+3. `GET /api/v1/taskSessions` with `createdAfterFilter=<now − lookback>`, once, paged via `skip`/`limit`: one entry per object and run with name, result, sessionId, creationTime, endTime, progress. Only tasks whose `sessionId` belongs to a session from step 2 are kept. No `sessionTypeFilter`: on VBR 13.1 `sessionTypeFilter=BackupJob` matches no file share tasks, although they report `"sessionType": "BackupJob"` (lab test, #21).
 4. For each job and object, keep the entry with the newest creationTime. The job name comes from step 1; if the jobId is missing there (deleted job, type not in `jobs/states`), the name of the newest session of that job is used.
 
-Session types: `BackupJob` and `ReplicaJob` by default, extensible via parameter. One request per type (1.3 also accepts arrays, but a single value per request keeps the queries simple). According to the documentation example, file share tasks also run under `sessionType=BackupJob`.
+Session types: `BackupJob` and `ReplicaJob` by default, extensible via parameter. One `sessions` request per type (1.3 also accepts arrays, but a single value per request keeps the queries simple). File share jobs run under `sessionType=BackupJob` (confirmed in the lab with VBR 13.1); their task is named after the file server, not the share path.
 
 Both endpoints are available to Veeam Backup Viewer (claims `ViewSessions`, `ViewTaskSessions`) and are in the reference from 1.2-rev0 on ([Sessions reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/Sessions#operation/GetAllTaskSessions)). Proposed lookback: 8 days, so weekly jobs do not drop out. Objects removed from a job disappear once the lookback has passed.
 

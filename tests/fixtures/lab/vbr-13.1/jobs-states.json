@@ -1,0 +1,109 @@
+{
+  "data": [
+    {
+      "type": "FileBackup",
+      "status": "Stopped",
+      "lastResult": "Failed",
+      "workload": "File",
+      "id": "3eb8464b-debb-4a69-89f2-66d6c663afc1",
+      "name": "FS Broken",
+      "description": "Created by Powershell at 08.11.2026 09:12:50.",
+      "lastRun": "2026-11-08T09:12:53.302018+01:00",
+      "nextRunPolicy": "<Not scheduled>",
+      "repositoryId": "c9d4e009-22f1-44d6-aad0-95f9e364307e",
+      "repositoryName": "Repo R",
+      "objectsCount": 1,
+      "sessionId": "2a84eddf-63d6-40be-9f60-709e3535c560",
+      "highPriority": false,
+      "progressPercent": 100,
+      "sessionProgress": {
+        "bottleneck": "Target",
+        "duration": "00:02:01",
+        "processingRate": "N/A",
+        "processedSize": 0,
+        "readSize": 0,
+        "transferredSize": 755,
+        "progressPercent": 100
+      },
+      "isStorageSnapshot": false,
+      "targetName": "Repo R"
+    },
+    {
+      "type": "FileBackup",
+      "status": "Inactive",
+      "lastResult": "None",
+      "workload": "File",
+      "id": "50e51cbb-b488-4568-abe7-402cde97df52",
+      "name": "FS NeverRun",
+      "description": "Created by Powershell at 08.11.2026 09:12:51.",
+      "nextRunPolicy": "<Not scheduled>",
+      "repositoryId": "c9d4e009-22f1-44d6-aad0-95f9e364307e",
+      "repositoryName": "Repo R",
+      "objectsCount": 1,
+      "highPriority": false,
+      "progressPercent": 0,
+      "isStorageSnapshot": false,
+      "targetName": "Repo R"
+    },
+    {
+      "type": "FileBackup",
+      "status": "Stopped",
+      "lastResult": "Success",
+      "workload": "File",
+      "id": "329b62b7-b962-406a-865c-b4b75fc9345c",
+      "name": "FS TestData",
+      "description": "Created by Powershell at 08.11.2026 09:12:47.",
+      "lastRun": "2026-11-08T09:12:52.673366+01:00",
+      "nextRunPolicy": "<Not scheduled>",
+      "repositoryId": "c9d4e009-22f1-44d6-aad0-95f9e364307e",
+      "repositoryName": "Repo R",
+      "objectsCount": 1,
+      "sessionId": "05e3e1ce-fe9d-44be-9fa5-16cb9bc44882",
+      "highPriority": false,
+      "progressPercent": 100,
+      "sessionProgress": {
+        "bottleneck": "Proxy",
+        "duration": "00:02:19",
+        "processingRate": "2 MB/s",
+        "processedSize": 20971520,
+        "readSize": 20971520,
+        "transferredSize": 21067973,
+        "progressPercent": 100
+      },
+      "isStorageSnapshot": false,
+      "targetName": "Repo R"
+    },
+    {
+      "type": "FileBackup",
+      "status": "Stopped",
+      "lastResult": "Success",
+      "workload": "File",
+      "id": "daf413a9-f9d6-4c42-a16d-8fb64d978a23",
+      "name": "FS TestData SOBR",
+      "description": "Created by Powershell at 08.11.2026 09:12:49.",
+      "lastRun": "2026-11-08T09:12:53.048843+01:00",
+      "nextRunPolicy": "<Not scheduled>",
+      "repositoryId": "e6aa2761-c224-46ff-a1ea-2ae5bc063f30",
+      "repositoryName": "SOBR Test",
+      "objectsCount": 1,
+      "sessionId": "c6d4719c-d974-47c6-90cf-04026adc1af9",
+      "highPriority": false,
+      "progressPercent": 100,
+      "sessionProgress": {
+        "bottleneck": "Source",
+        "duration": "00:02:48",
+        "processingRate": "2 MB/s",
+        "processedSize": 20971520,
+        "readSize": 20971520,
+        "transferredSize": 21067973,
+        "progressPercent": 100
+      },
+      "isStorageSnapshot": false,
+      "targetName": "SOBR Test"
+    }
+  ],
+  "pagination": {
+    "total": 4,
+    "count": 4
+  }
+}

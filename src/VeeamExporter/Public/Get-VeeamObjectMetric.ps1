@@ -4,8 +4,9 @@ function Get-VeeamObjectMetric {
     Objects collector: newest task session per job and object -> metrics for veeam_objects.prom.
     .DESCRIPTION
     Follows docs/metrics.md, section "Unprotected VMs (per object)":
-    jobs/states for the job names, sessions and taskSessions per session type
-    (one request per type), all pages.
+    jobs/states for the job names, sessions per session type (one request per
+    type), task sessions once for the lookback and filtered by their sessionId,
+    all pages.
     Pass -JobState, -JobSession and -TaskSession to build the metrics from
     already loaded data (tests).
     #>
@@ -26,19 +27,27 @@ function Get-VeeamObjectMetric {
 
         $JobState = @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/jobs/states')
         $sessions = New-Object -TypeName System.Collections.Generic.List[object]
-        $tasks = New-Object -TypeName System.Collections.Generic.List[object]
+        $sessionIds = New-OrdinalDictionary
         foreach ($type in $SessionType) {
             $sessionQuery = [ordered]@{
                 typeFilter         = $type
                 createdAfterFilter = (ConvertTo-VeeamFilterTimestamp -Value $sessionCutoff)
             }
-            foreach ($item in @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/sessions' -Query $sessionQuery)) { $sessions.Add($item) }
-
-            $taskQuery = [ordered]@{
-                sessionTypeFilter  = $type
-                createdAfterFilter = (ConvertTo-VeeamFilterTimestamp -Value $taskCutoff)
+            foreach ($item in @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/sessions' -Query $sessionQuery)) {
+                $sessions.Add($item)
+                $sid = Get-VeeamGuidKey -Value (Get-VeeamField -InputObject $item -Name 'id')
+                if ($sid) { $sessionIds[$sid] = $true }
             }
-            foreach ($item in @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/taskSessions' -Query $taskQuery)) { $tasks.Add($item) }
+        }
+
+        # Task sessions once, without sessionTypeFilter: on VBR 13.1 the filter
+        # matches no file share tasks, although they report sessionType BackupJob
+        # (lab test, #21). Keep the tasks whose session was loaded above.
+        $taskQuery = [ordered]@{ createdAfterFilter = (ConvertTo-VeeamFilterTimestamp -Value $taskCutoff) }
+        $tasks = New-Object -TypeName System.Collections.Generic.List[object]
+        foreach ($item in @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/taskSessions' -Query $taskQuery)) {
+            $sid = Get-VeeamGuidKey -Value (Get-VeeamField -InputObject $item -Name 'sessionId')
+            if ($sid -and $sessionIds.ContainsKey($sid)) { $tasks.Add($item) }
         }
         $JobSession = $sessions.ToArray()
         $TaskSession = $tasks.ToArray()

@@ -41,7 +41,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Certificate pinning (5.1: validation callback, 7: HttpClientHandler) | implemented | works (REST task under 5.1, self-signed VBR certificate) |
 | Writer (atomic, UTF-8 without BOM, LF) | implemented | works |
 | Collector `jobs` → `veeam_jobs.prom` | implemented | works; file share jobs appear as `job_type="FileBackup"`, `workload="File"`. The configuration backup job is not in `jobs/states` |
-| Collector `objects` → `veeam_objects.prom` | implemented | empty for file share jobs ([#21](https://github.com/domimeister/vbr-textfile-exporter/issues/21)); VM jobs not tested |
+| Collector `objects` → `veeam_objects.prom` | implemented | works for file share jobs (object = file server); VM jobs not tested |
 | Collector `repositories` → `veeam_repositories.prom` | implemented | works, including SOBR extents (the SOBR itself has no row of its own) |
 | Health → `veeam_exporter.prom` | implemented | works; `vbr_version` stays empty for Backup Viewer (OP-13) |
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
