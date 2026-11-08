@@ -5,6 +5,13 @@
 BeforeAll {
     . (Join-Path -Path $PSScriptRoot -ChildPath 'TestHelpers.ps1')
     Set-TestTimeZone
+
+    function ConvertFrom-TestJsonArray {
+        # Windows PowerShell 5.1 returns a JSON array as one object; wrap it
+        # like the API responses (data) so both editions get the elements.
+        param([Parameter(Mandatory = $true)][string]$Json)
+        return @((('{"data":' + $Json + '}') | ConvertFrom-Json).data)
+    }
 }
 
 Describe 'Faulty values: jobs collector' {
@@ -17,7 +24,7 @@ Describe 'Faulty values: jobs collector' {
     "lastResult": "Failed", "lastRun": "yesterday-ish", "nextRun": "not a date", "nextRunPolicy": "08:00 every day", "objectsCount": "many" }
 ]
 '@
-        $script:Jobs = @($json | ConvertFrom-Json)
+        $script:Jobs = ConvertFrom-TestJsonArray -Json $json
         $script:Text = ConvertTo-PromText -Metric (Get-VeeamJobMetric -JobState $script:Jobs -WarningVariable w -WarningAction SilentlyContinue)
         $script:Warnings = @($w | ForEach-Object { [string]$_ })
     }
@@ -55,7 +62,7 @@ Describe 'Faulty values: repositories collector' {
   { "id": "b", "name": "Repo B", "type": "WinLocal", "hostName": "h", "capacityGB": 100, "freeGB": 50, "usedSpaceGB": 5, "isOnline": true, "isOutOfDate": false }
 ]
 '@
-        $text = ConvertTo-PromText -Metric (Get-VeeamRepositoryMetric -RepositoryState @($json | ConvertFrom-Json) -ScaleOutRepository @() -WarningVariable w -WarningAction SilentlyContinue)
+        $text = ConvertTo-PromText -Metric (Get-VeeamRepositoryMetric -RepositoryState (ConvertFrom-TestJsonArray -Json $json) -ScaleOutRepository @() -WarningVariable w -WarningAction SilentlyContinue)
         $text | Should -Not -Match 'veeam_repository_capacity_bytes\{repository="Repo A"'
         $text | Should -Match 'veeam_repository_free_bytes\{repository="Repo A"[^}]*\} 11274289152'
         $text | Should -Match 'veeam_repository_online\{repository="Repo A"\} 1'
@@ -67,21 +74,21 @@ Describe 'Faulty values: repositories collector' {
 
 Describe 'Faulty values: objects collector' {
     It 'keeps the object with the readable values and warns about the rest' {
-        $jobs = @('[{ "id": "11111111-1111-1111-1111-111111111111", "name": "Job 1" }]' | ConvertFrom-Json)
-        $sessions = @(@'
+        $jobs = ConvertFrom-TestJsonArray -Json '[{ "id": "11111111-1111-1111-1111-111111111111", "name": "Job 1" }]'
+        $sessions = ConvertFrom-TestJsonArray -Json @'
 [
   { "id": "aaaaaaaa-0000-0000-0000-000000000001", "jobId": "11111111-1111-1111-1111-111111111111", "name": "Job 1", "creationTime": "garbage" },
   { "id": "aaaaaaaa-0000-0000-0000-000000000002", "jobId": "11111111-1111-1111-1111-111111111111", "name": "Job 1", "creationTime": "2026-11-08T08:00:00+01:00" }
 ]
-'@ | ConvertFrom-Json)
-        $tasks = @(@'
+'@
+        $tasks = ConvertFrom-TestJsonArray -Json @'
 [
   { "id": "t1", "sessionId": "aaaaaaaa-0000-0000-0000-000000000002", "name": "vm01", "usn": 5, "creationTime": "2026-11-08T08:00:00", "endTime": "broken",
     "result": { "result": "Failed", "message": "disk full" }, "progress": { "processedSize": "lots" } },
   { "id": "t2", "sessionId": "aaaaaaaa-0000-0000-0000-000000000001", "name": "vm02", "usn": "x", "creationTime": "also broken", "endTime": "2026-11-08T09:00:00",
     "result": { "result": "Success", "message": "" }, "progress": { "processedSize": 1024 } }
 ]
-'@ | ConvertFrom-Json)
+'@
         $text = ConvertTo-PromText -Metric (Get-VeeamObjectMetric -JobState $jobs -JobSession $sessions -TaskSession $tasks -WarningVariable w -WarningAction SilentlyContinue)
         $warnings = (@($w | ForEach-Object { [string]$_ }) -join "`n")
         # vm01: end time broken -> run time falls back to the creation time; size broken -> no series.
