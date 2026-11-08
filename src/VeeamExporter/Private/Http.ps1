@@ -150,17 +150,35 @@ function Invoke-VeeamHttpRequest {
     catch [System.Net.WebException] {
         $webResponse = $_.Exception.Response
         if ($null -eq $webResponse) { throw }
-        $content = ''
-        $stream = $webResponse.GetResponseStream()
-        if ($null -ne $stream) {
-            $reader = New-Object -TypeName System.IO.StreamReader -ArgumentList $stream, $utf8
-            try { $content = $reader.ReadToEnd() } finally { $reader.Dispose() }
-        }
+        $errorDetails = $null
+        if ($_.ErrorDetails) { $errorDetails = $_.ErrorDetails.Message }
         return [pscustomobject]@{
             StatusCode = [int]$webResponse.StatusCode
-            Content    = $content
+            Content    = (Read-VeeamErrorResponseBody -Stream $webResponse.GetResponseStream() -ErrorDetailsMessage $errorDetails)
         }
     }
+}
+
+function Read-VeeamErrorResponseBody {
+    # Body of an HTTP error response under Windows PowerShell 5.1. Invoke-WebRequest
+    # has already read the response stream (into ErrorDetails), so the stream is at
+    # its end and reading it again returns an empty string (lab test, VBR 13.1).
+    # Rewind it and decode as UTF-8; fall back to ErrorDetails if that gives nothing.
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [AllowNull()][System.IO.Stream]$Stream,
+        [AllowNull()][AllowEmptyString()][string]$ErrorDetailsMessage
+    )
+    $content = ''
+    if ($null -ne $Stream) {
+        if ($Stream.CanSeek) { $Stream.Position = 0 }
+        $utf8 = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $false
+        $reader = New-Object -TypeName System.IO.StreamReader -ArgumentList $Stream, $utf8
+        try { $content = $reader.ReadToEnd() } finally { $reader.Dispose() }
+    }
+    if (-not $content -and $ErrorDetailsMessage) { $content = $ErrorDetailsMessage }
+    return $content
 }
 
 function Get-VeeamErrorText {

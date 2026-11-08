@@ -51,6 +51,9 @@ function New-TestSession {
 $script:TokenJson = '{"access_token":"access-123","token_type":"bearer","refresh_token":"refresh-456","expires_in":900}'
 $script:UnsupportedVersionJson = '{"errorCode":"BadRequest","message":"The specified API version is not supported."}'
 $script:InvalidGrantJson = '{"error":"invalid_grant","error_description":"Invalid username or password."}'
+# Real answers of VBR 13.1 (lab) to POST /api/oauth2/token.
+$script:UnsupportedVersionJsonVbr131 = '{"errorCode":"NotImplemented","message":"The HTTP resource that matches the request URI ''https://localhost:9419/api/oauth2/token'' does not support the API version ''1.3-rev3''.","title":"The HTTP resource that matches the request URI ''https://localhost:9419/api/oauth2/token'' does not support the API version ''1.3-rev3''.","status":400}'
+$script:AccessDeniedJsonVbr131 = '{"errorCode":"AccessDenied","message":"Unable to perform authorization: The provided user credentials are invalid.","title":"Unable to perform authorization: The provided user credentials are invalid.","status":401}'
 
 $script:SupportedDocVersions = @('1.3-rev0', '1.3-rev1', '1.3-rev2')
 

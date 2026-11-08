@@ -37,7 +37,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 
 | Part | Status | Lab test (VBR 13.1) |
 | --- | --- | --- |
-| Auth (OAuth2 password grant, logout), version probe | implemented | works with 1.3-rev2. An unsupported revision gets HTTP 400 with an empty body, which the probe does not recognise; likely breaks VBR 13.0.x ([#22](https://github.com/domimeister/vbr-textfile-exporter/issues/22)) |
+| Auth (OAuth2 password grant, logout), version probe | implemented | works; the probe skips an unsupported revision under Windows PowerShell 5.1 and 7 (checked by putting an unknown revision first) |
 | Certificate pinning (5.1: validation callback, 7: HttpClientHandler) | implemented | works (REST task under 5.1, self-signed VBR certificate) |
 | Writer (atomic, UTF-8 without BOM, LF) | implemented | works |
 | Collector `jobs` → `veeam_jobs.prom` | implemented | works; file share jobs appear as `job_type="FileBackup"`, `workload="File"`. The configuration backup job is not in `jobs/states` |
