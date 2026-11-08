@@ -28,6 +28,7 @@ The windows_exporter, which runs on the server anyway, serves the files to Prome
 | Veeam account | local Windows user with the VBR role **Backup Viewer** for the REST task |
 | Permissions | installation in a PowerShell **as Administrator** |
 | Prometheus | scrapes the windows_exporter (default port 9182) |
+| Grafana | dashboard and alert rules (Grafana-managed alerting), checked with Grafana 13.3 |
 
 Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 
@@ -47,7 +48,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter. Uninstall not tested yet |
 | Grafana dashboard (`dashboards/`) | implemented | not tried against lab data yet |
-| Alert rules (`rules/`) | implemented, unit-tested with promtool | not tried against lab data yet |
+| Grafana alert rules (`alerting/`) | implemented, logic unit-tested with promtool | works in Grafana 13.3: all nine rules evaluate without errors; the failed job and object (after 45 minutes) and the expiring trial license alert; `VeeamJobNotRun` leaves out jobs without a schedule (also one whose schedule is disabled) and a job that never ran; a test webhook got the notifications. Disabled jobs only in the promtool tests (no disabled job in the lab at the time) |
 | Test suite on a machine with VBR installed | - | one test depends on the machine ([#23](https://github.com/domimeister/vbr-textfile-exporter/issues/23)) |
 
 ## Grafana dashboard
@@ -101,9 +102,21 @@ The license task runs as SYSTEM without a stored password and reads the license 
 
 ## Alert rules
 
-`rules/veeam.rules.yml` holds the nine Prometheus alerting rules from [`docs/metrics.md`](docs/metrics.md#example-alerts): failed jobs and objects, jobs with warnings, jobs not run for 26 hours, full and offline repositories, expiring license, and stale exporter files. Load the file via `rule_files` in the Prometheus configuration. The thresholds are proposals; `for: 45m` on the job and object rules covers the Veeam retry window.
+`alerting/veeam-alerts.json` holds nine Grafana alert rules, specified in [`docs/metrics.md`](docs/metrics.md#example-alerts): failed jobs and objects, jobs with warnings, jobs not run for 26 hours, full and offline repositories, expiring license, and stale exporter files. They are a template: neither the exporter nor the install script touches Grafana, and nothing is imported automatically. Pick the rules you need. The thresholds are proposals; `for: 45m` on the job and object rules covers the Veeam retry window.
 
-`tests/rules/veeam.rules.test.yml` tests every rule with `promtool test rules`, including the cases that must not fire (a failed job that is retrying, a disabled job, object storage without capacity).
+Each rule queries Prometheus (`A`, an instant query that returns the value, e.g. hours since the last run) and fires when the threshold `B` is met. Rules come with the label `severity` (`critical` or `warning`) and a `summary` annotation. Contact points and notification policies stay with you: route by `severity`.
+
+Two ways to get them into Grafana:
+
+- **Create them in the Grafana UI** (editable there): a new Grafana-managed alert rule per alert, with the query from `docs/metrics.md` as an instant query `A`, the condition as a threshold on `A`, `for` and the label `severity` from there, and the `summary` from `alerting/veeam-alerts.json`.
+- **Provision the file** (read-only in the UI, change the file instead):
+  1. Remove the rules you do not want from a copy of `alerting/veeam-alerts.json` and put it into the alerting provisioning directory of Grafana, e.g. `/etc/grafana/provisioning/alerting/`. The rules land in the folder `Veeam`, group `veeam`, evaluated every minute.
+  2. Set the environment variable `VEEAM_PROMETHEUS_DATASOURCE_UID` for the Grafana server to the UID of the Prometheus data source that scrapes the VBR servers (shown in the URL of the data source settings, `.../connections/datasources/edit/<uid>`). Grafana replaces `${VEEAM_PROMETHEUS_DATASOURCE_UID}` in the file with it. Without the variable the rules have no data source and show up as `DatasourceError`.
+  3. Restart Grafana, or reload the provisioned alerting resources with `POST /api/admin/provisioning/alerting/reload`.
+
+Earlier versions of this repo shipped Prometheus rules (`rules/veeam.rules.yml`); remove them from `rule_files` in Prometheus if you loaded them, otherwise both alert.
+
+`tests/alerting/veeam-alerts.test.yml` tests the logic of every rule with `promtool test rules`, including the cases that must not fire (a failed job that is retrying, a disabled job, a job without a schedule, object storage without capacity). `tests/Alerts.Tests.ps1` builds an equivalent Prometheus rule for each Grafana rule for this (query `A` combined with the threshold of `B`) and checks the file against the spec.
 
 ## Tests
 
@@ -113,7 +126,7 @@ Invoke-ScriptAnalyzer -Path src -Recurse
 Invoke-ScriptAnalyzer -Path deploy -Recurse
 ```
 
-If `promtool` is in the PATH, `tests/Promtool.Tests.ps1` additionally checks the expected and the generated `.prom` files with `promtool check metrics`, and `tests/Rules.Tests.ps1` runs `promtool check rules` and the rule unit tests; otherwise these tests are skipped.
+If `promtool` is in the PATH, `tests/Promtool.Tests.ps1` additionally checks the expected and the generated `.prom` files with `promtool check metrics`, and `tests/Alerts.Tests.ps1` runs the logic tests of the alert rules; otherwise these tests are skipped.
 
 CI (`.github/workflows/ci.yml`) runs on every pull request and on pushes to `main`, on `windows-latest`, under Windows PowerShell 5.1 and PowerShell 7: Pester, PSScriptAnalyzer (errors fail the build) and `promtool check metrics` on all `.prom` files the tests generated. Locally the same check works like this:
 

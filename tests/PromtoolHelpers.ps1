@@ -1,4 +1,4 @@
-# Shared by tests/Promtool.Tests.ps1, tests/Rules.Tests.ps1 and tests/Invoke-PromtoolCheck.ps1.
+# Shared by tests/Promtool.Tests.ps1, tests/Alerts.Tests.ps1 and tests/Invoke-PromtoolCheck.ps1.
 # Keep this file ASCII-only (Windows PowerShell 5.1 reads it as ANSI).
 
 function Invoke-PromtoolProcess {
