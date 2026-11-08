@@ -8,6 +8,8 @@ $script:TaskPath = '\VeeamExporter\'
 $script:RestTaskName = 'Veeam Exporter REST'
 $script:LicenseTaskName = 'Veeam Exporter License'
 $script:CredentialFileName = 'veeam.cred.xml'
+# REST collectors of Invoke-VeeamExporter.ps1, in the order they run.
+$script:Collectors = @('jobs', 'objects', 'repositories')
 $script:PromFiles = @(
     'veeam_jobs.prom', 'veeam_objects.prom', 'veeam_repositories.prom', 'veeam_license.prom',
     'veeam_exporter.prom', 'veeam_exporter_license.prom'
@@ -476,6 +478,27 @@ function Get-VeeamExporterTaskTextfileDirectory {
     return [string[]]$directories.ToArray()
 }
 
+function ConvertTo-VeeamExporterCollectorList {
+    # -Collector of the installer: comma lists allowed, names in lower case and
+    # each one once, only known collectors. The task gets this list, and the
+    # cleanup of the files of dropped collectors uses it.
+    [CmdletBinding()]
+    [OutputType([string[]])]
+    param([Parameter(Mandatory = $true)][AllowEmptyCollection()][AllowNull()][string[]]$Collector)
+    $names = New-Object -TypeName System.Collections.Generic.List[string]
+    foreach ($value in @($Collector)) {
+        if ($null -eq $value) { continue }
+        foreach ($part in ($value -split ',')) {
+            $name = $part.Trim().ToLowerInvariant()
+            if ($name.Length -eq 0) { continue }
+            if ($script:Collectors -notcontains $name) { throw ("Unknown collector '{0}'. Valid: {1}" -f $part.Trim(), ($script:Collectors -join ', ')) }
+            if (-not $names.Contains($name)) { $names.Add($name) }
+        }
+    }
+    if ($names.Count -eq 0) { throw ('No collector selected. Valid: {0}' -f ($script:Collectors -join ', ')) }
+    return [string[]]$names.ToArray()
+}
+
 function Get-VeeamExporterTaskDefinition {
     <#
     Definition of one scheduled task (pure data, no system change):
@@ -503,7 +526,7 @@ function Get-VeeamExporterTaskDefinition {
             (Join-WindowsPath -Path $InstallPath -ChildPath 'Invoke-VeeamExporter.ps1'),
             '-CredentialPath', (Join-WindowsPath -Path $DataPath -ChildPath $script:CredentialFileName),
             '-TextfileDirectory', $TextfileDirectory.TrimEnd('\'),
-            '-Collector', ((@($Collector) | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ }) -join ','),
+            '-Collector', ((ConvertTo-VeeamExporterCollectorList -Collector $Collector) -join ','),
             '-ObjectLookbackDays', [string]$ObjectLookbackDays,
             '-LogPath', (Join-WindowsPath -Path $logDir -ChildPath 'rest.log')
         )
@@ -1201,6 +1224,9 @@ function Install-VeeamExporter {
     $DataPath = ConvertTo-VeeamExporterFullPath -Path $DataPath
     if ($TextfileDirectory) { $TextfileDirectory = ConvertTo-VeeamExporterFullPath -Path $TextfileDirectory }
     if ($VeeamModule -and ($VeeamModule -match '[\\/]' -or $VeeamModule -like '*.psd1')) { $VeeamModule = ConvertTo-VeeamExporterFullPath -Path $VeeamModule }
+    # A typo would only show up in the first run, and the cleanup below would
+    # count the misspelt collector as dropped.
+    $Collector = @(ConvertTo-VeeamExporterCollectorList -Collector $Collector)
     if (-not (Test-VeeamExporterAdministrator)) { throw 'Run the installation in an elevated PowerShell (Administrator).' }
 
     # Existing installation and data directory: refuse an untrusted one before
@@ -1309,8 +1335,7 @@ function Install-VeeamExporter {
     # values (and the stale alerts would fire on them for good): those of
     # dropped collectors, the license files with -SkipLicenseTask, and all
     # exporter files in a previous textfile directory.
-    $collectorNames = @(@($Collector) -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
-    $outdated = @(foreach ($c in 'jobs', 'objects', 'repositories') { if ($collectorNames -notcontains $c) { 'veeam_{0}.prom' -f $c } })
+    $outdated = @(foreach ($c in $script:Collectors) { if ($Collector -notcontains $c) { 'veeam_{0}.prom' -f $c } })
     if ($SkipLicenseTask) { $outdated += @('veeam_license.prom', 'veeam_exporter_license.prom') }
     $removedOutdated = @()
     if ($outdated.Count -gt 0) { $removedOutdated += @(Remove-VeeamExporterPromFile -TextfileDirectory $TextfileDirectory -Name $outdated) }
