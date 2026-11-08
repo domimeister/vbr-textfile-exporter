@@ -113,10 +113,15 @@ Describe 'Source code rules' {
         $ErrorActionPreference = 'Continue'
         $script = Join-Path -Path $script:SrcRoot -ChildPath 'Invoke-VeeamExporter.ps1'
         $missing = Join-Path -Path $TestDrive -ChildPath 'missing.cred.xml'
-        $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $script -CredentialPath $missing -Collector 'jobs,objects' -ObjectSessionType 'BackupJob,ReplicaJob' 2>&1
+        # Never the default directory: on a machine with windows_exporter the
+        # run would replace the real veeam_exporter.prom.
+        $out = Join-Path -Path $TestDrive -ChildPath 'textfile-lists'
+        $null = New-Item -ItemType Directory -Path $out
+        $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -File $script -CredentialPath $missing -TextfileDirectory $out -Collector 'jobs,objects' -ObjectSessionType 'BackupJob,ReplicaJob' 2>&1
         $LASTEXITCODE | Should -Be 1
         ($output -join ' ') | Should -Not -Match 'Cannot validate argument'
         ($output -join ' ') | Should -Match 'missing.cred.xml'
+        Get-FileText -Path (Join-Path -Path $out -ChildPath 'veeam_exporter.prom') | Should -Match 'veeam_exporter_collector_success\{collector="objects"\} 0'
     }
 
     It 'exports the functions from the manifest' {
