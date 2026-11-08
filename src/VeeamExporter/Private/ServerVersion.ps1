@@ -3,30 +3,10 @@
 # (/api/v1/serverInfo), but the exporter runs on the VBR server: the file
 # version of the backup service binary is the same build number.
 
-function ConvertFrom-ServiceImagePath {
-    # Executable of a service ImagePath: quoted or not, with or without
-    # arguments, environment variables expanded.
-    [CmdletBinding()]
-    [OutputType([string])]
-    param(
-        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$ImagePath
-    )
-    $path = $ImagePath.Trim()
-    if ($path.StartsWith('"')) {
-        $end = $path.IndexOf('"', 1)
-        if ($end -lt 0) { throw ('Unbalanced quote in service image path: {0}' -f $ImagePath) }
-        $path = $path.Substring(1, $end - 1)
-    }
-    else {
-        $match = [regex]::Match($path, '^(.*?\.exe)(\s|$)', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-        if ($match.Success) { $path = $match.Groups[1].Value }
-    }
-    if (-not $path) { throw 'Empty service image path.' }
-    return [System.Environment]::ExpandEnvironmentVariables($path)
-}
-
 function Get-VeeamServiceImagePath {
-    # ImagePath of a service from the registry (Windows only, mocked in tests).
+    # ImagePath of a service from the registry, environment variables
+    # expanded (REG_EXPAND_SZ), as the service control manager starts it.
+    # The executable comes from ConvertFrom-ServiceImagePath (ServiceImagePath.ps1).
     [CmdletBinding()]
     [OutputType([string])]
     param(

@@ -78,6 +78,7 @@ Describe 'windows_exporter: textfile directory' {
         @{ Case = 'config file, plain list with spaces'; Image = 'x.exe --config.file c.yaml'; Config = "collector:`n  textfile:`n    directories: D:\My Data\tf1, D:\tf2`n"; Dir = 'D:\My Data\tf1'; Source = 'config' }
         @{ Case = 'config file, single quotes'; Image = 'x.exe --config.file c.yaml'; Config = "collector:`n  textfile:`n    directories: 'C:\Program Files\we\tf'`n"; Dir = 'C:\Program Files\we\tf'; Source = 'config' }
         @{ Case = 'MSI default next to the exe'; Image = '"C:\Program Files\windows_exporter\windows_exporter.exe" --log.file eventlog'; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
+        @{ Case = 'MSI default next to an unquoted exe with blanks'; Image = 'C:\Program Files\windows_exporter\windows_exporter.exe --log.file eventlog'; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
         @{ Case = 'without service'; Image = $null; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
     ) {
         param($Image, $Config, $Dir, $Source)
@@ -129,6 +130,50 @@ Describe 'windows_exporter: textfile directory' {
             param($Image, $Config)
             (Get-WindowsExporterTextfileDirectory -ImagePath $Image -ConfigText $Config).MetricsUri
         } | Should -BeExactly $Uri
+    }
+}
+
+Describe 'Image path parser shared with the exporter' {
+    BeforeAll {
+        # Child process with the PowerShell edition of this test run.
+        function Invoke-DeployModuleProbe {
+            param([string]$ModulePath)
+            $command = "`$ErrorActionPreference = 'Stop'; Import-Module -Name '$ModulePath'; & (Get-Module -Name VeeamExporterDeploy) { (Get-Command -Name ConvertFrom-ServiceImagePath).ScriptBlock.File }"
+            $encoded = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($command))
+            # Windows PowerShell 5.1 turns redirected stderr of a child process into a
+            # terminating error when $ErrorActionPreference is Stop (GitHub Actions sets it).
+            $ErrorActionPreference = 'Continue'
+            $output = & (Get-Process -Id $PID).Path -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1
+            return [pscustomobject]@{ ExitCode = $LASTEXITCODE; Output = (@($output | ForEach-Object { "$_" }) -join "`n").Trim() }
+        }
+    }
+
+    It 'is the file of the exporter module (repository layout)' {
+        $file = InModuleScope VeeamExporterDeploy { (Get-Command -Name ConvertFrom-ServiceImagePath).ScriptBlock.File }
+        $expected = Join-Path -Path (Join-Path -Path (Join-Path -Path $script:SrcRoot -ChildPath 'VeeamExporter') -ChildPath 'Private') -ChildPath 'ServiceImagePath.ps1'
+        [System.IO.Path]::GetFullPath($file) | Should -Be ([System.IO.Path]::GetFullPath($expected))
+        (Get-Command -Module VeeamExporter -Name ConvertFrom-ServiceImagePath -ErrorAction SilentlyContinue) | Should -BeNullOrEmpty
+        InModuleScope VeeamExporter { (Get-Command -Name ConvertFrom-ServiceImagePath).ScriptBlock.File } | Should -Be $file
+    }
+
+    It 'loads from an installation made by Copy-VeeamExporterFile' {
+        $target = New-TestDirectory -Name 'install'
+        $null = InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
+            param($Root, $Target)
+            Copy-VeeamExporterFile -SourceRoot $Root -InstallPath $Target -Confirm:$false
+        }
+        $r = Invoke-DeployModuleProbe -ModulePath (Join-Path -Path (Join-Path -Path $target -ChildPath 'deploy') -ChildPath 'VeeamExporterDeploy.psm1')
+        $r.ExitCode | Should -Be 0
+        $expected = Join-Path -Path (Join-Path -Path (Join-Path -Path $target -ChildPath 'VeeamExporter') -ChildPath 'Private') -ChildPath 'ServiceImagePath.ps1'
+        [System.IO.Path]::GetFullPath($r.Output) | Should -Be ([System.IO.Path]::GetFullPath($expected))
+    }
+
+    It 'refuses to load without the parser file' {
+        $alone = Join-Path -Path (New-TestDirectory -Name 'alone') -ChildPath 'deploy'
+        $null = New-Item -ItemType Directory -Path $alone
+        Copy-Item -LiteralPath $script:DeployModule -Destination $alone
+        $r = Invoke-DeployModuleProbe -ModulePath (Join-Path -Path $alone -ChildPath 'VeeamExporterDeploy.psm1')
+        ($r.Output -replace '\s', '') | Should -Match 'ServiceImagePath\.ps1oftheexportermodulenotfound'
     }
 }
 
