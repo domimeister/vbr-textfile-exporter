@@ -6,10 +6,10 @@ The install script sets up the exporter on a VBR server: files, encrypted creden
 
 | What | Details |
 | --- | --- |
-| VBR | 12.3.1 or 13 (REST API on `localhost:9419`) |
+| VBR | 13 or later (REST API on `localhost:9419`). VBR 12 is not supported; the install script refuses a Veeam module older than 13. |
 | windows_exporter | installed as a service, textfile collector enabled (default) |
 | Veeam account for REST | local Windows user with the VBR role **Backup Viewer** (console: *Users and Roles*). It needs no Windows admin rights. |
-| License task | The Veeam PowerShell module. With VBR 13 also **PowerShell 7** and the installed Veeam console. The task runs as SYSTEM; SYSTEM must be Backup Administrator in VBR (default via the local Administrators group). |
+| License task | The Veeam PowerShell module, **PowerShell 7** and the installed Veeam console (VBR 13 setup installs all three). The task runs as SYSTEM; SYSTEM must be Backup Administrator in VBR (default via the local Administrators group). |
 | Execution | Windows PowerShell 5.1, **as Administrator** |
 
 Example for the REST account:
@@ -55,7 +55,7 @@ Test without changes: `.\deploy\Install-VeeamExporter.ps1 -WhatIf`.
 | `C:\ProgramData\VeeamExporter\veeam.cred.xml` | credential of the REST account, DPAPI for SYSTEM |
 | `C:\ProgramData\VeeamExporter\logs\` | `rest.log`, `license.log`: transcript of the last run |
 | Task `\VeeamExporter\Veeam Exporter REST` | every 15 minutes, SYSTEM, Windows PowerShell 5.1, time limit 10 minutes |
-| Task `\VeeamExporter\Veeam Exporter License` | daily at 06:17, SYSTEM, PowerShell 5.1 (VBR 12) or 7 (VBR 13), time limit 30 minutes |
+| Task `\VeeamExporter\Veeam Exporter License` | daily at 06:17, SYSTEM, PowerShell 7, time limit 30 minutes |
 | Textfile directory of the windows_exporter | `veeam_*.prom`, read from the service (`--collector.textfile.directories` or config file) |
 
 ### Permissions
@@ -121,7 +121,6 @@ It only deletes folders that look like an exporter installation.
 | `-TextfileDirectory` | from the windows_exporter service | target of the `.prom` files |
 | `-InstallPath` / `-DataPath` | `C:\Program Files\VeeamExporter` / `C:\ProgramData\VeeamExporter` | |
 | `-VeeamModule` | searched in PSModulePath and the console folder | name or path (`.psd1`) of the Veeam module |
-| `-LicenseHost` | `Auto` | force `WindowsPowerShell` or `PowerShell7` |
 | `-SkipLicenseTask` | – | set up only the REST task |
 | `-RestIntervalMinutes` | `15` | interval of the REST task |
 | `-LicenseTime` | `06:17` | time of day of the license task |
@@ -136,7 +135,7 @@ It only deletes folders that look like an exporter installation.
 
 The deploy logic is tested under Linux with Pester; the Windows cmdlets (scheduled tasks, ACLs, DPAPI) are replaced by mocks there. To verify on a real server:
 
-- [ ] Installation under Windows PowerShell 5.1 on VBR 12.3.1 and VBR 13, including the credential handover to SYSTEM.
+- [ ] Installation under Windows PowerShell 5.1 on VBR 13, including the credential handover to SYSTEM.
 - [ ] VBR 13: where is the Veeam PowerShell module, and does `pwsh.exe` find it under SYSTEM? Assumption in the script: `C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1`; otherwise pass `-VeeamModule`.
 - [ ] Is SYSTEM Backup Administrator in VBR, so that `Get-VBRInstalledLicense` works (OP-3 in `docs/metrics.md`)?
 - [ ] Does the REST task repeat indefinitely on the target Windows version? Without `RepetitionDuration` this is the case from Windows Server 2016 on.

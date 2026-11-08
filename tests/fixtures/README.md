@@ -2,7 +2,7 @@
 
 ## `doc/<version>/` – unchanged from the Veeam docs
 
-Response examples from the OpenAPI specs of the [REST reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview) (`components.examples`), for each supported revision 1.2-rev1, 1.3-rev0, 1.3-rev1, 1.3-rev2. Only reformatted, content unchanged.
+Response examples from the OpenAPI specs of the [REST reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview) (`components.examples`), for each supported revision 1.3-rev0, 1.3-rev1, 1.3-rev2. Only reformatted, content unchanged.
 
 | File | Example in the spec |
 | --- | --- |
@@ -18,7 +18,7 @@ Notable: depending on the version, the examples write enum values in lower or up
 
 - `objects-doc-sessions.json`, `objects-doc-jobs-states.json`: the doc examples for sessions and task sessions do not match (different IDs). These files map the six `sessionId` values from `TaskSessionsResultExample` to three jobs, in the structure of `SessionsResultExample`. The NFS share job is intentionally missing from `jobs/states` (fallback to the session name).
 - `objects-edge-*.json`: edge cases for the objects collector: successful retry after a failure, running task, renamed and deleted job, upper/lower case in the object name, escaping, long multi-line message, `endTime` = `0001-01-01T00:00:00`, identical creationTime (higher `usn` wins), unknown session, task without a name.
-- `repositories-sobr-states.json`: repository states matching the extent IDs from `ScaleOutRepositoriesResultExample`: performance extent with `scaleOutRepositoryDetails`, performance extent only via the extent list (as under 1.2-rev1, ID in upper case), archive extent with capacity 0, object storage without capacity, standalone repository, extent of an unknown SOBR (`membership`), escaping, 0.1 GB, `isOnline`/`isOutOfDate` as strings, repository without status.
+- `repositories-sobr-states.json`: repository states matching the extent IDs from `ScaleOutRepositoriesResultExample`: performance extent with `scaleOutRepositoryDetails`, performance extent only via the extent list (without `scaleOutRepositoryDetails`, ID in upper case), archive extent with capacity 0, object storage without capacity, standalone repository, extent of an unknown SOBR (`membership`), escaping, 0.1 GB, `isOnline`/`isOutOfDate` as strings, repository without status.
 - `jobs-states.json`: hand-made, covers Success/Warning/Failed/None, running/disabled, chained jobs without `nextRun` and never-run jobs without `lastRun`.
 - `jobs-states-escaping.json`: edge cases for label values (quotes, backslashes, line break, umlauts) and unknown values in `lastResult`/`status`. The German names with umlauts are intentional test data for UTF-8 handling.
 

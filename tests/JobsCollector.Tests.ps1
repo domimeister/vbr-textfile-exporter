@@ -23,7 +23,7 @@ Describe 'Jobs collector' {
     }
 
     It 'generates veeam_jobs.prom line by line from the doc example <Version>' -TestCases @(
-        @{ Version = '1.2-rev1' }, @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
+        @{ Version = '1.3-rev0' }, @{ Version = '1.3-rev1' }, @{ Version = '1.3-rev2' }
     ) {
         param($Version)
         $actual = Get-JobsPromText -Fixture "doc/$Version/jobs-states.json"

@@ -36,7 +36,7 @@ Both tasks run locally on the backup server. The only outside traffic is the exi
 - **Installation:** manually per server with `deploy/Install-VeeamExporter.ps1`; both tasks run as SYSTEM, the REST credential is encrypted with DPAPI for SYSTEM ([deploy/README.md](../deploy/README.md)).
 - **Runtime:** Windows PowerShell 5.1 and PowerShell 7, without the Veeam console and without the Veeam PS module.
 - **Auth:** OAuth2 password grant on `/api/oauth2/token`; access token valid for 15 minutes, refresh token for 24 hours. Log in on every run, call `/api/oauth2/logout` at the end ([Veeam REST Overview](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview)).
-- **API version:** `x-api-version` in every request. The script picks the highest revision the server offers: 1.3-rev2 (13.1), 1.3-rev1 (13.0.1), 1.3-rev0 (13.0), 1.2-rev1 (12.3.1).
+- **API version:** `x-api-version` in every request. The script picks the highest revision the server offers: 1.3-rev2 (13.1), 1.3-rev1 (13.0.1), 1.3-rev0 (13.0). VBR 12 (1.2-rev1) is not supported; if the server accepts none of these revisions, the exporter fails with a message that VBR 13 is required.
 - **Credential:** local Veeam user, password encrypted with DPAPI (`Export-Clixml`) for the task account; it exists only on the server itself.
 - **Role:** Veeam Backup Viewer is enough for jobs, sessions and repositories. REST returns the license only to Veeam Backup Administrator, see the license section; the same applies to `/api/v1/serverInfo` (OP-13).
 - **Writing files:** write `<name>.prom.tmp` first, then rename (atomic). UTF-8 without BOM, LF line endings, newline at end of file. Do not use `Out-File` under 5.1, it writes UTF-16.
@@ -70,7 +70,7 @@ For each job and object, the most recent task run counts. A successful retry thu
 3. `GET /api/v1/taskSessions` with `sessionTypeFilter=<type>` and `createdAfterFilter=<now − lookback>`, one request per session type, paged via `skip`/`limit`: one entry per object and run with name, result, sessionId, creationTime, endTime, progress.
 4. For each job and object, keep the entry with the newest creationTime. The job name comes from step 1; if the jobId is missing there (deleted job, type not in `jobs/states`), the name of the newest session of that job is used.
 
-Session types: `BackupJob` and `ReplicaJob` by default, extensible via parameter. One request per type, because `typeFilter` and `sessionTypeFilter` accept only a single value under 1.2-rev1; arrays arrive with 1.3. According to the documentation example, file share tasks also run under `sessionType=BackupJob`.
+Session types: `BackupJob` and `ReplicaJob` by default, extensible via parameter. One request per type (1.3 also accepts arrays, but a single value per request keeps the queries simple). According to the documentation example, file share tasks also run under `sessionType=BackupJob`.
 
 Both endpoints are available to Veeam Backup Viewer (claims `ViewSessions`, `ViewTaskSessions`) and are in the reference from 1.2-rev0 on ([Sessions reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/Sessions#operation/GetAllTaskSessions)). Proposed lookback: 8 days, so weekly jobs do not drop out. Objects removed from a job disappear once the lookback has passed.
 
@@ -104,12 +104,12 @@ veeam_object_last_failure_info{job_name="Backup Job 1",object="winsrv88",message
 | `veeam_repository_free_bytes` | as above | bytes | freeGB |
 | `veeam_repository_backup_bytes` | as above | bytes used by backup files | usedSpaceGB |
 | `veeam_repository_online` | repository | 1 online, 0 offline | isOnline |
-| `veeam_repository_out_of_date` | repository | 1 if components are out of date, missing under 12.3.1 | isOutOfDate (from 1.3) |
+| `veeam_repository_out_of_date` | repository | 1 if components are out of date | isOutOfDate |
 
 - **Never compute fill level from usedSpaceGB:** in the Veeam example a repository has 299.4 GB capacity, 217.8 GB free and 173.4 GB usedSpace ([example response](https://docs.blinkops.com/docs/integrations/veeam-basic-backup-and-replication/actions/list-repository-states.md)). The value counts backup files, not the volume. Compute fill level as `1 − free / capacity` instead.
 - **Unit:** the API returns GB with one decimal place. Convert with 1024³ and round to whole bytes (assuming GiB, verify against the console).
 - **SOBR:** extents appear individually. The `sobr` label is the name of the SOBR, empty for standalone repositories. The source is `scaleOutRepositories` with the extent IDs from `performanceTier.performanceExtents[].id`, `capacityTier.extents[].id` and `archiveTier.extentId`. From 1.3 on, `repositories/states` also contains `scaleOutRepositoryDetails.scaleOutRepositoryId`; this takes precedence, with `membership` as the name if the ID is missing from the SOBR list.
-- **Versions:** under 1.2-rev1 (12.3.1) the model lacks `isOutOfDate` and `scaleOutRepositoryDetails`; `veeam_repository_out_of_date` is then omitted. In the documentation examples `isOutOfDate` is sometimes a string (`"false"`, 1.3-rev0) and sometimes a boolean; both are read.
+- **Versions:** if `isOutOfDate` is missing in a response, `veeam_repository_out_of_date` is omitted for that repository. In the documentation examples `isOutOfDate` is sometimes a string (`"false"`, 1.3-rev0) and sometimes a boolean; both are read.
 - **Object storage:** capacity may be missing or 0. Alerts therefore also check `capacity_bytes > 0`.
 
 ## License Expiration
@@ -117,7 +117,7 @@ veeam_object_last_failure_info{job_name="Backup Job 1",object="winsrv88",message
 The license does not come from REST but from `Get-VBRInstalledLicense` in a separate task, once a day. Reason: `GET /api/v1/license` is only available to Veeam Backup Administrator ([License reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/License#operation/GetInstalledLicense)); that would require storing an admin password on the server.
 
 - **Task account:** SYSTEM or a local account that is Backup Administrator in VBR. No stored password.
-- **Prerequisite:** Veeam PS module. Under v13 only with PowerShell 7 and the console installed ([Veeam PowerShell v13](https://helpcenter.veeam.com/docs/vbr/powershell/global_changes_v13.html)), under v12 with Windows PowerShell 5.1.
+- **Prerequisite:** Veeam PS module, which under v13 works only with PowerShell 7 and the console installed ([Veeam PowerShell v13](https://helpcenter.veeam.com/docs/vbr/powershell/global_changes_v13.html)).
 - **Connection:** if there is no session (`Get-VBRServerSession`), the script connects with `Connect-VBRServer` without parameters, i.e. locally as the task account, and disconnects at the end with `Disconnect-VBRServer`. It calls no other Veeam cmdlets; writing cmdlets such as `Install-VBRLicense`, `Update-VBRLicense` or `Enable-VBRLicenseAutoUpdate` are excluded by a test.
 - **Output:** `veeam_license.prom`, separate from the REST files, replaced only on success. If this task fails, jobs and repositories keep working.
 - **Health:** the license task writes `veeam_exporter_collector_success{collector="license"}` and the duration to its own file `veeam_exporter_license.prom`, on every run. In `veeam_exporter.prom` the two tasks would overwrite each other.
@@ -209,18 +209,18 @@ These points can only be settled in the lab; they change details, not the archit
 - [ ] **OP-3** Test the license task under v13 as SYSTEM (PowerShell 7, console) and check ExpirationDate for a perpetual license. Assumption: `MinValue`/`MaxValue` means "not set". Also check whether `Get-VBRInstalledLicense` ever returns more than one object; the script then takes the first one and warns.
 - [ ] **OP-4** Object storage repositories: what does capacityGB return?
 - [ ] **OP-5** Is the unit GB = GiB? Compare against the console.
-- [x] **OP-6** VBR 12.0 to 12.2 (API 1.1): does `taskSessions` exist yet? Settled from the OpenAPI specs (1.1-rev0 to 1.3-rev2): `taskSessions` is missing in all 1.1 revisions and present from 1.2-rev0 on. The minimum version stays 12.3.1 (1.2-rev1).
+- [x] **OP-6** VBR 12.0 to 12.2 (API 1.1): does `taskSessions` exist yet? Settled from the OpenAPI specs (1.1-rev0 to 1.3-rev2): `taskSessions` is missing in all 1.1 revisions and present from 1.2-rev0 on. Moot since VBR 12 support was dropped; the minimum is now VBR 13.0 (1.3-rev0).
 - [ ] **OP-7** Version probe: how does the server answer an unsupported `x-api-version` on the token request? Assumption: HTTP 400 with "version" in the error text. Any other error response aborts the probe immediately, so a wrong password is not tried four times (lockout risk).
 - [ ] **OP-8** Unknown values in `lastResult` or `result.result` (e.g. empty or a new enum value): assumption -1 like None.
 - [ ] **OP-9** Timestamps without a time zone: assumption local time of the VBR server (where the exporter runs). In the documentation examples `jobs/states` and `sessions` carry an offset, `taskSessions` does not (`"creationTime": "2024-11-13T22:00:49.893878"`); the start times there fall on full hours like a local schedule. Check in the lab whether real responses carry an offset.
 - [ ] **OP-10** Jobs without `lastRun` (never run): `veeam_job_last_run_timestamp_seconds` is then missing. `VeeamJobNotRun` does not fire for these jobs; consider a separate alert on `veeam_job_last_result == -1`.
-- [ ] **OP-11** Which session type do agent jobs run under? From 1.3 on there are also `AgentBackup`, `AgentPolicy`, `EndpointBackup` and `BackupCopyJob`. If agent tasks end up there, they are missing from `veeam_objects.prom` with the default `BackupJob,ReplicaJob` and have to be added via parameter (these values do not exist under 1.2-rev1).
+- [ ] **OP-11** Which session type do agent jobs run under? From 1.3 on there are also `AgentBackup`, `AgentPolicy`, `EndpointBackup` and `BackupCopyJob`. If agent tasks end up there, they are missing from `veeam_objects.prom` with the default `BackupJob,ReplicaJob` and have to be added via parameter.
 - [ ] **OP-12** Does a SOBR itself appear as a row in `repositories/states` (type `ExtendableRepository` in the enum)? Then sums over all repositories count the extents twice; build sums over `sobr=""` plus extents, or exclude the SOBR row. For now the exporter outputs the row unchanged.
 - [ ] **OP-13** According to the reference, `GET /api/v1/serverInfo` is only available to Backup Administrator. With the viewer account, `vbr_version` in `veeam_exporter_info` stays empty (HTTP 403, no warning). Alternative: read the version locally from the installation.
 - [ ] **OP-14** Socket licenses: `SocketLicenseSummary` (`LicensedSocketsNumber`, `UsedSocketsNumber` per platform) is not exported yet. Only needed if socket licenses are still in use.
 
 1. Script skeleton: auth, version probe, atomic writing, jobs collector.
-2. Test against one v12 and one v13 server each, store example .prom files.
+2. Test against a v13 server, store example .prom files.
 3. Add the object, repository and license collectors, load the alerts into Prometheus.
 4. Rollout manually per server: install script, two tasks, encrypted credential (see `deploy/README.md`).
 

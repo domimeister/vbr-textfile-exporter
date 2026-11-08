@@ -206,30 +206,58 @@ Describe 'Task arguments' {
 }
 
 Describe 'Host for the license task' {
-    It 'chooses <Expected> for mode <Mode> and module version <Version>' -TestCases @(
-        @{ Mode = 'Auto'; Version = '13.0.1.1'; Expected = 'pwsh' }
-        @{ Mode = 'Auto'; Version = '12.3.1.1139'; Expected = 'winps' }
-        @{ Mode = 'WindowsPowerShell'; Version = '13.0.0.0'; Expected = 'winps' }
-        @{ Mode = 'PowerShell7'; Version = '12.3.0.0'; Expected = 'pwsh' }
+    It 'always chooses PowerShell 7 (module version <Version>)' -TestCases @(
+        @{ Version = '13.0.1.1' }
+        @{ Version = '13.1.2.57' }
+        @{ Version = $null }
     ) {
-        param($Mode, $Version, $Expected)
-        $result = InModuleScope VeeamExporterDeploy -Parameters @{ Mode = $Mode; Version = $Version; WinPs = $script:WinPs; Pwsh = $script:Pwsh } {
-            param($Mode, $Version, $WinPs, $Pwsh)
-            Resolve-VeeamLicenseHost -Mode $Mode -ModuleVersion ([version]$Version) -WindowsPowerShellPath $WinPs -PwshPath $Pwsh
+        param($Version)
+        $result = InModuleScope VeeamExporterDeploy -Parameters @{ Version = $Version; Pwsh = $script:Pwsh } {
+            param($Version, $Pwsh)
+            $v = $null
+            if ($Version) { $v = [version]$Version }
+            Resolve-VeeamLicenseHost -ModuleVersion $v -PwshPath $Pwsh
         }
-        if ($Expected -eq 'pwsh') { $result | Should -BeExactly $script:Pwsh } else { $result | Should -BeExactly $script:WinPs }
+        $result | Should -BeExactly $script:Pwsh
     }
 
-    It 'throws if VBR 13 is installed without PowerShell 7' {
+    It 'rejects a Veeam module older than 13 (VBR 12 is not supported)' {
         InModuleScope VeeamExporterDeploy {
-            { Resolve-VeeamLicenseHost -Mode Auto -ModuleVersion ([version]'13.0') -WindowsPowerShellPath 'w.exe' -PwshPath $null } | Should -Throw '*PowerShell 7*'
+            { Resolve-VeeamLicenseHost -ModuleVersion ([version]'12.3.1.1139') -PwshPath 'p.exe' } | Should -Throw '*requires Veeam Backup & Replication 13 or later*'
         }
     }
 
-    It 'throws if the Veeam module is missing' {
+    It 'throws if PowerShell 7 is missing' {
         InModuleScope VeeamExporterDeploy {
-            { Resolve-VeeamLicenseHost -Mode Auto -ModuleVersion $null -WindowsPowerShellPath 'w.exe' -PwshPath 'p.exe' } | Should -Throw '*-SkipLicenseTask*'
+            { Resolve-VeeamLicenseHost -ModuleVersion ([version]'13.0') -PwshPath $null } | Should -Throw '*PowerShell 7*'
         }
+    }
+}
+
+Describe 'Veeam PowerShell module' {
+    It 'reads the version from the manifest, because Windows PowerShell 5.1 lists the VBR 13 module as 0.0' {
+        $dir = New-TestDirectory -Name 'veeam-module'
+        $psd1 = Join-Path -Path $dir -ChildPath 'Veeam.Backup.PowerShell.psd1'
+        [System.IO.File]::WriteAllText($psd1, "@{ ModuleVersion = '13.1.2.57'; PowerShellVersion = '7.6' }")
+        Mock -ModuleName VeeamExporterDeploy Get-Module { [pscustomobject]@{ Name = 'Veeam.Backup.PowerShell'; Version = [version]'0.0'; Path = $psd1 } } -ParameterFilter { $ListAvailable }
+        $result = InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } {
+            param($Dir)
+            $saved = $env:ProgramFiles
+            try { $env:ProgramFiles = $Dir; Find-VeeamPowerShellModule } finally { $env:ProgramFiles = $saved }
+        }
+        $result.Module | Should -BeExactly $psd1
+        $result.Version | Should -Be ([version]'13.1.2.57')
+    }
+
+    It 'returns nothing if no manifest is readable' {
+        $dir = New-TestDirectory -Name 'no-veeam-module'
+        Mock -ModuleName VeeamExporterDeploy Get-Module { } -ParameterFilter { $ListAvailable }
+        $result = InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } {
+            param($Dir)
+            $saved = $env:ProgramFiles
+            try { $env:ProgramFiles = $Dir; Find-VeeamPowerShellModule } finally { $env:ProgramFiles = $saved }
+        }
+        $result | Should -BeNullOrEmpty
     }
 }
 
@@ -323,10 +351,17 @@ Describe 'Install-VeeamExporter' {
         @($result.FirstRun | Where-Object Ok).Count | Should -Be 2
     }
 
-    It 'uses Windows PowerShell for the license task under VBR 12' {
+    It 'refuses to install on VBR 12' {
         $script:ModuleVersion = [version]'12.3.1.1139'
-        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
-        $script:Registered[1].Execute | Should -BeExactly $script:WinPs
+        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } |
+            Should -Throw '*requires Veeam Backup & Replication 13 or later*'
+        $script:Registered.Count | Should -Be 0
+    }
+
+    It 'throws if the Veeam module is missing and the license task is not skipped' {
+        Mock -ModuleName VeeamExporterDeploy Find-VeeamPowerShellModule { }
+        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } |
+            Should -Throw '*-SkipLicenseTask*'
     }
 
     It 'keeps an existing credential and replaces it only with -UpdateCredential' {

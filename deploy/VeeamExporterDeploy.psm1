@@ -219,25 +219,45 @@ function Format-CertificateThumbprint {
 
 # ---------------------------------------------------- PowerShell / Veeam module --
 
+function Get-VeeamModuleManifestVersion {
+    # ModuleVersion from a module manifest (.psd1), $null if it cannot be read.
+    [CmdletBinding()]
+    [OutputType([version])]
+    param([Parameter(Mandatory = $true)][string]$Path)
+    try {
+        $data = Import-PowerShellDataFile -Path $Path
+        if ($data.ModuleVersion) { return [version]$data.ModuleVersion }
+    }
+    catch {
+        Write-Verbose ('Cannot read {0}: {1}' -f $Path, $_.Exception.Message)
+    }
+    return $null
+}
+
 function Find-VeeamPowerShellModule {
     <#
     Veeam.Backup.PowerShell module: path and version. Searches PSModulePath
-    and the console folder (ASSUMPTION: VBR 13 console path, see deploy/README.md).
+    and the console folder (VBR 13 console path, confirmed in the lab with 13.1).
+    The version always comes from the manifest: Windows PowerShell 5.1 lists the
+    VBR 13 module (PowerShellVersion 7.6) with version 0.0.
     #>
     [CmdletBinding()]
     param()
-    $found = @(Get-Module -ListAvailable -Name 'Veeam.Backup.PowerShell' -ErrorAction SilentlyContinue | Sort-Object -Property Version -Descending)
-    if ($found.Count -gt 0) {
-        return [pscustomobject]@{ Module = $found[0].Path; Version = $found[0].Version }
+    $paths = New-Object -TypeName System.Collections.Generic.List[string]
+    foreach ($module in @(Get-Module -ListAvailable -Name 'Veeam.Backup.PowerShell' -ErrorAction SilentlyContinue)) {
+        if ($module.Path -like '*.psd1') { $paths.Add($module.Path) }
     }
     if ($env:ProgramFiles) {
         $candidate = Join-Path -Path $env:ProgramFiles -ChildPath 'Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1'
-        if (Test-Path -LiteralPath $candidate) {
-            $data = Import-PowerShellDataFile -Path $candidate
-            return [pscustomobject]@{ Module = $candidate; Version = [version]$data.ModuleVersion }
-        }
+        if (Test-Path -LiteralPath $candidate) { $paths.Add($candidate) }
     }
-    return $null
+    $best = $null
+    foreach ($path in @($paths | Select-Object -Unique)) {
+        $version = Get-VeeamModuleManifestVersion -Path $path
+        if ($null -eq $version) { continue }
+        if ($null -eq $best -or $version -gt $best.Version) { $best = [pscustomobject]@{ Module = $path; Version = $version } }
+    }
+    return $best
 }
 
 function Find-PowerShellHost {
@@ -263,30 +283,21 @@ function Find-PowerShellHost {
 
 function Resolve-VeeamLicenseHost {
     <#
-    PowerShell host for the license task. Auto: Veeam PowerShell 13 needs
-    PowerShell 7, older versions run in Windows PowerShell 5.1.
+    PowerShell host for the license task: always PowerShell 7 (pwsh.exe), because the
+    Veeam PowerShell module of VBR 13 requires it. A module older than 13 means VBR 12,
+    which is not supported. $null as version (module given by name) is accepted.
     #>
     [CmdletBinding()]
     [OutputType([string])]
     param(
-        [ValidateSet('Auto', 'WindowsPowerShell', 'PowerShell7')][string]$Mode = 'Auto',
         [AllowNull()][version]$ModuleVersion,
-        [AllowNull()][AllowEmptyString()][string]$WindowsPowerShellPath,
         [AllowNull()][AllowEmptyString()][string]$PwshPath
     )
-    $target = $Mode
-    if ($Mode -eq 'Auto') {
-        if ($null -eq $ModuleVersion) {
-            throw 'Veeam PowerShell module not found. Pass -VeeamModule <path> or -SkipLicenseTask.'
-        }
-        if ($ModuleVersion.Major -ge 13) { $target = 'PowerShell7' } else { $target = 'WindowsPowerShell' }
+    if ($null -ne $ModuleVersion -and $ModuleVersion.Major -lt 13) {
+        throw ('Veeam PowerShell module {0} found. The exporter requires Veeam Backup & Replication 13 or later.' -f $ModuleVersion)
     }
-    if ($target -eq 'PowerShell7') {
-        if (-not $PwshPath) { throw 'The license task needs PowerShell 7 (pwsh.exe) for Veeam PowerShell 13, but pwsh.exe was not found.' }
-        return $PwshPath
-    }
-    if (-not $WindowsPowerShellPath) { throw 'powershell.exe (Windows PowerShell 5.1) not found.' }
-    return $WindowsPowerShellPath
+    if (-not $PwshPath) { throw 'The license task needs PowerShell 7 (pwsh.exe), but pwsh.exe was not found. Install PowerShell 7 or pass -SkipLicenseTask.' }
+    return $PwshPath
 }
 
 # ------------------------------------------------------------ task arguments --
@@ -1003,7 +1014,6 @@ function Install-VeeamExporter {
         [System.Management.Automation.PSCredential]$Credential,
         [switch]$UpdateCredential,
         [string]$VeeamModule,
-        [ValidateSet('Auto', 'WindowsPowerShell', 'PowerShell7')][string]$LicenseHost = 'Auto',
         [switch]$SkipLicenseTask,
         [ValidateRange(5, 60)][int]$RestIntervalMinutes = 15,
         [ValidatePattern('^([01][0-9]|2[0-3]):[0-5][0-9]$')][string]$LicenseTime = '06:17',
@@ -1057,13 +1067,14 @@ function Install-VeeamExporter {
         $moduleVersion = $null
         if (-not $VeeamModule) {
             $module = Find-VeeamPowerShellModule
-            if ($module) { $VeeamModule = $module.Module; $moduleVersion = $module.Version }
+            if (-not $module) { throw 'Veeam PowerShell module not found. Pass -VeeamModule <path> or -SkipLicenseTask.' }
+            $VeeamModule = $module.Module
+            $moduleVersion = $module.Version
         }
-        elseif ($LicenseHost -eq 'Auto') {
-            if ($VeeamModule -like '*.psd1' -and (Test-Path -LiteralPath $VeeamModule)) { $moduleVersion = [version](Import-PowerShellDataFile -Path $VeeamModule).ModuleVersion }
-            else { throw 'With -VeeamModule as a module name, set -LicenseHost WindowsPowerShell or PowerShell7.' }
+        elseif ($VeeamModule -like '*.psd1' -and (Test-Path -LiteralPath $VeeamModule)) {
+            $moduleVersion = Get-VeeamModuleManifestVersion -Path $VeeamModule
         }
-        $licenseHostPath = Resolve-VeeamLicenseHost -Mode $LicenseHost -ModuleVersion $moduleVersion -WindowsPowerShellPath $hosts.WindowsPowerShell -PwshPath $hosts.Pwsh
+        $licenseHostPath = Resolve-VeeamLicenseHost -ModuleVersion $moduleVersion -PwshPath $hosts.Pwsh
         Write-Information ('License task: {0} with {1}' -f $licenseHostPath, $VeeamModule)
     }
 
