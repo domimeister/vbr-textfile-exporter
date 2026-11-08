@@ -72,6 +72,10 @@ Describe 'windows_exporter: textfile directory' {
         @{ Case = 'argument with = and list'; Image = 'C:\we\windows_exporter.exe --collector.textfile.directories=C:\tf1,C:\tf2'; Config = $null; Dir = 'C:\tf1'; Source = 'argument' }
         @{ Case = 'old option directory with trailing backslash'; Image = 'C:\we\windows_exporter.exe --collector.textfile.directory C:\old\'; Config = $null; Dir = 'C:\old'; Source = 'argument' }
         @{ Case = 'config file'; Image = '"C:\we\windows_exporter.exe" --config.file "C:\we\config.yml"'; Config = "collectors:`n  enabled: cpu,textfile`ncollector:`n  textfile:`n    directories: `"D:\\tf`"`n"; Dir = 'D:\tf'; Source = 'config' }
+        @{ Case = 'config file, plain value with spaces'; Image = 'x.exe --config.file c.yaml'; Config = "collector:`n  textfile:`n    directories: C:\Program Files\windows_exporter\textfile_inputs`n"; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'config' }
+        @{ Case = 'config file, plain value with comment and CRLF'; Image = 'x.exe --config.file c.yaml'; Config = "collector:`r`n  textfile:`r`n    directories: C:\Program Files\we\tf   # textfile inputs`r`nlog:`r`n  level: info`r`n"; Dir = 'C:\Program Files\we\tf'; Source = 'config' }
+        @{ Case = 'config file, plain list with spaces'; Image = 'x.exe --config.file c.yaml'; Config = "collector:`n  textfile:`n    directories: D:\My Data\tf1, D:\tf2`n"; Dir = 'D:\My Data\tf1'; Source = 'config' }
+        @{ Case = 'config file, single quotes'; Image = 'x.exe --config.file c.yaml'; Config = "collector:`n  textfile:`n    directories: 'C:\Program Files\we\tf'`n"; Dir = 'C:\Program Files\we\tf'; Source = 'config' }
         @{ Case = 'MSI default next to the exe'; Image = '"C:\Program Files\windows_exporter\windows_exporter.exe" --log.file eventlog'; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
         @{ Case = 'without service'; Image = $null; Config = $null; Dir = 'C:\Program Files\windows_exporter\textfile_inputs'; Source = 'default' }
     ) {
