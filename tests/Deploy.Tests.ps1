@@ -948,3 +948,57 @@ Describe 'Reading the certificate from localhost:9419' {
         { Get-TlsCertificateInfo -HostName '127.0.0.1' -Port 9 -TimeoutSeconds 3 } | Should -Throw '*127.0.0.1:9*'
     }
 }
+
+Describe 'Wrapper scripts show the information messages' {
+    BeforeAll {
+        # Child processes with the PowerShell edition of this test run, against a
+        # stub of the deploy module next to copies of the wrapper scripts.
+        $script:Exe = (Get-Process -Id $PID).Path
+        $script:StubDir = Join-Path -Path $TestDrive -ChildPath 'wrapper-stub'
+        $null = New-Item -ItemType Directory -Path $script:StubDir
+        foreach ($name in 'Install-VeeamExporter.ps1', 'Uninstall-VeeamExporter.ps1') {
+            Copy-Item -LiteralPath (Join-Path (Join-Path $script:RepoRoot 'deploy') $name) -Destination $script:StubDir
+        }
+        $stub = @'
+function Install-VeeamExporter {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param([string]$SourceRoot, [switch]$Force)
+    Write-Information 'install-information-marker'
+}
+function Uninstall-VeeamExporter {
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param([switch]$KeepData)
+    Write-Information 'uninstall-information-marker'
+}
+'@
+        [System.IO.File]::WriteAllText((Join-Path $script:StubDir 'VeeamExporterDeploy.psm1'), $stub)
+        function Invoke-Wrapper {
+            # Called like in a console (.\Install-VeeamExporter.ps1, a child scope of
+            # the global scope). With -File the script runs in the global scope, where
+            # the module would see its preference variable anyway.
+            param([string]$Name, [string[]]$Arguments)
+            # Windows PowerShell 5.1 turns redirected stderr of a child process into a
+            # terminating error when $ErrorActionPreference is Stop (GitHub Actions sets it).
+            $ErrorActionPreference = 'Continue'
+            $command = "& '{0}' {1}" -f (Join-Path $script:StubDir $Name), ($Arguments -join ' ')
+            $output = & $script:Exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command $command 2>&1
+            return ($output | Out-String)
+        }
+    }
+
+    It '<Name> prints the messages by default' -TestCases @(
+        @{ Name = 'Install-VeeamExporter.ps1'; Marker = 'install-information-marker'; Arguments = @('-Force') }
+        @{ Name = 'Uninstall-VeeamExporter.ps1'; Marker = 'uninstall-information-marker'; Arguments = @('-KeepData') }
+    ) {
+        param($Name, $Marker, $Arguments)
+        Invoke-Wrapper -Name $Name -Arguments $Arguments | Should -Match $Marker
+    }
+
+    It '<Name> keeps -InformationAction SilentlyContinue from the caller' -TestCases @(
+        @{ Name = 'Install-VeeamExporter.ps1'; Marker = 'install-information-marker'; Arguments = @('-Force') }
+        @{ Name = 'Uninstall-VeeamExporter.ps1'; Marker = 'uninstall-information-marker'; Arguments = @('-KeepData') }
+    ) {
+        param($Name, $Marker, $Arguments)
+        Invoke-Wrapper -Name $Name -Arguments ($Arguments + @('-InformationAction', 'SilentlyContinue')) | Should -Not -Match $Marker
+    }
+}

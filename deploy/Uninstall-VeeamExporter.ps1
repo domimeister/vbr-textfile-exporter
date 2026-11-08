@@ -19,8 +19,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$InformationPreference = 'Continue'
 # Load the deploy module into memory first: the script may run from the
 # installation folder that is about to be deleted.
 Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporterDeploy.psm1') -Force
-Uninstall-VeeamExporter @PSBoundParameters
+$params = @{} + $PSBoundParameters
+# Module functions do not inherit this script's preference variables, so the
+# messages are shown by passing the common parameter explicitly.
+if (-not $params.ContainsKey('InformationAction')) { $params.InformationAction = 'Continue' }
+Uninstall-VeeamExporter @params

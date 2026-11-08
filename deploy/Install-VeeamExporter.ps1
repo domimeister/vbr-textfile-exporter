@@ -44,9 +44,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$InformationPreference = 'Continue'
 Import-Module -Name (Join-Path -Path $PSScriptRoot -ChildPath 'VeeamExporterDeploy.psm1') -Force
 
 $params = @{} + $PSBoundParameters
 $params.SourceRoot = Split-Path -Parent $PSScriptRoot
+# Module functions do not inherit this script's preference variables, so the
+# installer's messages are shown by passing the common parameter explicitly.
+if (-not $params.ContainsKey('InformationAction')) { $params.InformationAction = 'Continue' }
 Install-VeeamExporter @params
