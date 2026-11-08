@@ -51,7 +51,9 @@ function Get-VeeamFileVersion {
 }
 
 function Get-VeeamLocalServerVersion {
-    # Build number of the local VBR server, e.g. 13.1.2.57.
+    # Build number of the local VBR server, e.g. 13.1.2.57. Read on every run,
+    # so an update shows up with the next run.
+    # ASSUMPTION: the service binary carries the build number of the installed release or patch, see docs/metrics.md#OP-15
     [CmdletBinding()]
     [OutputType([string])]
     param(
