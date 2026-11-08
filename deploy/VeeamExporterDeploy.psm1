@@ -506,6 +506,27 @@ function Register-VeeamExporterTask {
     }
 }
 
+function Wait-VeeamExporterTaskIdle {
+    # Waits until no instance of the task runs. The tasks use MultipleInstances
+    # IgnoreNew, so Start-ScheduledTask during a scheduled run would be dropped.
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$TaskPath,
+        [Parameter(Mandatory = $true)][string]$TaskName,
+        [int]$TimeoutSeconds = 300
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    $announced = $false
+    while ([string](Get-ScheduledTask -TaskPath $TaskPath -TaskName $TaskName -ErrorAction SilentlyContinue).State -eq 'Running') {
+        if (-not $announced) {
+            Write-Information ('Task {0}{1} is running; waiting for it to finish before the first run.' -f $TaskPath, $TaskName)
+            $announced = $true
+        }
+        if ((Get-Date) -gt $deadline) { throw ('Task {0}{1} was still running after {2} s.' -f $TaskPath, $TaskName, $TimeoutSeconds) }
+        Start-Sleep -Seconds 2
+    }
+}
+
 function Wait-VeeamExporterTask {
     # Waits until a started task has finished; returns Get-ScheduledTaskInfo.
     [CmdletBinding()]
@@ -1225,10 +1246,22 @@ function Install-VeeamExporter {
     $results = New-Object -TypeName System.Collections.Generic.List[object]
     if (-not $NoStart -and -not $WhatIfPreference) {
         foreach ($d in $definitions) {
-            $startedAt = Get-Date
-            Start-ScheduledTask -TaskPath $d.TaskPath -TaskName $d.TaskName
-            $info = Wait-VeeamExporterTask -TaskPath $d.TaskPath -TaskName $d.TaskName -StartedAt $startedAt
-            $results.Add([pscustomobject]@{ Task = $d.TaskName; LastTaskResult = $info.LastTaskResult; Ok = ($info.LastTaskResult -eq 0) })
+            # As long as the task itself may run, plus a minute.
+            $timeout = [int]$d.ExecutionTimeLimit.TotalSeconds + 60
+            $entry = [pscustomobject]@{ Task = $d.TaskName; LastTaskResult = $null; Ok = $false }
+            try {
+                Wait-VeeamExporterTaskIdle -TaskPath $d.TaskPath -TaskName $d.TaskName -TimeoutSeconds $timeout
+                $startedAt = Get-Date
+                Start-ScheduledTask -TaskPath $d.TaskPath -TaskName $d.TaskName
+                $info = Wait-VeeamExporterTask -TaskPath $d.TaskPath -TaskName $d.TaskName -StartedAt $startedAt -TimeoutSeconds $timeout
+                $entry.LastTaskResult = $info.LastTaskResult
+                $entry.Ok = ($info.LastTaskResult -eq 0)
+            }
+            catch {
+                # The installation itself is complete; go on with the next task.
+                Write-Warning ("First run of {0} not checked: {1} Check later with: Get-ScheduledTaskInfo -TaskPath '{2}' -TaskName '{0}'" -f $d.TaskName, $_.Exception.Message, $d.TaskPath)
+            }
+            $results.Add($entry)
         }
         foreach ($healthFile in @('veeam_exporter.prom', 'veeam_exporter_license.prom')) {
             $path = Join-Path -Path $TextfileDirectory -ChildPath $healthFile
