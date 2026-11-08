@@ -815,6 +815,19 @@ function New-VeeamExporterSecureDirectoryItem {
     }
 }
 
+function Assert-VeeamExporterDirectoryTrusted {
+    # An existing directory is only used when it and everything in it is
+    # owned by a trusted account and contains no junction or symbolic link.
+    # Read-only; a missing directory passes.
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return }
+    $problems = @(Get-VeeamExporterPathProblem -Path $Path)
+    if ($problems.Count -gt 0) {
+        throw ("Refusing to use {0}: it was not created by an administrator (or contains links). Check it, remove it and run the installation again.`n  {1}" -f $Path, ($problems -join "`n  "))
+    }
+}
+
 function Initialize-VeeamExporterSecureDirectory {
     <#
     Creates the directory (with the protected DACL from the start) or takes
@@ -832,10 +845,7 @@ function Initialize-VeeamExporterSecureDirectory {
     # parent's inherited permissions. A directory someone else creates in the
     # meantime is caught by the owner check below.
     if (-not (Test-Path -LiteralPath $Path)) { New-VeeamExporterSecureDirectoryItem -Path $Path -Kind $Kind -Confirm:$false }
-    $problems = @(Get-VeeamExporterPathProblem -Path $Path)
-    if ($problems.Count -gt 0) {
-        throw ("Refusing to use {0}: it was not created by an administrator (or contains links). Check it, remove it and run the installation again.`n  {1}" -f $Path, ($problems -join "`n  "))
-    }
+    Assert-VeeamExporterDirectoryTrusted -Path $Path
     Set-VeeamExporterDirectoryAcl -Path $Path -Kind $Kind -Confirm:$false
 }
 
@@ -1046,7 +1056,8 @@ function Install-VeeamExporter {
     2. Secures InstallPath (owner Administrators, write access only for
        SYSTEM and Administrators) and copies the exporter there; creates
        DataPath (SYSTEM and Administrators only). An existing directory owned
-       by another account, or one with junctions/symbolic links, is refused.
+       by another account, or one with junctions/symbolic links, is refused
+       before anything is created or copied.
     3. Stores the Veeam credential for SYSTEM if missing or -UpdateCredential.
     4. Registers the REST task (every 15 min) and the license task (daily).
     5. Runs both tasks once and reports the result, unless -NoStart.
@@ -1074,6 +1085,12 @@ function Install-VeeamExporter {
     if (-not $InstallPath) { $InstallPath = Join-Path -Path $env:ProgramFiles -ChildPath 'VeeamExporter' }
     if (-not $DataPath) { $DataPath = Join-Path -Path $env:ProgramData -ChildPath 'VeeamExporter' }
     if (-not (Test-VeeamExporterAdministrator)) { throw 'Run the installation in an elevated PowerShell (Administrator).' }
+
+    # Existing installation and data directory: refuse an untrusted one before
+    # anything is created or copied. Initialize-VeeamExporterSecureDirectory
+    # checks again right before it takes a directory over.
+    Assert-VeeamExporterDirectoryTrusted -Path $InstallPath
+    Assert-VeeamExporterDirectoryTrusted -Path $DataPath
 
     # textfile directory
     if (-not $TextfileDirectory) {
