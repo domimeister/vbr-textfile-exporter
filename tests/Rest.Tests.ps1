@@ -226,6 +226,13 @@ Describe 'Read-only' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
     }
 
+    It 'refuses -TimeoutSec <Value> before the password is sent' -TestCases @(@{ Value = 0 }, @{ Value = -5 }, @{ Value = 601 }) {
+        param($Value)
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content '{"access_token":"t"}' }
+        { Connect-VeeamServer -Credential (New-TestCredential) -TimeoutSec $Value } | Should -Throw '*TimeoutSec*'
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
+    }
+
     It 'Invoke-VeeamHttpRequest blocks writing calls before any network access' {
         InModuleScope VeeamExporter {
             $ctx = [pscustomobject]@{ BaseUri = 'https://127.0.0.1:1'; TimeoutSec = 1; HttpClient = $null }

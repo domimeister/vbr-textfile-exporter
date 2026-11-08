@@ -105,6 +105,29 @@ Describe 'Invoke-VeeamExporterRun' {
         Get-FileText -Path $script:HealthFile | Should -Match 'veeam_exporter_collector_success\{collector="objects"\} 0'
     }
 
+    It 'refuses -<Name> <Value> before logging in, after writing veeam_exporter.prom' -TestCases @(
+        @{ Name = 'TimeoutSec'; Value = 0; Message = '*TimeoutSec must be between 1 and 600 seconds, got 0*' }
+        @{ Name = 'TimeoutSec'; Value = 601; Message = '*TimeoutSec must be between 1 and 600 seconds, got 601*' }
+        @{ Name = 'ObjectLookbackDays'; Value = 0; Message = '*ObjectLookbackDays must be between 1 and 90, got 0*' }
+        @{ Name = 'ObjectLookbackDays'; Value = 91; Message = '*ObjectLookbackDays must be between 1 and 90, got 91*' }
+    ) {
+        param($Name, $Value, $Message)
+        Set-VeeamApiMock
+        $extra = @{ $Name = $Value }
+        { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) @extra } | Should -Throw $Message
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
+        $health = Get-FileText -Path $script:HealthFile
+        foreach ($c in 'jobs', 'objects', 'repositories') { $health | Should -Match ('veeam_exporter_collector_success\{collector="' + $c + '"\} 0') }
+    }
+
+    It 'accepts the limits of -TimeoutSec (1, 600) and -ObjectLookbackDays (1, 90)' {
+        Set-VeeamApiMock
+        foreach ($extra in @(@{ TimeoutSec = 1; ObjectLookbackDays = 1 }, @{ TimeoutSec = 600; ObjectLookbackDays = 90 })) {
+            $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue @extra
+            $result.Success | Should -BeTrue
+        }
+    }
+
     It 'writes veeam_exporter.prom also when a warning is turned into an error (-WarningAction Stop)' {
         Set-VeeamApiMock -VbrVersionFails
         { Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction Stop } | Should -Throw
@@ -270,6 +293,19 @@ Describe 'Entry scripts write the health file in any case' {
         $health = Get-FileText -Path (Join-Path $script:Out 'veeam_exporter.prom')
         foreach ($c in 'jobs', 'objects', 'repositories') { $health | Should -Match ('veeam_exporter_collector_success\{collector="' + $c + '"\} 0') }
         $health | Should -Match 'veeam_exporter_info\{'
+    }
+
+    It 'REST task: a value out of range still gives veeam_exporter.prom with all collectors 0 (<Name>)' -TestCases @(
+        @{ Name = 'ObjectLookbackDays'; Value = '0' }
+        @{ Name = 'TimeoutSec'; Value = '0' }
+    ) {
+        param($Name, $Value)
+        $r = Invoke-EntryScript -Script (Join-Path $script:App 'Invoke-VeeamExporter.ps1') -Arguments @('-CredentialPath', (Join-Path $script:Root 'missing.cred.xml'), '-TextfileDirectory', $script:Out, ('-' + $Name), $Value)
+        $r.ExitCode | Should -Be 1
+        # Windows PowerShell 5.1 wraps the error text of the child at the console width.
+        ($r.Output -replace '\s', '') | Should -Match ($Name + 'mustbebetween')
+        $health = Get-FileText -Path (Join-Path $script:Out 'veeam_exporter.prom')
+        foreach ($c in 'jobs', 'objects', 'repositories') { $health | Should -Match ('veeam_exporter_collector_success\{collector="' + $c + '"\} 0') }
     }
 
     It 'REST task: a module that cannot be loaded still gives veeam_exporter.prom with the requested collectors 0' {

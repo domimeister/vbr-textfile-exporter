@@ -13,9 +13,11 @@ Collectors to run, also as comma list ("jobs,objects") for powershell.exe -File.
 .PARAMETER LogPath
 Optional: transcript of the last run (overwritten each run). Contains no secrets.
 .PARAMETER ObjectLookbackDays
-How far back the objects collector reads task sessions (default 8 days).
+How far back the objects collector reads task sessions (default 8 days, 1 to 90).
 .PARAMETER ObjectSessionType
 Session types for the objects collector (default BackupJob, ReplicaJob).
+.PARAMETER TimeoutSec
+Timeout per HTTP request in seconds (default 60, 1 to 600).
 .PARAMETER CertificateThumbprint
 SHA-1 thumbprint of the local VBR REST certificate. Only this certificate is
 accepted. Without it the default certificate validation applies.
@@ -31,7 +33,9 @@ param(
     [string]$CertificateThumbprint,
     [string]$ApiVersion,
     [string[]]$Collector = @('jobs', 'objects', 'repositories'),
-    [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
+    # The ranges of ObjectLookbackDays and TimeoutSec are checked by the run,
+    # so a bad task argument still writes veeam_exporter.prom.
+    [int]$ObjectLookbackDays = 8,
     [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
     [int]$TimeoutSec = 60,
     [string]$LogPath

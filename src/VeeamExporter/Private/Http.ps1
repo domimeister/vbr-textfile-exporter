@@ -22,7 +22,8 @@ function New-VeeamHttpContext {
     param(
         [Parameter(Mandatory = $true)][string]$BaseUri,
         [AllowNull()][AllowEmptyString()][string]$CertificateThumbprint,
-        [int]$TimeoutSec = 60
+        # 0 would mean "no timeout" under 5.1 and throws under PowerShell 7.
+        [ValidateRange(1, 600)][int]$TimeoutSec = 60
     )
     # The password is sent to this URI: TLS only.
     $parsed = $null
