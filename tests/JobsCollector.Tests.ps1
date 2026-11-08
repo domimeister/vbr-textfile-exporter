@@ -67,6 +67,17 @@ Describe 'Jobs collector' {
         $actual | Should -Not -Match 'veeam_job_last_run_timestamp_seconds\{job_name="Replica Job 1"\}'
     }
 
+    It 'reports a disabled job as disabled although its status stays Stopped (real VBR 13.1 state)' {
+        $metrics = Get-VeeamJobMetric -JobState (Get-FixtureData -Name 'lab/vbr-13.1/jobs-states-disabled.json')
+        $enabled = ($metrics | Where-Object Name -EQ 'veeam_job_enabled').Samples
+        $enabled.Count | Should -Be 4
+        foreach ($sample in $enabled) {
+            $expected = 1
+            if ($sample.Labels['job_name'] -eq 'FS TestData') { $expected = 0 }
+            $sample.Value | Should -Be $expected -Because $sample.Labels['job_name']
+        }
+    }
+
     It 'returns empty text for a server without jobs' {
         Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
             New-HttpResponse -StatusCode 200 -Content '{"data":[],"pagination":{"total":0,"count":0,"skip":0,"limit":200}}'

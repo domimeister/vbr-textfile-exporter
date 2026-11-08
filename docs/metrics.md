@@ -49,7 +49,7 @@ A single call to `GET /api/v1/jobs/states` returns all values. The Veeam Backup 
 | --- | --- | --- | --- |
 | `veeam_job_info` | job_name, job_id, job_type, workload, repository, schedule | 1 | id, type, workload, repositoryName; schedule from nextRun and nextRunPolicy |
 | `veeam_job_last_result` | job_name, job_type | 0 Success, 1 Warning, 2 Failed, -1 None | lastResult |
-| `veeam_job_enabled` | job_name | 1 enabled, 0 disabled | status ≠ disabled |
+| `veeam_job_enabled` | job_name | 1 enabled, 0 disabled | status ≠ Disabled and nextRunPolicy ≠ `<Disabled>` |
 | `veeam_job_running` | job_name | 1 currently running | status = running, starting, stopping |
 | `veeam_job_last_run_timestamp_seconds` | job_name | Unix time | lastRun |
 | `veeam_job_next_run_timestamp_seconds` | job_name | Unix time, missing for chained and unscheduled jobs | nextRun |
@@ -65,6 +65,7 @@ All metrics are gauges.
 
   For scheduled jobs `nextRunPolicy` is free text in the date format of the server (lab: `08.11.2026 22:00`, docs: `7/30/2025 7:00 PM`) and is not parsed.
 - **Label `job_name` instead of `job`:** Prometheus sets `job` itself on scrape; a label with the same name would be renamed to `exported_job`.
+- **Disabled jobs:** on VBR 13.1 a disabled file share job keeps `status` `Stopped` and keeps its `nextRun`; only `nextRunPolicy` becomes `<Disabled>` (lab test, #36). `veeam_job_enabled` therefore checks both fields.
 - **Retries:** REST does not show whether a retry follows a failure ([Veeam Forum](https://forums.veeam.com/viewtopic.php?p=453319)). A Failed inside the retry window is therefore normal. Alerts need a `for` covering the window (Veeam default: 3 retries of 10 minutes each).
 - **Covered job types** according to the API enum: vSphere and Hyper-V backup, vSphere replica, backup copy, agent (Windows, Linux), Cloud Director, Entra ID. Tape, file share and SureBackup are not in the enum, see open points.
 
