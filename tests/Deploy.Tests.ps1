@@ -470,6 +470,14 @@ Describe 'Install-VeeamExporter' {
         Should -Invoke -ModuleName VeeamExporterDeploy Find-VeeamPowerShellModule -Times 0 -Exactly
     }
 
+    It 'accepts a REST interval of at most 30 minutes (VeeamExporterStale fires after 1 hour)' {
+        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -RestIntervalMinutes 31 -InformationAction SilentlyContinue } | Should -Throw '*RestIntervalMinutes*'
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -RestIntervalMinutes 30 -InformationAction SilentlyContinue
+        $script:Registered[0].Trigger.IntervalMinutes | Should -Be 30
+        $range = @((Get-Command -Name (Join-Path (Join-Path $script:RepoRoot 'deploy') 'Install-VeeamExporter.ps1')).Parameters['RestIntervalMinutes'].Attributes | Where-Object { $_ -is [System.Management.Automation.ValidateRangeAttribute] })[0]
+        $range.MaxRange | Should -Be 30
+    }
+
     It 'changes nothing with -WhatIf' {
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -WhatIf -InformationAction SilentlyContinue
         Test-Path -LiteralPath $script:Install | Should -BeFalse

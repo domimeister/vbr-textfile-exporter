@@ -131,7 +131,7 @@ It only deletes folders that look like an exporter installation.
 | `-InstallPath` / `-DataPath` | `C:\Program Files\VeeamExporter` / `C:\ProgramData\VeeamExporter` | |
 | `-VeeamModule` | searched in PSModulePath and the console folder | name or path (`.psd1`) of the Veeam module |
 | `-SkipLicenseTask` | – | set up only the REST task |
-| `-RestIntervalMinutes` | `15` | interval of the REST task |
+| `-RestIntervalMinutes` | `15` | interval of the REST task, 5 to 30 minutes (`VeeamExporterStale` fires once a REST file is older than 1 hour) |
 | `-LicenseTime` | `06:17` | time of day of the license task |
 | `-Collector` | `jobs,objects,repositories` | REST collectors |
 | `-ObjectLookbackDays` | `8` | lookback of the objects collector |

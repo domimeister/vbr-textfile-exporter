@@ -32,7 +32,7 @@ flowchart LR
 
 Both tasks run locally on the backup server. The only outside traffic is the existing scrape on port 9182.
 
-- **Interval:** every 15 minutes (proposal), so data is at most 15 minutes old.
+- **Interval:** every 15 minutes (proposal), so data is at most 15 minutes old. The installer allows 5 to 30 minutes: `VeeamExporterStale` fires once a REST file is older than 1 hour, so one missed run stays below that and two trigger it.
 - **Installation:** manually per server with `deploy/Install-VeeamExporter.ps1`; both tasks run as SYSTEM, the REST credential is encrypted with DPAPI for SYSTEM ([deploy/README.md](../deploy/README.md)).
 - **Runtime:** Windows PowerShell 5.1 and PowerShell 7, without the Veeam console and without the Veeam PS module.
 - **Auth:** OAuth2 password grant on `/api/oauth2/token`; access token valid for 15 minutes, refresh token for 24 hours. Log in on every run, call `/api/oauth2/logout` at the end ([Veeam REST Overview](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/SectionOverview)).
