@@ -14,7 +14,7 @@ src/
   Invoke-VeeamExporter.ps1    # REST collectors: jobs, objects, repositories
   Invoke-VeeamLicenseExporter.ps1  # license via Get-VBRInstalledLicense (separate task)
 deploy/                       # task definitions, install script, credential setup
-rules/veeam.rules.yml         # Prometheus alerts
+alerting/veeam-alerts.json    # Grafana alert rules (file provisioning)
 dashboards/                   # Grafana
 tests/                        # Pester 5
   fixtures/                   # JSON responses from the Veeam REST docs

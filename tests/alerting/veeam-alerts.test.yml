@@ -1,7 +1,12 @@
-# Unit tests for rules/veeam.rules.yml: promtool test rules tests/rules/veeam.rules.test.yml
+# Logic tests for the Grafana alert rules in alerting/veeam-alerts.json, run by
+# tests/Alerts.Tests.ps1. promtool cannot read Grafana rules, so the test writes
+# veeam-alerts.rules.yml next to a copy of this file: one Prometheus rule per
+# Grafana rule, with query A and the threshold of B combined into one expression,
+# the same for and the severity label. That selects the same series as the
+# Grafana rule. Annotations are not part of it (Grafana templates use $values).
 # promtool lists only firing alerts, so exp_alerts: [] also covers pending ones.
 rule_files:
-  - ../../rules/veeam.rules.yml
+  - veeam-alerts.rules.yml
 
 evaluation_interval: 1m
 
@@ -61,12 +66,10 @@ tests:
         alertname: VeeamJobFailed
         exp_alerts:
           - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: Failed Job, job_type: VSphereBackup}
-            exp_annotations: {summary: 'Job Failed Job on vbr01:9182 failed'}
       - eval_time: 46m
         alertname: VeeamJobWarning
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Warning Job, job_type: BackupCopy}
-            exp_annotations: {summary: 'Job Warning Job on vbr01:9182 ended with a warning'}
       - eval_time: 44m
         alertname: VeeamObjectFailed
         exp_alerts: []
@@ -74,7 +77,6 @@ tests:
         alertname: VeeamObjectFailed
         exp_alerts:
           - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: Failed Job, object: vm02}
-            exp_annotations: {summary: 'vm02 in Failed Job not backed up'}
       - eval_time: 59m
         alertname: VeeamRepositoryFull
         exp_alerts: []
@@ -82,7 +84,6 @@ tests:
         alertname: VeeamRepositoryFull
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, repository: repo-full, repository_type: WinLocal, host: srv1}
-            exp_annotations: {summary: 'Repository repo-full on vbr01:9182 is 90% full'}
       - eval_time: 14m
         alertname: VeeamRepositoryOffline
         exp_alerts: []
@@ -90,14 +91,11 @@ tests:
         alertname: VeeamRepositoryOffline
         exp_alerts:
           - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, repository: repo-offline}
-            exp_annotations: {summary: 'Repository repo-offline on vbr01:9182 is offline'}
       - eval_time: 5m
         alertname: VeeamLicenseExpiring
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows}
-            exp_annotations: {summary: 'Veeam license on vbr01:9182 expires in 10 days'}
           - exp_labels: {severity: warning, instance: 'vbr03:9182', job: windows}
-            exp_annotations: {summary: 'Veeam license on vbr03:9182 has expired'}
 
   - name: jobs not run for 26 hours
     interval: 1m
@@ -152,11 +150,8 @@ tests:
         alertname: VeeamJobNotRun
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Old Job}
-            exp_annotations: {summary: 'Job Old Job on vbr01:9182 has not run for more than 26 hours'}
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Chained Job}
-            exp_annotations: {summary: 'Job Chained Job on vbr01:9182 has not run for more than 26 hours'}
           - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, job_name: Old Exporter Job}
-            exp_annotations: {summary: 'Job Old Exporter Job on vbr02:9182 has not run for more than 26 hours'}
 
   - name: stale exporter files
     interval: 1m
@@ -180,7 +175,6 @@ tests:
         alertname: VeeamExporterStale
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, file: 'C:\Program Files\windows_exporter\textfile_inputs\veeam_jobs.prom'}
-            exp_annotations: {summary: 'Veeam exporter file C:\Program Files\windows_exporter\textfile_inputs\veeam_jobs.prom on vbr01:9182 is older than 1 hour'}
       - eval_time: 48h
         alertname: VeeamExporterLicenseStale
         exp_alerts: []
@@ -188,4 +182,3 @@ tests:
         alertname: VeeamExporterLicenseStale
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, file: 'C:\Program Files\windows_exporter\textfile_inputs\veeam_license.prom'}
-            exp_annotations: {summary: 'Veeam license file on vbr01:9182 is older than 2 days'}
