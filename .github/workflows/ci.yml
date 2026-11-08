@@ -74,12 +74,23 @@ jobs:
 
       - name: Install promtool
         # Same binary for both editions, so this step always uses pwsh.
+        # Downloads through the release asset API: the plain releases/download URL kept
+        # answering HTTP 504 on 2026-11-08 while the API path worked. Retries on top,
+        # the SHA-256 check below is unchanged.
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           $ProgressPreference = 'SilentlyContinue'
           $name = "prometheus-$env:PROMETHEUS_VERSION.windows-amd64"
           $zip = Join-Path -Path $env:RUNNER_TEMP -ChildPath "$name.zip"
-          Invoke-WebRequest -Uri "https://github.com/prometheus/prometheus/releases/download/v$env:PROMETHEUS_VERSION/$name.zip" -OutFile $zip
+          $headers = @{ 'X-GitHub-Api-Version' = '2022-11-28' }
+          if ($env:GH_TOKEN) { $headers['Authorization'] = "Bearer $env:GH_TOKEN" }
+          $release = Invoke-RestMethod -Uri "https://api.github.com/repos/prometheus/prometheus/releases/tags/v$env:PROMETHEUS_VERSION" -Headers $headers -MaximumRetryCount 3 -RetryIntervalSec 10
+          $asset = @($release.assets | Where-Object { $_.name -eq "$name.zip" })
+          if ($asset.Count -ne 1) { throw "Release v$env:PROMETHEUS_VERSION has no single asset $name.zip" }
+          $headers['Accept'] = 'application/octet-stream'
+          Invoke-WebRequest -Uri $asset[0].url -Headers $headers -OutFile $zip -MaximumRetryCount 3 -RetryIntervalSec 10
           $hash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash
           if ($hash -ne $env:PROMETHEUS_SHA256) { throw "SHA-256 mismatch for $name.zip: $hash" }
           Expand-Archive -LiteralPath $zip -DestinationPath $env:RUNNER_TEMP -Force
