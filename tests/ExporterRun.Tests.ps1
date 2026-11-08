@@ -64,7 +64,8 @@ Describe 'Invoke-VeeamExporterRun' {
         Set-VeeamApiMock
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -Collector 'jobs, objects' -ObjectSessionType 'BackupJob,ReplicaJob' -WarningAction SilentlyContinue
         ($result.Collectors | ForEach-Object Collector) -join ',' | Should -BeExactly 'jobs,objects'
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
     }
 
     It 'aborts on an unknown collector before logging in' {
@@ -86,8 +87,9 @@ Describe 'Invoke-VeeamExporterRun' {
     It 'passes lookback and session types on to the objects collector' {
         Set-VeeamApiMock
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -ObjectSessionType 'ReplicaJob' -ObjectLookbackDays 2 -WarningAction SilentlyContinue
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' -and $Query['sessionTypeFilter'] -eq 'ReplicaJob' }
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' -and $Query['sessionTypeFilter'] -eq 'BackupJob' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' -and $Query['typeFilter'] -eq 'ReplicaJob' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' -and $Query['typeFilter'] -eq 'BackupJob' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
         $expected = [System.DateTimeOffset]::UtcNow.AddDays(-2).ToString('yyyy-MM-dd')
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' -and $Query['createdAfterFilter'].StartsWith($expected) }
     }

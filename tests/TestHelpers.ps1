@@ -125,7 +125,7 @@ function Set-VeeamApiMock {
             }
             '/api/v1/taskSessions' {
                 if ($script:MockTaskSessionsStatus -ne 200) { return New-HttpResponse -StatusCode $script:MockTaskSessionsStatus -Content '{"errorCode":"InternalError","message":"boom"}' }
-                if ($Query['sessionTypeFilter'] -ne 'BackupJob') { return New-HttpResponse -StatusCode 200 -Content $script:MockEmpty }
+                if ($Query.Contains('sessionTypeFilter')) { throw 'sessionTypeFilter must not be used (#21)' }
                 return New-HttpResponse -StatusCode 200 -Content $script:MockTasksContent
             }
         }

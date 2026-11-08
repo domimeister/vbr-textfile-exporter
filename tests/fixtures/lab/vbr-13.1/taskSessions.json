@@ -1,0 +1,126 @@
+{
+  "data": [
+    {
+      "algorithm": "None",
+      "state": "Working",
+      "platformType": "UnstructuredData",
+      "name": "VBRTEST",
+      "repositoryId": "00000000-0000-0000-0000-000000000000",
+      "usn": 3144,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "NotDefined",
+        "duration": "00:07:42",
+        "processingRate": "N/A",
+        "processedSize": 0,
+        "readSize": 0,
+        "transferredSize": 0,
+        "progressPercent": 0
+      },
+      "platformId": "00000000-0000-0000-0000-000000000000",
+      "type": "Backup",
+      "sessionType": "MalwareDetection",
+      "id": "7965419a-bf41-4b86-9841-df5118b8494d",
+      "sessionId": "0ec7c002-08bf-4ee6-9720-904bb62afbed",
+      "creationTime": "2026-11-08T09:24:41.556958",
+      "endTime": "1900-01-01T00:00:00"
+    },
+    {
+      "algorithm": "None",
+      "state": "Stopped",
+      "platformType": "UnstructuredData",
+      "name": "VBRTEST",
+      "repositoryId": "00000000-0000-0000-0000-000000000000",
+      "usn": 2849,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Source",
+        "duration": "00:00:41",
+        "processingRate": "2 MB",
+        "processedSize": 20971520,
+        "readSize": 20971520,
+        "transferredSize": 21067973,
+        "progressPercent": 100
+      },
+      "platformId": "00000000-0000-0000-0000-000000000000",
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "063cc13e-bfef-4c1e-aa6a-7f186d6c74a1",
+      "sessionId": "c6d4719c-d974-47c6-90cf-04026adc1af9",
+      "creationTime": "2026-11-08T09:14:55.198647",
+      "endTime": "2026-11-08T09:15:37.075468"
+    },
+    {
+      "algorithm": "None",
+      "state": "Stopped",
+      "platformType": "UnstructuredData",
+      "name": "VBRTEST",
+      "repositoryId": "00000000-0000-0000-0000-000000000000",
+      "usn": 2610,
+      "result": {
+        "result": "Failed",
+        "message": "0 files and 1 folders (0 B) transferred at 0 KB/s",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "NotDefined",
+        "duration": "00:00:41",
+        "processingRate": "N/A",
+        "processedSize": 0,
+        "readSize": 0,
+        "transferredSize": 755,
+        "progressPercent": 100
+      },
+      "platformId": "00000000-0000-0000-0000-000000000000",
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "e2b60d62-5af4-4fb1-b9a6-c62243ea13dd",
+      "sessionId": "2a84eddf-63d6-40be-9f60-709e3535c560",
+      "creationTime": "2026-11-08T09:14:09.135463",
+      "endTime": "2026-11-08T09:14:50.245852"
+    },
+    {
+      "algorithm": "None",
+      "state": "Stopped",
+      "platformType": "UnstructuredData",
+      "name": "VBRTEST",
+      "repositoryId": "00000000-0000-0000-0000-000000000000",
+      "usn": 2714,
+      "result": {
+        "result": "Success",
+        "message": "Success",
+        "isCanceled": false
+      },
+      "progress": {
+        "bottleneck": "Proxy",
+        "duration": "00:01:00",
+        "processingRate": "2 MB",
+        "processedSize": 20971520,
+        "readSize": 20971520,
+        "transferredSize": 21067973,
+        "progressPercent": 100
+      },
+      "platformId": "00000000-0000-0000-0000-000000000000",
+      "type": "Backup",
+      "sessionType": "BackupJob",
+      "id": "e1d5d9c6-f305-4340-a962-f5e123f0d048",
+      "sessionId": "05e3e1ce-fe9d-44be-9fa5-16cb9bc44882",
+      "creationTime": "2026-11-08T09:14:09.123217",
+      "endTime": "2026-11-08T09:15:09.946327"
+    }
+  ],
+  "pagination": {
+    "total": 4,
+    "count": 4,
+    "skip": 0,
+    "limit": 50
+  }
+}
