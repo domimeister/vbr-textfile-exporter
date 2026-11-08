@@ -844,10 +844,28 @@ Describe 'Permissions: install and uninstall' {
         }
     }
 
-    It 'aborts if another account created the data directory beforehand' {
+    It 'aborts if another account created the data directory beforehand, before it creates or copies anything' {
         $null = New-Item -ItemType Directory -Path $script:Data
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker } -ParameterFilter { $Path -like "$($script:Data)*" }
         { Install-VeeamExporter @script:InstallArgs } | Should -Throw '*not created by an administrator*'
+        Test-Path -LiteralPath $script:Install | Should -BeFalse
+        Should -Invoke -ModuleName VeeamExporterDeploy New-VeeamExporterSecureDirectoryItem -Times 0 -Exactly
+        Should -Invoke -ModuleName VeeamExporterDeploy Set-VeeamExporterDirectoryAcl -Times 0 -Exactly
+        Should -Invoke -ModuleName VeeamExporterDeploy Save-VeeamExporterCredentialAsSystem -Times 0 -Exactly
+        Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
+    }
+
+    It 'refuses an untrusted data directory also with -WhatIf' {
+        $null = New-Item -ItemType Directory -Path $script:Data
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker } -ParameterFilter { $Path -like "$($script:Data)*" }
+        { Install-VeeamExporter @script:InstallArgs -WhatIf } | Should -Throw '*not created by an administrator*'
+    }
+
+    It 'still refuses a data directory created between the first check and its takeover' {
+        # Trusted at the pre-flight check, then replaced by another account's directory.
+        Mock -ModuleName VeeamExporterDeploy Copy-VeeamExporterFile { $null = New-Item -ItemType Directory -Path $script:Data; @() }
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker } -ParameterFilter { $Path -like "$($script:Data)*" }
+        { Install-VeeamExporter @script:InstallArgs } | Should -Throw '*Refusing to use*not created by an administrator*'
         Should -Invoke -ModuleName VeeamExporterDeploy Save-VeeamExporterCredentialAsSystem -Times 0 -Exactly
         Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
     }
