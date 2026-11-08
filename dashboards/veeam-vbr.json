@@ -652,7 +652,7 @@
       "id": 10,
       "type": "table",
       "title": "Jobs",
-      "description": "One row per job from veeam_jobs.prom. Since last run turns yellow after 26 h (alert VeeamJobNotRun).",
+      "description": "One row per job from veeam_jobs.prom. Since last run turns yellow after 26 h; the alert VeeamJobNotRun fires then too, except for jobs with schedule Manual (started by hand). Schedule: Scheduled, Chained (runs after another job) or Manual.",
       "gridPos": {
         "x": 0,
         "y": 7,
@@ -670,7 +670,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (instance, job_name, job_type, workload, repository) (veeam_job_info{instance=~\"$instance\"})",
+          "expr": "max by (instance, job_name, job_type, workload, repository, schedule) (veeam_job_info{instance=~\"$instance\"})",
           "legendFormat": "__auto",
           "instant": true,
           "range": false,
@@ -769,10 +769,11 @@
               "Value #C": 4,
               "Value #E": 5,
               "Value #F": 6,
-              "job_type": 7,
-              "workload": 8,
-              "repository": 9,
-              "Value #G": 10
+              "schedule": 7,
+              "job_type": 8,
+              "workload": 9,
+              "repository": 10,
+              "Value #G": 11
             },
             "renameByName": {
               "instance": "Server",
@@ -785,7 +786,8 @@
               "job_type": "Type",
               "workload": "Workload",
               "repository": "Repository",
-              "Value #G": "Objects"
+              "Value #G": "Objects",
+              "schedule": "Schedule"
             }
           }
         }
@@ -955,7 +957,7 @@
               },
               {
                 "id": "custom.width",
-                "value": 200
+                "value": 130
               },
               {
                 "id": "thresholds",
@@ -987,11 +989,11 @@
               },
               {
                 "id": "noValue",
-                "value": "\u2013 (chained)"
+                "value": "\u2013"
               },
               {
                 "id": "custom.width",
-                "value": 150
+                "value": 120
               }
             ]
           },
@@ -1004,6 +1006,48 @@
               {
                 "id": "custom.width",
                 "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Schedule"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "scheduled": {
+                        "text": "Scheduled",
+                        "index": 0
+                      },
+                      "chained": {
+                        "text": "Chained",
+                        "index": 1
+                      },
+                      "none": {
+                        "text": "Manual",
+                        "index": 2
+                      },
+                      "unknown": {
+                        "text": "Unknown",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "noValue",
+                "value": "\u2013"
+              },
+              {
+                "id": "custom.width",
+                "value": 100
               }
             ]
           }

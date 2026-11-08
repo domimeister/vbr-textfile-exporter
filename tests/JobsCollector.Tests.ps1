@@ -48,6 +48,19 @@ Describe 'Jobs collector' {
         $actual | Should -Not -Match '[{,]instance='
     }
 
+    It 'sets the schedule label from the real VBR 13.1 states (<Fixture>)' -TestCases @(
+        @{ Fixture = 'jobs-states-scheduled.json'; Expected = @{ 'FS Broken' = 'none'; 'FS NeverRun' = 'chained'; 'FS TestData' = 'scheduled'; 'FS TestData SOBR' = 'none' } }
+        @{ Fixture = 'jobs-states-disabled.json'; Expected = @{ 'FS Broken' = 'none'; 'FS NeverRun' = 'chained'; 'FS TestData' = 'scheduled'; 'FS TestData SOBR' = 'none' } }
+    ) {
+        param($Fixture, $Expected)
+        $metrics = Get-VeeamJobMetric -JobState (Get-FixtureData -Name "lab/vbr-13.1/$Fixture")
+        $info = ($metrics | Where-Object Name -EQ 'veeam_job_info').Samples
+        $info.Count | Should -Be 4
+        foreach ($sample in $info) {
+            $sample.Labels['schedule'] | Should -BeExactly $Expected[$sample.Labels['job_name']] -Because $sample.Labels['job_name']
+        }
+    }
+
     It 'omits next_run for chained jobs and last_run for jobs that never ran' {
         $actual = Get-JobsPromText -Fixture 'jobs-states.json'
         $actual | Should -Not -Match 'veeam_job_next_run_timestamp_seconds\{job_name="Backup Copy Job 1"\}'

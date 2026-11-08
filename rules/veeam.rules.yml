@@ -31,9 +31,11 @@ groups:
           summary: '{{ $labels.object }} in {{ $labels.job_name }} not backed up'
 
       # Assumes daily jobs. Jobs that never ran have no last run timestamp
-      # and do not fire here (docs/metrics.md#OP-10).
+      # and do not fire here (docs/metrics.md#OP-10). Jobs without a schedule
+      # (schedule="none", started by hand) are skipped; exporters older than
+      # the schedule label still alert as before.
       - alert: VeeamJobNotRun
-        expr: (time() - veeam_job_last_run_timestamp_seconds) > 26 * 3600 and on(instance, job_name) veeam_job_enabled == 1
+        expr: (time() - veeam_job_last_run_timestamp_seconds) > 26 * 3600 and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!="none"}
         for: 1h
         labels:
           severity: warning

@@ -93,3 +93,25 @@ Describe 'ConvertTo-VeeamResultCode' {
         } | Should -Be $Out
     }
 }
+
+Describe 'ConvertTo-VeeamJobSchedule' {
+    It 'is <Out> for nextRun <NextRun> and nextRunPolicy <Policy>' -TestCases @(
+        @{ NextRun = '2026-11-08T22:00:00+01:00'; Policy = '08.11.2026 22:00'; Out = 'scheduled' }
+        @{ NextRun = '2025-07-30T19:00:00+02:00'; Policy = '7/30/2025 7:00 PM'; Out = 'scheduled' }
+        @{ NextRun = '2026-11-08T22:00:00+01:00'; Policy = '<Disabled>'; Out = 'scheduled' }
+        @{ NextRun = $null; Policy = 'After [FS TestData]'; Out = 'chained' }
+        @{ NextRun = $null; Policy = 'After [Linux backup job]'; Out = 'chained' }
+        @{ NextRun = ''; Policy = '  after [x]'; Out = 'chained' }
+        @{ NextRun = $null; Policy = '<Not scheduled>'; Out = 'none' }
+        @{ NextRun = '0001-01-01T00:00:00'; Policy = '<Not scheduled>'; Out = 'none' }
+        @{ NextRun = $null; Policy = '<Disabled>'; Out = 'unknown' }
+        @{ NextRun = $null; Policy = ''; Out = 'unknown' }
+        @{ NextRun = $null; Policy = $null; Out = 'unknown' }
+    ) {
+        param($NextRun, $Policy, $Out)
+        InModuleScope VeeamExporter -Parameters @{ NextRun = $NextRun; Policy = $Policy } {
+            param($NextRun, $Policy)
+            ConvertTo-VeeamJobSchedule -NextRun $NextRun -NextRunPolicy $Policy
+        } | Should -BeExactly $Out
+    }
+}

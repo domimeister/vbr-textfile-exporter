@@ -22,7 +22,7 @@ function Get-VeeamJobMetric {
     $enabled = New-PromMetric -Name 'veeam_job_enabled' -Help '1 job enabled, 0 disabled'
     $running = New-PromMetric -Name 'veeam_job_running' -Help '1 if the job is currently active (running, starting, stopping)'
     $lastRun = New-PromMetric -Name 'veeam_job_last_run_timestamp_seconds' -Help 'Start of the last run as Unix time'
-    $nextRun = New-PromMetric -Name 'veeam_job_next_run_timestamp_seconds' -Help 'Next scheduled run as Unix time (missing for chained jobs)'
+    $nextRun = New-PromMetric -Name 'veeam_job_next_run_timestamp_seconds' -Help 'Next scheduled run as Unix time (missing for chained and unscheduled jobs)'
     $objects = New-PromMetric -Name 'veeam_job_objects' -Help 'Number of objects in the job'
 
     foreach ($job in $JobState) {
@@ -36,6 +36,7 @@ function Get-VeeamJobMetric {
                 job_type   = $type
                 workload   = [string](Get-VeeamField -InputObject $job -Name 'workload')
                 repository = [string](Get-VeeamField -InputObject $job -Name 'repositoryName')
+                schedule   = (ConvertTo-VeeamJobSchedule -NextRun (Get-VeeamField -InputObject $job -Name 'nextRun') -NextRunPolicy ([string](Get-VeeamField -InputObject $job -Name 'nextRunPolicy')))
             })
 
         Add-PromSample -Metric $lastResult -Labels ([ordered]@{ job_name = $name; job_type = $type }) `
