@@ -46,7 +46,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Health → `veeam_exporter.prom` | implemented | works; `vbr_version` stays empty for Backup Viewer (OP-13) |
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter. Uninstall not tested yet |
-| Grafana dashboard (`dashboards/`) | implemented | not tried against lab data yet |
+| Grafana dashboard (`dashboards/`) | implemented | works in Grafana 13.3: every panel shows the lab data; status tiles, jobs with result, schedule (scheduled, chained, manual) and next run, the failed object with its message, repositories including the SOBR extents, license and exporter health |
 | Alert rules (`rules/`) | implemented, unit-tested with promtool | not tried against lab data yet |
 | Test suite on a machine with VBR installed | - | one test depends on the machine ([#23](https://github.com/domimeister/vbr-textfile-exporter/issues/23)) |
 
@@ -62,7 +62,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 
 Import it in Grafana under *Dashboards > New > Import*. It needs a Prometheus data source that scrapes the windows_exporter of the VBR servers. Variables: `datasource` (Prometheus data source) and `instance` (one or more VBR servers, taken from `veeam_exporter_info`). Status colours always come with a symbol and a label (Success, Warning, Failed).
 
-Built and checked with Grafana 13.3 and Prometheus 3.16 against the fixtures in `tests/fixtures/expected`, not against a live VBR server yet. `tests/Dashboard.Tests.ps1` checks that every query uses the data source variable, filters by `instance` and only uses metrics from `docs/metrics.md`.
+Built with Grafana 13.3 and Prometheus 3.16 against the fixtures in `tests/fixtures/expected`, then checked against the lab VBR 13.1 server (see [Status](#status)). `tests/Dashboard.Tests.ps1` checks that every query uses the data source variable, filters by `instance` and only uses metrics from `docs/metrics.md`.
 
 ## Installation
 
