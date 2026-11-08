@@ -47,16 +47,23 @@ A single call to `GET /api/v1/jobs/states` returns all values. The Veeam Backup 
 
 | Metric | Labels | Value | API field |
 | --- | --- | --- | --- |
-| `veeam_job_info` | job_name, job_id, job_type, workload, repository | 1 | id, type, workload, repositoryName |
+| `veeam_job_info` | job_name, job_id, job_type, workload, repository, schedule | 1 | id, type, workload, repositoryName; schedule from nextRun and nextRunPolicy |
 | `veeam_job_last_result` | job_name, job_type | 0 Success, 1 Warning, 2 Failed, -1 None | lastResult |
 | `veeam_job_enabled` | job_name | 1 enabled, 0 disabled | status ≠ disabled |
 | `veeam_job_running` | job_name | 1 currently running | status = running, starting, stopping |
 | `veeam_job_last_run_timestamp_seconds` | job_name | Unix time | lastRun |
-| `veeam_job_next_run_timestamp_seconds` | job_name | Unix time, missing for chained jobs | nextRun |
+| `veeam_job_next_run_timestamp_seconds` | job_name | Unix time, missing for chained and unscheduled jobs | nextRun |
 | `veeam_job_objects` | job_name | number of objects in the job | objectsCount |
 
 All metrics are gauges.
 
+- **Label `schedule`:** how the job is started, so that dashboards and alerts can tell a job started by hand from a chained one (both have no `nextRun`):
+  - `scheduled`: `nextRun` is set;
+  - `chained`: `nextRunPolicy` starts with `After [` (runs after another job, e.g. `After [Linux backup job]`);
+  - `none`: `nextRunPolicy` is `<Not scheduled>` (started by hand only);
+  - `unknown`: anything else.
+
+  For scheduled jobs `nextRunPolicy` is free text in the date format of the server (lab: `08.11.2026 22:00`, docs: `7/30/2025 7:00 PM`) and is not parsed.
 - **Label `job_name` instead of `job`:** Prometheus sets `job` itself on scrape; a label with the same name would be renamed to `exported_job`.
 - **Retries:** REST does not show whether a retry follows a failure ([Veeam Forum](https://forums.veeam.com/viewtopic.php?p=453319)). A Failed inside the retry window is therefore normal. Alerts need a `for` covering the window (Veeam default: 3 retries of 10 minutes each).
 - **Covered job types** according to the API enum: vSphere and Hyper-V backup, vSphere replica, backup copy, agent (Windows, Linux), Cloud Director, Entra ID. Tape, file share and SureBackup are not in the enum, see open points.
@@ -153,7 +160,7 @@ Values for `collector`: jobs, objects, repositories, license. The textfile colle
 
 ## Example Alerts
 
-Nine rules cover the minimum requirements and the exporter itself. The thresholds are proposals. They are implemented in [`rules/veeam.rules.yml`](../rules/veeam.rules.yml), which adds a `summary` annotation to every rule; `tests/rules/veeam.rules.test.yml` covers each rule with `promtool test rules`. `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval; `VeeamJobNotRun` assumes daily jobs.
+Nine rules cover the minimum requirements and the exporter itself. The thresholds are proposals. They are implemented in [`rules/veeam.rules.yml`](../rules/veeam.rules.yml), which adds a `summary` annotation to every rule; `tests/rules/veeam.rules.test.yml` covers each rule with `promtool test rules`. `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval; `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand.
 
 ```yaml
 groups:
@@ -176,7 +183,7 @@ groups:
         annotations:
           summary: "{{ $labels.object }} in {{ $labels.job_name }} not backed up"
       - alert: VeeamJobNotRun
-        expr: (time() - veeam_job_last_run_timestamp_seconds) > 26 * 3600 and on(instance, job_name) veeam_job_enabled == 1
+        expr: (time() - veeam_job_last_run_timestamp_seconds) > 26 * 3600 and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!="none"}
         for: 1h
         labels: {severity: warning}
       - alert: VeeamRepositoryFull

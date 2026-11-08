@@ -81,6 +81,25 @@ function ConvertTo-VeeamFilterTimestamp {
     return $Value.UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", [System.Globalization.CultureInfo]::InvariantCulture)
 }
 
+function ConvertTo-VeeamJobSchedule {
+    # How a job is started: scheduled (nextRun set), chained (nextRunPolicy
+    # "After [<job>]"), none ("<Not scheduled>", started by hand) or unknown.
+    # The policy text of scheduled jobs is a date in the server's format and
+    # is not parsed. See docs/metrics.md, section "Jobs & Results".
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [AllowNull()][object]$NextRun,
+        [AllowNull()][AllowEmptyString()][string]$NextRunPolicy
+    )
+    if ($null -ne (ConvertTo-UnixTimestamp -Value $NextRun)) { return 'scheduled' }
+    $policy = ''
+    if ($NextRunPolicy) { $policy = $NextRunPolicy.Trim() }
+    if ($policy.StartsWith('After [', [System.StringComparison]::OrdinalIgnoreCase)) { return 'chained' }
+    if ($policy -eq '<Not scheduled>') { return 'none' }
+    return 'unknown'
+}
+
 function ConvertTo-VeeamResultCode {
     # Success 0, Warning 1, Failed 2, None -1.
     [CmdletBinding()]

@@ -1,7 +1,7 @@
 # HELP veeam_job_info Veeam job (value always 1)
 # TYPE veeam_job_info gauge
-veeam_job_info{job_name="Backup \"Prod\" \\\\fs01\\daten",job_id="11111111-2222-4333-8444-555555555555",job_type="VSphereBackup",workload="Vm",repository="Repo\nZeile 2"} 1
-veeam_job_info{job_name="Sicherung Büro",job_id="66666666-7777-4888-9999-000000000000",job_type="HyperVBackup",workload="Vm",repository="Repo München"} 1
+veeam_job_info{job_name="Backup \"Prod\" \\\\fs01\\daten",job_id="11111111-2222-4333-8444-555555555555",job_type="VSphereBackup",workload="Vm",repository="Repo\nZeile 2",schedule="scheduled"} 1
+veeam_job_info{job_name="Sicherung Büro",job_id="66666666-7777-4888-9999-000000000000",job_type="HyperVBackup",workload="Vm",repository="Repo München",schedule="unknown"} 1
 # HELP veeam_job_last_result Result of the last run: 0 Success, 1 Warning, 2 Failed, -1 None
 # TYPE veeam_job_last_result gauge
 veeam_job_last_result{job_name="Backup \"Prod\" \\\\fs01\\daten",job_type="VSphereBackup"} 0
@@ -18,7 +18,7 @@ veeam_job_running{job_name="Sicherung Büro"} 1
 # TYPE veeam_job_last_run_timestamp_seconds gauge
 veeam_job_last_run_timestamp_seconds{job_name="Backup \"Prod\" \\\\fs01\\daten"} 1705525200
 veeam_job_last_run_timestamp_seconds{job_name="Sicherung Büro"} 1705521600
-# HELP veeam_job_next_run_timestamp_seconds Next scheduled run as Unix time (missing for chained jobs)
+# HELP veeam_job_next_run_timestamp_seconds Next scheduled run as Unix time (missing for chained and unscheduled jobs)
 # TYPE veeam_job_next_run_timestamp_seconds gauge
 veeam_job_next_run_timestamp_seconds{job_name="Backup \"Prod\" \\\\fs01\\daten"} 1705611600
 # HELP veeam_job_objects Number of objects in the job

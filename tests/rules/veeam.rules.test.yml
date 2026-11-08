@@ -117,6 +117,33 @@ tests:
         values: '0+60x1700'
       - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Busy Job"}'
         values: '1x1700'
+      # Just as old, but without a schedule (started by hand): no alert.
+      - series: 'veeam_job_last_run_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Manual Job"}'
+        values: '0x1700'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Manual Job"}'
+        values: '1x1700'
+      # Just as old, chained after another job: alerts like a scheduled job.
+      - series: 'veeam_job_last_run_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Chained Job"}'
+        values: '0x1700'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Chained Job"}'
+        values: '1x1700'
+      # Just as old, from an exporter without the schedule label: alerts as before.
+      - series: 'veeam_job_last_run_timestamp_seconds{instance="vbr02:9182",job="windows",job_name="Old Exporter Job"}'
+        values: '0x1700'
+      - series: 'veeam_job_enabled{instance="vbr02:9182",job="windows",job_name="Old Exporter Job"}'
+        values: '1x1700'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Old Job",schedule="scheduled"}'
+        values: '1x1700'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Disabled Job",schedule="scheduled"}'
+        values: '1x1700'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Busy Job",schedule="scheduled"}'
+        values: '1x1700'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Manual Job",schedule="none"}'
+        values: '1x1700'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Chained Job",schedule="chained"}'
+        values: '1x1700'
+      - series: 'veeam_job_info{instance="vbr02:9182",job="windows",job_name="Old Exporter Job"}'
+        values: '1x1700'
     alert_rule_test:
       - eval_time: 27h
         alertname: VeeamJobNotRun
@@ -126,6 +153,10 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Old Job}
             exp_annotations: {summary: 'Job Old Job on vbr01:9182 has not run for more than 26 hours'}
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Chained Job}
+            exp_annotations: {summary: 'Job Chained Job on vbr01:9182 has not run for more than 26 hours'}
+          - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, job_name: Old Exporter Job}
+            exp_annotations: {summary: 'Job Old Exporter Job on vbr02:9182 has not run for more than 26 hours'}
 
   - name: stale exporter files
     interval: 1m

@@ -1,9 +1,9 @@
 # HELP veeam_job_info Veeam job (value always 1)
 # TYPE veeam_job_info gauge
-veeam_job_info{job_name="Backup Job 1",job_id="8e5d1ffc-1b0f-4a3b-9fd3-2ba0d4d4f6e2",job_type="VSphereBackup",workload="Vm",repository="Default Backup Repository"} 1
-veeam_job_info{job_name="Backup Copy Job 1",job_id="3b8c2f40-5f0e-4b8a-9c11-1f0d7d4e0b21",job_type="BackupCopy",workload="Vm",repository="SOBR 1"} 1
-veeam_job_info{job_name="Agent Backup Policy 1",job_id="5d6e7f80-9a1b-4c2d-8e3f-4a5b6c7d8e9f",job_type="WindowsAgentBackup",workload="Computer",repository="Default Backup Repository"} 1
-veeam_job_info{job_name="Replica Job 1",job_id="9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",job_type="VSphereReplica",workload="Vm",repository=""} 1
+veeam_job_info{job_name="Backup Job 1",job_id="8e5d1ffc-1b0f-4a3b-9fd3-2ba0d4d4f6e2",job_type="VSphereBackup",workload="Vm",repository="Default Backup Repository",schedule="scheduled"} 1
+veeam_job_info{job_name="Backup Copy Job 1",job_id="3b8c2f40-5f0e-4b8a-9c11-1f0d7d4e0b21",job_type="BackupCopy",workload="Vm",repository="SOBR 1",schedule="chained"} 1
+veeam_job_info{job_name="Agent Backup Policy 1",job_id="5d6e7f80-9a1b-4c2d-8e3f-4a5b6c7d8e9f",job_type="WindowsAgentBackup",workload="Computer",repository="Default Backup Repository",schedule="unknown"} 1
+veeam_job_info{job_name="Replica Job 1",job_id="9f8e7d6c-5b4a-4392-8170-6f5e4d3c2b1a",job_type="VSphereReplica",workload="Vm",repository="",schedule="scheduled"} 1
 # HELP veeam_job_last_result Result of the last run: 0 Success, 1 Warning, 2 Failed, -1 None
 # TYPE veeam_job_last_result gauge
 veeam_job_last_result{job_name="Backup Job 1",job_type="VSphereBackup"} 0
@@ -27,7 +27,7 @@ veeam_job_running{job_name="Replica Job 1"} 0
 veeam_job_last_run_timestamp_seconds{job_name="Backup Job 1"} 1705525212
 veeam_job_last_run_timestamp_seconds{job_name="Backup Copy Job 1"} 1705559400
 veeam_job_last_run_timestamp_seconds{job_name="Agent Backup Policy 1"} 1705443345
-# HELP veeam_job_next_run_timestamp_seconds Next scheduled run as Unix time (missing for chained jobs)
+# HELP veeam_job_next_run_timestamp_seconds Next scheduled run as Unix time (missing for chained and unscheduled jobs)
 # TYPE veeam_job_next_run_timestamp_seconds gauge
 veeam_job_next_run_timestamp_seconds{job_name="Backup Job 1"} 1705611600
 veeam_job_next_run_timestamp_seconds{job_name="Replica Job 1"} 1705622400
