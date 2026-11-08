@@ -53,6 +53,15 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly -ParameterFilter { $Path -like '*serverInfo*' }
     }
 
+    It 'leaves vbr_version empty without a warning when -BaseUri points to another server' {
+        Set-VeeamApiMock -VbrVersion '13.1.2.57'
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -BaseUri 'https://vbr02.example.net:9419' -WarningVariable warnings -WarningAction SilentlyContinue
+        $result.Success | Should -BeTrue
+        @($warnings).Count | Should -Be 0
+        Get-FileText -Path $script:HealthFile | Should -Match ([regex]::Escape('api_version="1.3-rev2",vbr_version=""} 1'))
+        Should -Invoke -ModuleName VeeamExporter Get-VeeamLocalServerVersion -Times 0 -Exactly
+    }
+
     It 'leaves vbr_version empty and warns once if the local version cannot be read; collectors still run' {
         Set-VeeamApiMock -VbrVersionFails
         $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningVariable warnings -WarningAction SilentlyContinue

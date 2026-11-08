@@ -70,3 +70,31 @@ Describe 'Get-VeeamLocalServerVersion' {
         { InModuleScope VeeamExporter { Get-VeeamLocalServerVersion } } | Should -Throw '*Cannot find path*'
     }
 }
+
+Describe 'Test-VeeamLocalBaseUri' {
+    It 'returns <Expected> for <BaseUri>' -TestCases @(
+        @{ BaseUri = 'https://localhost:9419'; Expected = $true }
+        @{ BaseUri = 'https://LOCALHOST:9419/'; Expected = $true }
+        @{ BaseUri = 'https://127.0.0.1:9419'; Expected = $true }
+        @{ BaseUri = 'https://[::1]:9419'; Expected = $true }
+        @{ BaseUri = 'https://vbr02.example.net:9419'; Expected = $false }
+        @{ BaseUri = 'https://10.0.0.5:9419'; Expected = $false }
+        @{ BaseUri = 'not a uri'; Expected = $false }
+        @{ BaseUri = ''; Expected = $false }
+    ) {
+        param($BaseUri, $Expected)
+        InModuleScope VeeamExporter -Parameters @{ BaseUri = $BaseUri } {
+            param($BaseUri)
+            Test-VeeamLocalBaseUri -BaseUri $BaseUri
+        } | Should -Be $Expected
+    }
+
+    It 'returns $true for the name of this machine, in any case' {
+        $name = [System.Net.NetworkInformation.IPGlobalProperties]::GetIPGlobalProperties().HostName
+        if ($env:COMPUTERNAME) { $name = $env:COMPUTERNAME }
+        InModuleScope VeeamExporter -Parameters @{ Name = $name.ToUpperInvariant() } {
+            param($Name)
+            Test-VeeamLocalBaseUri -BaseUri ('https://{0}:9419' -f $Name)
+        } | Should -BeTrue
+    }
+}

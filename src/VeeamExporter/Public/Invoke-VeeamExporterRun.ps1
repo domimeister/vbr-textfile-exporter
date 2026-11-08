@@ -62,12 +62,18 @@ function Invoke-VeeamExporterRun {
             foreach ($name in $failed) { $results.Add([pscustomobject]@{ Collector = $name; Success = $false; DurationSeconds = 0 }) }
         }
 
-        # Read locally, independent of the REST role (docs/metrics.md#OP-13).
-        try {
-            $vbrVersion = Get-VeeamLocalServerVersion
+        # Read locally, independent of the REST role (docs/metrics.md#OP-13),
+        # but only if the REST data come from this machine as well.
+        if (Test-VeeamLocalBaseUri -BaseUri $BaseUri) {
+            try {
+                $vbrVersion = Get-VeeamLocalServerVersion
+            }
+            catch {
+                Write-Warning ('VBR version not readable: {0}' -f $_.Exception.Message)
+            }
         }
-        catch {
-            Write-Warning ('VBR version not readable: {0}' -f $_.Exception.Message)
+        else {
+            Write-Verbose ('{0} is not this machine; vbr_version stays empty.' -f $BaseUri)
         }
 
         if ($null -eq $configError) {
