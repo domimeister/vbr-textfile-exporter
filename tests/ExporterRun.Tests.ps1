@@ -283,6 +283,18 @@ Describe 'Invoke-VeeamExporterRun' {
         @(Get-ChildItem -LiteralPath $script:Dir -Filter '*.tmp').Count | Should -Be 0
         Get-SortedFileName -Directory $script:Dir | Should -BeExactly 'veeam_exporter.prom,veeam_jobs.prom,veeam_objects.prom,veeam_repositories.prom'
     }
+
+    It 'warns about a copy of an exporter file after writing the health file' {
+        Set-VeeamApiMock
+        [System.IO.File]::WriteAllText((Join-Path $script:Dir 'veeam_jobs - Kopie.prom'), "veeam_job_enabled{job_name=`"a`"} 1`n")
+        [System.IO.File]::WriteAllText((Join-Path $script:Dir 'node_custom.prom'), "node_custom 1`n")
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningVariable warnings -WarningAction SilentlyContinue
+        $result.Success | Should -BeTrue
+        $hits = @($warnings | Where-Object { "$_" -like '*hold Veeam metrics*' })
+        $hits.Count | Should -Be 1
+        "$($hits[0])" | Should -BeLike '*veeam_jobs - Kopie.prom'
+        Get-FileText -Path $script:HealthFile | Should -Match 'veeam_exporter_collector_success\{collector="jobs"\} 1'
+    }
 }
 
 Describe 'Health file without the module' {
