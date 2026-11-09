@@ -52,6 +52,23 @@ function Test-VeeamExporterAdministrator {
     catch { return $false }
 }
 
+# ------------------------------------------------- shared with the exporter --
+# ConvertFrom-ServiceImagePath: one parser for service image paths, also used
+# by the exporter for VeeamBackupSvc. Repository: src\VeeamExporter\Private;
+# installation: VeeamExporter\Private next to deploy\.
+
+$script:ServiceImagePathScript = & {
+    $parent = Split-Path -Parent $PSScriptRoot
+    foreach ($appRoot in @((Join-Path -Path $parent -ChildPath 'src'), $parent)) {
+        $file = Join-Path -Path (Join-Path -Path (Join-Path -Path $appRoot -ChildPath 'VeeamExporter') -ChildPath 'Private') -ChildPath 'ServiceImagePath.ps1'
+        if (Test-Path -LiteralPath $file -PathType Leaf) { return $file }
+    }
+}
+if (-not $script:ServiceImagePathScript) {
+    throw ('ServiceImagePath.ps1 of the exporter module not found (expected src\VeeamExporter\Private or VeeamExporter\Private next to {0}).' -f $PSScriptRoot)
+}
+. $script:ServiceImagePathScript
+
 # --------------------------------------------------------- windows_exporter --
 
 function Get-WindowsExporterTextfileDirectory {
@@ -88,8 +105,10 @@ function Get-WindowsExporterTextfileDirectory {
 
     if (-not $directory) {
         $exe = $null
-        if ($ImagePath -and $ImagePath -match '^\s*"([^"]+)"') { $exe = $Matches[1] }
-        elseif ($ImagePath -and $ImagePath -match '^\s*(\S+)') { $exe = $Matches[1] }
+        if ($ImagePath) {
+            try { $exe = ConvertFrom-ServiceImagePath -ImagePath $ImagePath }
+            catch { Write-Verbose ('windows_exporter image path not readable: {0}' -f $_.Exception.Message) }
+        }
         if ($exe -and $exe.LastIndexOf('\') -gt 0) { $directory = $exe.Substring(0, $exe.LastIndexOf('\')) + '\textfile_inputs' }
         else { $directory = 'C:\Program Files\windows_exporter\textfile_inputs' }
     }
