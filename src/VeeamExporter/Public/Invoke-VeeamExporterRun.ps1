@@ -22,8 +22,11 @@ function Invoke-VeeamExporterRun {
         [AllowNull()][AllowEmptyString()][string]$ApiVersion,
         # Comma lists ("jobs,objects") are accepted as well, see Split-VeeamListParameter.
         [string[]]$Collector = @('jobs', 'objects', 'repositories'),
-        [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
+        # 1 to 90. Checked by the run (no ValidateRange), so a value out of
+        # range is a configuration error and veeam_exporter.prom is written.
+        [int]$ObjectLookbackDays = 8,
         [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
+        # Per HTTP request, 1 to 600 seconds; checked by the run like ObjectLookbackDays.
         [int]$TimeoutSec = 60
     )
     $collectorCommands = @{
@@ -53,6 +56,10 @@ function Invoke-VeeamExporterRun {
             }
             if ($Collector.Count -eq 0) { throw 'No collector selected.' }
             if ($ObjectSessionType.Count -eq 0) { throw 'No session type for the objects collector.' }
+            if ($ObjectLookbackDays -lt 1 -or $ObjectLookbackDays -gt 90) { throw ('ObjectLookbackDays must be between 1 and 90, got {0}.' -f $ObjectLookbackDays) }
+            # Windows PowerShell 5.1 would take 0 as "no timeout", PowerShell 7
+            # refuses it; the REST task is stopped after 10 minutes anyway.
+            if ($TimeoutSec -lt 1 -or $TimeoutSec -gt 600) { throw ('TimeoutSec must be between 1 and 600 seconds, got {0}.' -f $TimeoutSec) }
         }
         catch {
             # Configuration error: no collector runs. The requested known

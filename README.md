@@ -87,7 +87,7 @@ The script reads the thumbprint of the REST API (with confirmation), asks for th
 .\src\Invoke-VeeamLicenseExporter.ps1 -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs'
 ```
 
-The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.ps1` therefore needs its own credential, created in your own account with `Get-Credential | Export-Clixml -LiteralPath <file>`. Without `-CertificateThumbprint` the normal .NET certificate validation applies, and the self-signed VBR certificate is rejected. Exit code 0 if all collectors succeeded, otherwise 1.
+The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.ps1` therefore needs its own credential, created in your own account with `Get-Credential | Export-Clixml -LiteralPath <file>`. Without `-CertificateThumbprint` the normal .NET certificate validation applies, and the self-signed VBR certificate is rejected. Exit code 0 if all collectors succeeded, otherwise 1. A parameter value outside its range is a configuration error: the run writes `veeam_exporter.prom` with the requested collectors at 0, then stops with the error.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
@@ -95,7 +95,7 @@ The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.
 | `-ObjectLookbackDays` | `8` | How far back `objects` reads task sessions. |
 | `-ObjectSessionType` | `BackupJob,ReplicaJob` | Session types for `objects` (see OP-11 in `docs/metrics.md`). |
 | `-ApiVersion` | probe | Fixed `x-api-version`, skips the version probe. |
-| `-TimeoutSec` | `60` | Timeout per HTTP request. |
+| `-TimeoutSec` | `60` | Timeout per HTTP request, 1 to 600 seconds. |
 | `-LogPath` | – | Transcript of the run (overwritten every time). |
 
 The license task runs as SYSTEM without a stored password and reads the license with `Get-VBRInstalledLicense`. Under VBR 13 it needs PowerShell 7 and the Veeam console. It writes its health status to `veeam_exporter_license.prom` (`collector="license"`), so it does not overwrite the REST task's `veeam_exporter.prom`.
