@@ -221,7 +221,7 @@
               "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
               "model": {
                 "refId": "A",
-                "expr": "veeam_job_last_result unless on(instance, job_name) veeam_job_last_run_timestamp_seconds and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!=\"none\"}",
+                "expr": "count_over_time((veeam_job_last_result == -1 unless on(instance, job_name) veeam_job_last_run_timestamp_seconds and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!=\"none\"})[28h:15m]) and on(instance, job_name) (veeam_job_last_result == -1 unless on(instance, job_name) veeam_job_last_run_timestamp_seconds and on(instance, job_name) veeam_job_enabled == 1 and on(instance, job_name) veeam_job_info{schedule!=\"none\"})",
                 "instant": true,
                 "range": false
               }
@@ -236,9 +236,9 @@
                 "conditions": [
                   {
                     "evaluator": {
-                      "type": "eq",
+                      "type": "gt",
                       "params": [
-                        -1
+                        103
                       ]
                     }
                   }
@@ -248,7 +248,7 @@
           ],
           "noDataState": "OK",
           "execErrState": "Error",
-          "for": "26h",
+          "for": "0s",
           "isPaused": false,
           "labels": {
             "severity": "warning"
@@ -408,6 +408,106 @@
           }
         },
         {
+          "uid": "veeam-license-invalid",
+          "title": "VeeamLicenseInvalid",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_license_valid",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "1h",
+          "isPaused": false,
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Veeam license on {{ $labels.instance }} is not valid"
+          }
+        },
+        {
+          "uid": "veeam-support-expiring",
+          "title": "VeeamSupportExpiring",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "(veeam_license_support_expiration_timestamp_seconds - time()) / 86400",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "lt",
+                      "params": [
+                        30
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Veeam support on {{ $labels.instance }} ends in {{ printf \"%.0f\" $values.A.Value }} days"
+          }
+        },
+        {
           "uid": "veeam-exporter-stale",
           "title": "VeeamExporterStale",
           "condition": "B",
@@ -505,6 +605,156 @@
           },
           "annotations": {
             "summary": "Veeam license file on {{ $labels.instance }} has not been updated for {{ printf \"%.0f\" $values.A.Value }} hours"
+          }
+        },
+        {
+          "uid": "veeam-exporter-collector-failed",
+          "title": "VeeamExporterCollectorFailed",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_exporter_collector_success",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "30m",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Veeam exporter collector {{ $labels.collector }} on {{ $labels.instance }} has been failing for 30 minutes"
+          }
+        },
+        {
+          "uid": "veeam-exporter-missing",
+          "title": "VeeamExporterMissing",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "max by (instance) (max_over_time(veeam_exporter_info[1d])) unless on(instance) veeam_exporter_info",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "15m",
+          "isPaused": false,
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "No Veeam exporter data from {{ $labels.instance }} for 15 minutes: windows_exporter down, port blocked or files gone"
+          }
+        },
+        {
+          "uid": "veeam-exporter-textfile-error",
+          "title": "VeeamExporterTextfileError",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "windows_exporter_collector_success{collector=\"textfile\"} and on(instance) max by (instance) (max_over_time(veeam_exporter_info[1d]))",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "15m",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "windows_exporter on {{ $labels.instance }} rejects a file in its textfile directory"
           }
         }
       ]
