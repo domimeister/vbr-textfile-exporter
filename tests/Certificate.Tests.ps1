@@ -59,7 +59,7 @@ Describe 'Certificate pinning' {
     It 'PowerShell 7: HttpClient with pinning handler' {
         if ($PSVersionTable.PSEdition -ne 'Core') { Set-ItResult -Skipped -Because 'PowerShell 7 only'; return }
         InModuleScope VeeamExporter {
-            $ctx = New-VeeamHttpContext -BaseUri 'https://localhost:9419' -CertificateThumbprint 'AB CD EF'
+            $ctx = New-VeeamHttpContext -BaseUri 'https://localhost:9419' -CertificateThumbprint 'ab cd ef 01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef 01'
             try {
                 $ctx.HttpClient | Should -Not -BeNullOrEmpty
                 $ctx.HttpClient.Timeout.TotalSeconds | Should -Be 60
@@ -71,11 +71,22 @@ Describe 'Certificate pinning' {
     It 'Windows PowerShell 5.1: TLS 1.2 and validation callback' {
         if ($PSVersionTable.PSEdition -eq 'Core') { Set-ItResult -Skipped -Because 'Windows PowerShell 5.1 only'; return }
         InModuleScope VeeamExporter {
-            $ctx = New-VeeamHttpContext -BaseUri 'https://localhost:9419' -CertificateThumbprint 'AB CD EF'
+            $ctx = New-VeeamHttpContext -BaseUri 'https://localhost:9419' -CertificateThumbprint 'ab cd ef 01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef 01'
             $ctx.HttpClient | Should -BeNullOrEmpty
             [System.Net.ServicePointManager]::SecurityProtocol | Should -Be ([System.Net.SecurityProtocolType]::Tls12)
             [System.Net.ServicePointManager]::ServerCertificateValidationCallback | Should -Not -BeNullOrEmpty
-            [VeeamExporter.CertificatePin]::PinnedThumbprint | Should -BeExactly 'ABCDEF'
+            [VeeamExporter.CertificatePin]::PinnedThumbprint | Should -BeExactly 'ABCDEF0123456789ABCDEF0123456789ABCDEF01'
         }
+    }
+
+    It 'refuses <Case> as thumbprint before anything is sent' -TestCases @(
+        @{ Case = 'a label from certutil'; In = 'Cert Hash(sha1): ab cd ef 01 23 45 67 89 ab cd ef 01 23 45 67 89 ab cd ef 01'; Message = "*contains 'r'*" }
+        @{ Case = 'a SHA-256 fingerprint'; In = ('3F2A' * 16); Message = '*64 hex digits*' }
+        @{ Case = 'a short value'; In = 'AB CD EF'; Message = '*6 hex digits*' }
+    ) {
+        param($Case, $In, $Message)
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content $script:TokenJson }
+        { Connect-VeeamServer -Credential (New-TestCredential) -CertificateThumbprint $In } | Should -Throw $Message
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 0 -Exactly
     }
 }

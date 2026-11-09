@@ -221,6 +221,14 @@ Describe 'Disconnect-VeeamServer' {
         { Disconnect-VeeamServer -Session $session -WarningAction SilentlyContinue } | Should -Not -Throw
         $session.AccessToken | Should -BeNullOrEmpty
     }
+
+    It 'forgets the jobs/states of the session' {
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 }
+        $session = New-TestSession
+        $session | Add-Member -NotePropertyName JobStateCache -NotePropertyValue @([pscustomobject]@{ name = 'Job 1' })
+        Disconnect-VeeamServer -Session $session
+        $session.JobStateCache | Should -BeNullOrEmpty
+    }
 }
 
 Describe 'Read-only' {

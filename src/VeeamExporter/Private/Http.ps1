@@ -30,6 +30,8 @@ function New-VeeamHttpContext {
     if (-not [uri]::TryCreate($BaseUri, [System.UriKind]::Absolute, [ref]$parsed) -or $parsed.Scheme -ne 'https') {
         throw "BaseUri must be an absolute https:// URI, got '$BaseUri'."
     }
+    # A malformed value would be pinned and fail every TLS handshake.
+    if ($CertificateThumbprint) { $CertificateThumbprint = ConvertTo-VeeamCertificateThumbprint -Thumbprint $CertificateThumbprint }
     Initialize-VeeamTransportSecurity -CertificateThumbprint $CertificateThumbprint
 
     $client = $null
@@ -47,13 +49,15 @@ function New-VeeamHttpContext {
     }
 
     return [pscustomobject]@{
-        PSTypeName   = 'VeeamExporter.HttpContext'
-        BaseUri      = $BaseUri.TrimEnd('/')
-        TimeoutSec   = $TimeoutSec
-        HttpClient   = $client
-        ApiVersion   = $null
-        AccessToken  = $null
-        RefreshToken = $null
+        PSTypeName    = 'VeeamExporter.HttpContext'
+        BaseUri       = $BaseUri.TrimEnd('/')
+        TimeoutSec    = $TimeoutSec
+        HttpClient    = $client
+        ApiVersion    = $null
+        AccessToken   = $null
+        RefreshToken  = $null
+        # jobs/states of this session, see Get-VeeamJobState
+        JobStateCache = $null
     }
 }
 

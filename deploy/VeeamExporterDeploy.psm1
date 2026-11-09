@@ -843,9 +843,13 @@ function Get-VeeamExporterPathProblem {
     param(
         [Parameter(Mandatory = $true)][string]$Path,
         [int64]$RightsMask = 0,
-        [switch]$NoRecurse
+        [switch]$NoRecurse,
+        # From Get-VeeamExporterTrustedSid; pass it when checking several
+        # paths, it asks the local Administrators group every time.
+        [string[]]$TrustedSid
     )
-    $trusted = Get-VeeamExporterTrustedSid
+    $trusted = $TrustedSid
+    if (-not $trusted) { $trusted = Get-VeeamExporterTrustedSid }
     if ($NoRecurse) { $items = @(Get-Item -LiteralPath $Path -Force) }
     else { $items = @(Get-VeeamExporterTreeItem -Path $Path) }
     $problems = New-Object -TypeName System.Collections.Generic.List[string]
@@ -870,10 +874,11 @@ function Get-VeeamExporterTextfileProblem {
     [OutputType([string[]])]
     param([Parameter(Mandatory = $true)][string]$Directory)
     $problems = New-Object -TypeName System.Collections.Generic.List[string]
-    foreach ($p in (Get-VeeamExporterPathProblem -Path $Directory -RightsMask $script:WriteRightsMask -NoRecurse)) { $problems.Add($p) }
+    $trusted = Get-VeeamExporterTrustedSid
+    foreach ($p in (Get-VeeamExporterPathProblem -Path $Directory -RightsMask $script:WriteRightsMask -NoRecurse -TrustedSid $trusted)) { $problems.Add($p) }
     $names = @($script:PromFiles | ForEach-Object { $_; $_ + '.tmp' })
     foreach ($item in @(Get-ChildItem -LiteralPath $Directory -Force | Where-Object { $names -contains $_.Name })) {
-        foreach ($p in (Get-VeeamExporterPathProblem -Path $item.FullName -RightsMask $script:WriteRightsMask -NoRecurse)) { $problems.Add($p) }
+        foreach ($p in (Get-VeeamExporterPathProblem -Path $item.FullName -RightsMask $script:WriteRightsMask -NoRecurse -TrustedSid $trusted)) { $problems.Add($p) }
     }
     return [string[]]$problems.ToArray()
 }

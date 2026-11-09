@@ -82,3 +82,16 @@ function Get-VeeamPagedItem {
     }
     return $items.ToArray()
 }
+
+function Get-VeeamJobState {
+    # GET /api/v1/jobs/states (all pages), loaded once per session: the jobs
+    # and the objects collector both need it in the same run. A failed load
+    # is not kept, so the next collector tries again.
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][object]$Session)
+    $cached = $Session.PSObject.Properties['JobStateCache']
+    if ($null -ne $cached -and $null -ne $cached.Value) { return $cached.Value }
+    $states = @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/jobs/states')
+    $Session | Add-Member -NotePropertyName 'JobStateCache' -NotePropertyValue $states -Force
+    return $states
+}

@@ -23,6 +23,7 @@ function Disconnect-VeeamServer {
     finally {
         $Session.AccessToken = $null
         $Session.RefreshToken = $null
+        if ($Session.PSObject.Properties['JobStateCache']) { $Session.JobStateCache = $null }
         if ($null -ne $Session.HttpClient) {
             $Session.HttpClient.Dispose()
             $Session.HttpClient = $null

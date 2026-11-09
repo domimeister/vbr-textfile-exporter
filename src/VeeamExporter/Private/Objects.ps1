@@ -63,8 +63,17 @@ function Select-VeeamLatestObjectTask {
     $latest = New-OrdinalDictionary
     $skipped = 0
     foreach ($task in $TaskSession) {
-        $sid = Get-VeeamGuidKey -Value (Get-VeeamField -InputObject $task -Name 'sessionId')
-        $object = [string](Get-VeeamField -InputObject $task -Name 'name')
+        # Hot loop over every task session of the lookback (tens of thousands
+        # in a large environment): fields are read inline, not through
+        # Get-VeeamField/Get-VeeamGuidKey/ConvertTo-VeeamFieldValue. Under
+        # Windows PowerShell 5.1 every function call costs about 0.1 ms.
+        $props = $task.PSObject.Properties
+        $sid = ''
+        $p = $props['sessionId']
+        if ($null -ne $p -and $null -ne $p.Value) { $sid = ([string]$p.Value).Trim().ToLowerInvariant() }
+        $object = ''
+        $p = $props['name']
+        if ($null -ne $p -and $null -ne $p.Value) { $object = [string]$p.Value }
         if (-not $sid -or -not $sessionJob.ContainsKey($sid) -or -not $object) {
             $skipped++
             continue
@@ -81,32 +90,36 @@ function Select-VeeamLatestObjectTask {
         # A creation time or usn that cannot be read only weakens the choice of
         # the newest task; it is reported once with the object (Get-VeeamObjectMetric).
         $created = $null
-        try { $created = ConvertTo-VeeamDateTimeOffset -Value (Get-VeeamField -InputObject $task -Name 'creationTime') }
-        catch { Write-Verbose ("Task '{0}' in job '{1}': creationTime not readable for ordering." -f $object, $jobName) }
-        $usn = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $task -Name 'usn') -Field 'usn' -Item ("Task '{0}' in job '{1}'" -f $object, $jobName) `
-            -Conversion { param($v) if ($null -ne $v) { [int64]$v } }
-        if ($null -eq $usn) { $usn = -1 }
-        $candidate = [pscustomobject]@{
-            JobName = $jobName
-            Object  = $object
-            Created = $created
-            Usn     = [int64]$usn
-            Task    = $task
+        $p = $props['creationTime']
+        if ($null -ne $p -and $null -ne $p.Value) {
+            try { $created = ConvertTo-VeeamDateTimeOffset -Value $p.Value }
+            catch { Write-Verbose ("Task '{0}' in job '{1}': creationTime not readable for ordering." -f $object, $jobName) }
+        }
+        $usn = [int64]-1
+        $p = $props['usn']
+        if ($null -ne $p -and $null -ne $p.Value) {
+            try { $usn = [int64]$p.Value }
+            catch { Write-Warning ("Task '{0}' in job '{1}': field usn skipped: {2}" -f $object, $jobName, $_.Exception.Message) }
         }
 
         $key = $jobName + [char]0 + $object
-        if (-not $latest.ContainsKey($key)) {
-            $latest[$key] = $candidate
-            continue
+        if ($latest.ContainsKey($key)) {
+            $current = $latest[$key]
+            $newer = $false
+            if ($null -eq $current.Created) { $newer = ($null -ne $created) -or ($usn -gt $current.Usn) }
+            elseif ($null -ne $created) {
+                if ($created -gt $current.Created) { $newer = $true }
+                elseif ($created -eq $current.Created -and $usn -gt $current.Usn) { $newer = $true }
+            }
+            if (-not $newer) { continue }
         }
-        $current = $latest[$key]
-        $newer = $false
-        if ($null -eq $current.Created) { $newer = ($null -ne $created) -or ($candidate.Usn -gt $current.Usn) }
-        elseif ($null -ne $created) {
-            if ($created -gt $current.Created) { $newer = $true }
-            elseif ($created -eq $current.Created -and $candidate.Usn -gt $current.Usn) { $newer = $true }
+        $latest[$key] = [pscustomobject]@{
+            JobName = $jobName
+            Object  = $object
+            Created = $created
+            Usn     = $usn
+            Task    = $task
         }
-        if ($newer) { $latest[$key] = $candidate }
     }
     if ($skipped -gt 0) { Write-Verbose "Objects: skipped $skipped task sessions without known session, job or object name." }
 

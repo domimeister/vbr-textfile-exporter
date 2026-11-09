@@ -205,6 +205,32 @@ Describe 'Invoke-VeeamExporterRun' {
         $health | Should -Match 'veeam_exporter_collector_success\{collector="objects"\} 0'
     }
 
+    It 'loads jobs/states once for the jobs and the objects collector' {
+        Set-VeeamApiMock
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
+        $result.Success | Should -BeTrue
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/jobs/states' }
+        Get-FileText -Path $script:JobsFile | Should -BeExactly (Get-ExpectedText -Name 'veeam_jobs.prom')
+        Get-FileText -Path $script:ObjectsFile | Should -BeExactly (Get-ExpectedText -Name 'doc/1.3-rev0/veeam_objects.prom')
+    }
+
+    It 'loads jobs/states again for the objects collector if it failed for the jobs collector' {
+        Set-VeeamApiMock
+        $script:JobStateCalls = 0
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest {
+            $script:JobStateCalls++
+            if ($script:JobStateCalls -eq 1) { return New-HttpResponse -StatusCode 500 -Content '{"errorCode":"InternalError","message":"boom"}' }
+            return New-HttpResponse -StatusCode 200 -Content $script:MockJobsContent
+        } -ParameterFilter { $Path -eq '/api/v1/jobs/states' }
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
+        $result.Success | Should -BeFalse
+        $script:JobStateCalls | Should -Be 2
+        $health = Get-FileText -Path $script:HealthFile
+        $health | Should -Match 'veeam_exporter_collector_success\{collector="jobs"\} 0'
+        $health | Should -Match 'veeam_exporter_collector_success\{collector="objects"\} 1'
+        Get-FileText -Path $script:ObjectsFile | Should -BeExactly (Get-ExpectedText -Name 'doc/1.3-rev0/veeam_objects.prom')
+    }
+
     It 'logs out at the end' {
         Set-VeeamApiMock
         $null = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue

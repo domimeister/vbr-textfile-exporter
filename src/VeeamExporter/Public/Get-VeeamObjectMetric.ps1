@@ -25,7 +25,7 @@ function Get-VeeamObjectMetric {
         # One extra day for sessions that started before the cutoff.
         $sessionCutoff = $taskCutoff.AddDays(-1)
 
-        $JobState = @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/jobs/states')
+        $JobState = @(Get-VeeamJobState -Session $Session)
         $sessions = New-Object -TypeName System.Collections.Generic.List[object]
         $sessionIds = New-OrdinalDictionary
         foreach ($type in $SessionType) {
@@ -46,7 +46,12 @@ function Get-VeeamObjectMetric {
         $taskQuery = [ordered]@{ createdAfterFilter = (ConvertTo-VeeamFilterTimestamp -Value $taskCutoff) }
         $tasks = New-Object -TypeName System.Collections.Generic.List[object]
         foreach ($item in @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/taskSessions' -Query $taskQuery)) {
-            $sid = Get-VeeamGuidKey -Value (Get-VeeamField -InputObject $item -Name 'sessionId')
+            # Every task session of the lookback: read sessionId inline, a
+            # function call per item costs about 0.1 ms under 5.1 (see
+            # Select-VeeamLatestObjectTask).
+            $p = $item.PSObject.Properties['sessionId']
+            if ($null -eq $p -or $null -eq $p.Value) { continue }
+            $sid = ([string]$p.Value).Trim().ToLowerInvariant()
             if ($sid -and $sessionIds.ContainsKey($sid)) { $tasks.Add($item) }
         }
         $JobSession = $sessions.ToArray()

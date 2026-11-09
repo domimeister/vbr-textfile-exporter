@@ -119,3 +119,28 @@ function Initialize-VeeamTransportSecurity {
         [System.Net.ServicePointManager]::ServerCertificateValidationCallback = [VeeamExporter.CertificatePin]::Callback
     }
 }
+
+function ConvertTo-VeeamCertificateThumbprint {
+    # The 40 hex digits of a SHA-1 thumbprint, upper case. Blanks, colons,
+    # hyphens and invisible format characters (U+200E from the certificate
+    # dialog) are dropped; anything else, or a length other than 40 (SHA-256),
+    # is refused, so no value is pinned that can never match. Same rules as
+    # Format-CertificateThumbprint of the installer; a test runs both over the
+    # same cases (tests/Deploy.Tests.ps1).
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Thumbprint)
+    $hex = New-Object -TypeName System.Text.StringBuilder
+    foreach ($c in $Thumbprint.ToCharArray()) {
+        if ([char]::GetUnicodeCategory($c) -eq [System.Globalization.UnicodeCategory]::Format) { continue }
+        if ([char]::IsWhiteSpace($c) -or $c -eq ':' -or $c -eq '-') { continue }
+        if ("$c" -notmatch '^[0-9A-Fa-f]$') {
+            throw ("Certificate thumbprint contains '{0}'. Give only the 40 hex digits of the SHA-1 thumbprint (blanks and colons are fine)." -f $c)
+        }
+        $null = $hex.Append($c)
+    }
+    if ($hex.Length -ne 40) {
+        throw ('Certificate thumbprint has {0} hex digits, expected the 40 of a SHA-1 thumbprint.' -f $hex.Length)
+    }
+    return $hex.ToString().ToUpperInvariant()
+}

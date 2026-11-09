@@ -53,11 +53,12 @@ function ConvertTo-VeeamDateTimeOffset {
 
     if ($dt.Year -le 1 -or $dt.Year -ge 9999) { return $null }
     if ($dt.Kind -ne [System.DateTimeKind]::Unspecified) {
-        return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt.ToUniversalTime())
+        return [System.DateTimeOffset]::new($dt.ToUniversalTime())
     }
     # No offset means local time of the VBR server (taskSessions; confirmed with VBR 13.1, docs/metrics.md#OP-9).
     $offset = $script:VeeamTimeZone.GetUtcOffset($dt)
-    return (New-Object -TypeName System.DateTimeOffset -ArgumentList $dt, $offset)
+    # ::new, not New-Object: this runs for every task session (New-Object costs about 0.1 ms under 5.1).
+    return [System.DateTimeOffset]::new($dt, $offset)
 }
 
 function ConvertTo-VeeamFieldValue {
