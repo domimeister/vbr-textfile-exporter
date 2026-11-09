@@ -316,4 +316,22 @@ Describe 'GET and paging' {
                 Should -BeExactly 'typeFilter=BackupJob%2CReplicaJob&createdAfterFilter=2024-01-10T00%3A00%3A00%2B01%3A00&skip=0'
         }
     }
+
+    It 'fails on a 2xx answer that is not a page (<Case>), instead of reporting no items' -TestCases @(
+        @{ Case = 'no data field'; Content = '{"items":[{"id":"1"}],"pagination":{"total":1}}'; Message = '*unexpected response without a data array*' }
+        @{ Case = 'data is null'; Content = '{"data":null}'; Message = '*unexpected response without a data array*' }
+        @{ Case = 'a JSON array'; Content = '[{"id":"1"}]'; Message = '*unexpected response without a data array*' }
+        @{ Case = 'an empty body'; Content = ''; Message = '*empty response (HTTP 200)*' }
+    ) {
+        param($Case, $Content, $Message)
+        $script:Body = $Content
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content $script:Body }
+        { Get-VeeamJobMetric -Session (New-TestSession) } | Should -Throw $Message
+    }
+
+    It 'still takes an empty data array as an empty list' {
+        Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content '{"data":[],"pagination":{"total":0,"count":0,"skip":0,"limit":200}}' }
+        $items = @(InModuleScope VeeamExporter -Parameters @{ Session = (New-TestSession) } { param($Session) Get-VeeamPagedItem -Session $Session -Path '/api/v1/jobs/states' })
+        $items.Count | Should -Be 0
+    }
 }

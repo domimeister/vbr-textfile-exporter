@@ -37,7 +37,9 @@ function Invoke-VeeamRestGet {
     if (-not (Test-VeeamSuccessStatus -StatusCode $response.StatusCode)) {
         throw ('GET {0} failed: HTTP {1} {2}' -f $Path, $response.StatusCode, (Get-VeeamErrorText -Content $response.Content))
     }
-    if (-not $response.Content) { return $null }
+    # Every endpoint this exporter reads answers with JSON. An empty body would
+    # otherwise count as "no items" further up and hide the problem.
+    if (-not $response.Content) { throw ('GET {0}: empty response (HTTP {1}).' -f $Path, $response.StatusCode) }
     return ($response.Content | ConvertFrom-Json)
 }
 
@@ -64,9 +66,16 @@ function Get-VeeamPagedItem {
         $q['limit'] = $PageSize
 
         $body = Invoke-VeeamRestGet -Session $Session -Path $Path -Query $q
-        $data = Get-VeeamField -InputObject $body -Name 'data'
-        $pageItems = @()
-        if ($null -ne $data) { $pageItems = @($data) }
+        # A page must carry a data array, an empty one included. Without it the
+        # answer is not in the format this exporter knows (a changed API, an
+        # error page with HTTP 200), and an empty list would make the collector
+        # report success with an empty file.
+        # Read the property itself: a function return would turn an empty
+        # array into $null and make "data": [] look like a missing field.
+        $dataProperty = $null
+        if ($null -ne $body) { $dataProperty = $body.PSObject.Properties['data'] }
+        if ($null -eq $dataProperty -or $null -eq $dataProperty.Value) { throw ('GET {0}: unexpected response without a data array.' -f $Path) }
+        $pageItems = @($dataProperty.Value)
         foreach ($item in $pageItems) { $items.Add($item) }
 
         $skip += $pageItems.Count
