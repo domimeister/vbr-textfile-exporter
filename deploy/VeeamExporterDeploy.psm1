@@ -972,6 +972,32 @@ function Assert-VeeamExporterDirectorySecure {
     }
 }
 
+function Assert-VeeamExporterTrustedFile {
+    <#
+    A file that a SYSTEM task runs or imports (pwsh.exe, the Veeam module
+    manifest) and the folder it sits in must not be changeable by other
+    accounts: whoever can replace them runs code as SYSTEM. Same rules as for
+    the installation folder (owner, write rights), without the subfolders. A
+    path that does not exist is left to the task, which then fails visibly.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Purpose
+    )
+    if (-not (Test-Path -LiteralPath $Path)) {
+        Write-Verbose ('{0} not found, not checked: {1}' -f $Purpose, $Path)
+        return
+    }
+    $item = Get-Item -LiteralPath $Path -Force
+    $paths = @($item.FullName)
+    if (-not $item.PSIsContainer) { $paths = @((Split-Path -Parent $item.FullName), $item.FullName) }
+    $problems = @(foreach ($p in $paths) { Get-VeeamExporterPathProblem -Path $p -RightsMask $script:WriteRightsMask -NoRecurse })
+    if ($problems.Count -gt 0) {
+        throw ("{0} ({1}) can be changed by other accounts, and the license task would run it as SYSTEM every day. Use one in a folder that only administrators can change, or pass -SkipLicenseTask.`n  {2}" -f $Purpose, $Path, ($problems -join "`n  "))
+    }
+}
+
 function Initialize-VeeamExporterDataDirectory {
     <#
     Data directory (credential, logs): access only for SYSTEM and
@@ -1262,6 +1288,10 @@ function Install-VeeamExporter {
             $moduleVersion = Get-VeeamModuleManifestVersion -Path $VeeamModule
         }
         $licenseHostPath = Resolve-VeeamLicenseHost -ModuleVersion $moduleVersion -PwshPath $hosts.Pwsh
+        # Both run as SYSTEM every day: refuse what other accounts can change.
+        Assert-VeeamExporterTrustedFile -Path $licenseHostPath -Purpose 'PowerShell 7 (pwsh.exe)'
+        if ($VeeamModule -match '[\\/]') { Assert-VeeamExporterTrustedFile -Path $VeeamModule -Purpose 'The Veeam PowerShell module' }
+        else { Write-Warning ("The license task loads the Veeam module '{0}' by name from the module path of SYSTEM. Pass the path of its .psd1 with -VeeamModule to fix it." -f $VeeamModule) }
         Write-Information ('License task: {0} with {1}' -f $licenseHostPath, $VeeamModule)
     }
 

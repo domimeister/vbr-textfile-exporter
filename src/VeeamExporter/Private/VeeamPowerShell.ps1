@@ -7,7 +7,11 @@ function Import-VeeamBackupModule {
     param(
         [string]$Name = 'Veeam.Backup.PowerShell'
     )
-    if (Get-Command -Name 'Get-VBRInstalledLicense' -ErrorAction SilentlyContinue) { return }
+    # Always import what -Name says (the installer passes the full path). A
+    # lookup by command name first would autoload the first module in the
+    # module path of SYSTEM that exports it, whatever -Name says (PowerShell
+    # 7.5: Get-Command loads it, with -ListImported as well). Importing a
+    # module that is already loaded from the same path changes nothing.
     try {
         Import-Module -Name $Name -DisableNameChecking -Global -ErrorAction Stop
     }
