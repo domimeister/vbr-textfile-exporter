@@ -364,6 +364,40 @@ Describe 'Copying files' {
         Test-Path -LiteralPath (Join-Path (Join-Path $target 'VeeamExporter') 'Old.ps1') | Should -BeFalse
     }
 
+    It 'keeps the old installation when the copy fails, and leaves nothing behind' {
+        $target = New-TestDirectory -Name 'install'
+        InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
+            param($Root, $Target)
+            $null = Copy-VeeamExporterFile -SourceRoot $Root -InstallPath $Target -Confirm:$false
+        }
+        $marker = Join-Path (Join-Path $target 'VeeamExporter') 'Marker.ps1'
+        [System.IO.File]::WriteAllText($marker, '# installed before')
+        Mock -ModuleName VeeamExporterDeploy Copy-Item { throw 'There is not enough space on the disk.' } -ParameterFilter { $Recurse }
+        { InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
+                param($Root, $Target)
+                $null = Copy-VeeamExporterFile -SourceRoot $Root -InstallPath $Target -Confirm:$false
+            } } | Should -Throw '*not enough space*'
+        Test-Path -LiteralPath $marker | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path (Join-Path $target 'VeeamExporter') 'VeeamExporter.psd1') | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $target -Directory -Force | Where-Object { $_.Name -like '.*' }).Count | Should -Be 0
+    }
+
+    It 'swaps in the new module and removes staging folders, also those of an update that was killed' {
+        $target = New-TestDirectory -Name 'install'
+        $null = New-Item -ItemType Directory -Path (Join-Path $target '.staging-0123')
+        $null = New-Item -ItemType Directory -Path (Join-Path $target '.old-0123')
+        InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
+            param($Root, $Target)
+            $null = Copy-VeeamExporterFile -SourceRoot $Root -InstallPath $Target -Confirm:$false
+            [System.IO.File]::WriteAllText((Join-Path (Join-Path $Target 'VeeamExporter') 'Marker.ps1'), '# old')
+            $null = Copy-VeeamExporterFile -SourceRoot $Root -InstallPath $Target -Confirm:$false
+        }
+        Test-Path -LiteralPath (Join-Path (Join-Path $target 'VeeamExporter') 'Marker.ps1') | Should -BeFalse
+        Test-Path -LiteralPath (Join-Path $target 'Invoke-VeeamExporter.ps1') | Should -BeTrue
+        Test-Path -LiteralPath (Join-Path (Join-Path $target 'deploy') 'VeeamExporterDeploy.psm1') | Should -BeTrue
+        @(Get-ChildItem -LiteralPath $target -Directory -Force | Where-Object { $_.Name -like '.*' }).Count | Should -Be 0
+    }
+
     It 'copies nothing if source and target are the installation itself' {
         $target = New-TestDirectory -Name 'install'
         $copied = InModuleScope VeeamExporterDeploy -Parameters @{ Root = $script:RepoRoot; Target = $target } {
@@ -567,6 +601,19 @@ Describe 'Install-VeeamExporter' {
         Should -Invoke -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'Veeam Exporter REST' -and $TimeoutSeconds -eq 660 }
         Should -Invoke -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask -Times 1 -Exactly -ParameterFilter { $TaskName -eq 'Veeam Exporter License' -and $TimeoutSeconds -eq 1860 }
         @($result.FirstRun | Where-Object Ok).Count | Should -Be 2
+    }
+
+    It 'waits for running tasks before it replaces the files' {
+        $script:Order = New-Object System.Collections.Generic.List[string]
+        $script:Tasks = @(
+            [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Running' }
+            [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter License'; State = 'Ready' }
+        )
+        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { $script:Tasks }
+        Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTaskIdle { $script:Order.Add('wait ' + $TaskName + ' ' + $TimeoutSeconds) }
+        Mock -ModuleName VeeamExporterDeploy Copy-VeeamExporterFile { $script:Order.Add('copy') }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+        ($script:Order -join ' | ') | Should -BeExactly 'wait Veeam Exporter REST 660 | wait Veeam Exporter License 1860 | copy'
     }
 
     It 'goes on with the next task and returns the summary if a first run is not finished in time' {
