@@ -115,6 +115,46 @@ Describe 'Connect-VeeamServer (auth and version probe)' {
         { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*HTTP 401*credentials are invalid*'
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly
     }
+
+    Context 'HTTP client of a failed logon' {
+        BeforeEach {
+            # Stands in for the HttpClient of PowerShell 7; counts Dispose().
+            $script:Client = [pscustomobject]@{ Disposed = 0 }
+            $script:Client | Add-Member -MemberType ScriptMethod -Name Dispose -Value { $this.Disposed++ }
+            Mock -ModuleName VeeamExporter New-VeeamHttpContext {
+                [pscustomobject]@{ BaseUri = 'https://localhost:9419'; TimeoutSec = 5; HttpClient = $script:Client; ApiVersion = $null; AccessToken = $null; RefreshToken = $null }
+            }
+        }
+
+        # Content names a variable of TestHelpers.ps1: test cases are built
+        # before BeforeAll has loaded it.
+        It 'is released when the logon fails (<Case>)' -TestCases @(
+            @{ Case = 'HTTP 401'; StatusCode = 401; Content = 'AccessDeniedJsonVbr131'; Message = '*HTTP 401*' }
+            @{ Case = 'no supported API version'; StatusCode = 400; Content = 'UnsupportedVersionJson'; Message = '*none of the API versions*' }
+            @{ Case = 'no access_token'; StatusCode = 200; Content = $null; Message = '*no access_token*' }
+        ) {
+            param($Case, $StatusCode, $Content, $Message)
+            $body = '{}'
+            if ($Content) { $body = Get-Variable -Name $Content -Scope Script -ValueOnly }
+            $script:Answer = New-HttpResponse -StatusCode $StatusCode -Content $body
+            Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { $script:Answer }
+            { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw $Message
+            $script:Client.Disposed | Should -Be 1
+        }
+
+        It 'is released when the request fails (connection, TLS, timeout)' {
+            Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { throw 'The SSL connection could not be established.' }
+            { Connect-VeeamServer -Credential (New-TestCredential) } | Should -Throw '*SSL connection*'
+            $script:Client.Disposed | Should -Be 1
+        }
+
+        It 'stays open in the session after a successful logon' {
+            Mock -ModuleName VeeamExporter Invoke-VeeamHttpRequest { New-HttpResponse -StatusCode 200 -Content $script:TokenJson }
+            $session = Connect-VeeamServer -Credential (New-TestCredential)
+            $script:Client.Disposed | Should -Be 0
+            [object]::ReferenceEquals($session.HttpClient, $script:Client) | Should -BeTrue
+        }
+    }
 }
 
 Describe 'Error body under Windows PowerShell 5.1' {
