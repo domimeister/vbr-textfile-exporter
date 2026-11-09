@@ -646,6 +646,27 @@ Describe 'Install-VeeamExporter' {
         Should -Invoke -ModuleName VeeamExporterDeploy Find-VeeamPowerShellModule -Times 0 -Exactly
     }
 
+    It 'checks pwsh.exe and the Veeam module that the license task runs as SYSTEM' {
+        Mock -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile { }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+        Should -Invoke -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile -Times 1 -Exactly -ParameterFilter { $Path -eq $script:Pwsh }
+        Should -Invoke -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\Veeam\Veeam.Backup.PowerShell.psd1' }
+    }
+
+    It 'refuses a pwsh.exe that other accounts can change, before it changes anything' {
+        Mock -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile { throw 'PowerShell 7 (pwsh.exe) can be changed by other accounts' } -ParameterFilter { $Path -eq $script:Pwsh }
+        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } | Should -Throw '*can be changed by other accounts*'
+        Test-Path -LiteralPath $script:Install | Should -BeFalse
+        Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
+    }
+
+    It 'warns when the Veeam module is given by name' {
+        Mock -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile { }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -VeeamModule 'Veeam.Backup.PowerShell' -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+        (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -BeLike "*loads the Veeam module 'Veeam.Backup.PowerShell' by name*"
+        Should -Invoke -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile -Times 0 -Exactly -ParameterFilter { $Purpose -like '*Veeam*' }
+    }
+
     It 'accepts a REST interval of at most 30 minutes (VeeamExporterStale fires after 1 hour)' {
         { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -RestIntervalMinutes 31 -InformationAction SilentlyContinue } | Should -Throw '*RestIntervalMinutes*'
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -RestIntervalMinutes 30 -InformationAction SilentlyContinue
@@ -831,6 +852,46 @@ Describe 'Credential for SYSTEM' {
 }
 
 # Separate block: 'Credential for SYSTEM' mocks Write-VeeamExporterTransferFile.
+Describe 'Permissions: files the license task runs' {
+    BeforeEach {
+        $script:Dir = New-TestDirectory -Name 'pwsh'
+        $script:File = Join-Path -Path $script:Dir -ChildPath 'pwsh.exe'
+        [System.IO.File]::WriteAllText($script:File, 'MZ')
+    }
+
+    It 'accepts a file and folder that only trusted accounts can change' {
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsReadExecute) }
+        { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $script:File } { param($Path) Assert-VeeamExporterTrustedFile -Path $Path -Purpose 'PowerShell 7 (pwsh.exe)' } } | Should -Not -Throw
+        Should -Invoke -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity -Times 2 -Exactly
+    }
+
+    It 'refuses <Case>' -TestCases @(
+        @{ Case = 'a folder where Users may create files'; Target = 'dir'; Sid = 'S-1-5-32-545'; Rights = [int64]2 }
+        @{ Case = 'a file that Authenticated Users may modify'; Target = 'file'; Sid = 'S-1-5-11'; Rights = [int64]1245631 }
+    ) {
+        param($Case, $Target, $Sid, $Rights)
+        $script:Weak = $script:Dir
+        if ($Target -eq 'file') { $script:Weak = $script:File }
+        $script:WeakRule = New-TestRule -Sid $Sid -Rights $Rights
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @($script:WeakRule) } -ParameterFilter { $Path -eq $script:Weak }
+        { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $script:File } { param($Path) Assert-VeeamExporterTrustedFile -Path $Path -Purpose 'PowerShell 7 (pwsh.exe)' } } |
+            Should -Throw ('*can be changed by other accounts*' + $Sid + '*has access*')
+    }
+
+    It 'refuses a file owned by another account' {
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity }
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Owner $script:SidAttacker } -ParameterFilter { $Path -eq $script:File }
+        { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $script:File } { param($Path) Assert-VeeamExporterTrustedFile -Path $Path -Purpose 'The Veeam PowerShell module' } } |
+            Should -Throw '*The Veeam PowerShell module*owner is*'
+    }
+
+    It 'leaves a path that does not exist to the task' {
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { throw 'must not be read' }
+        { InModuleScope VeeamExporterDeploy { Assert-VeeamExporterTrustedFile -Path 'C:\nowhere\pwsh.exe' -Purpose 'PowerShell 7 (pwsh.exe)' } } | Should -Not -Throw
+    }
+}
+
 Describe 'Credential handover file' {
     It 'encrypts the handover file with DPAPI LocalMachine (Windows only)' {
         if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'DPAPI on Windows only'; return }

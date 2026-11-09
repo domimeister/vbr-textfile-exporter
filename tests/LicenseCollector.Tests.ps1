@@ -184,17 +184,18 @@ Describe 'Wrapper around the Veeam PowerShell module' {
         $result[0].Status | Should -Be 'Valid'
     }
 
-    It 'does not import the module if the cmdlets are already present' {
+    It 'imports the module from the given path even if the cmdlets are already known' {
+        # A lookup by command name would autoload the first module in the module
+        # path that exports it, instead of the path the installer chose.
+        Mock -ModuleName VeeamExporter Get-Command { }
         Mock -ModuleName VeeamExporter Import-Module { }
-        InModuleScope VeeamExporter { Import-VeeamBackupModule }
-        Should -Invoke -ModuleName VeeamExporter Import-Module -Times 0 -Exactly
+        $path = 'C:\Program Files\Veeam\Backup and Replication\Console\Veeam.Backup.PowerShell\Veeam.Backup.PowerShell.psd1'
+        InModuleScope VeeamExporter -Parameters @{ Path = $path } { param($Path) Import-VeeamBackupModule -Name $Path }
+        Should -Invoke -ModuleName VeeamExporter Import-Module -Times 1 -Exactly -ParameterFilter { $Name -eq $path -and $Global }
+        Should -Invoke -ModuleName VeeamExporter Get-Command -Times 0 -Exactly
     }
 
     It 'reports a failed import with the module name' {
-        # Mock the command lookup instead of removing the stub: on a machine with
-        # VBR installed, PowerShell would find the real cmdlet via module
-        # auto-loading and never call Import-Module (#23).
-        Mock -ModuleName VeeamExporter Get-Command { } -ParameterFilter { $Name -eq 'Get-VBRInstalledLicense' }
         Mock -ModuleName VeeamExporter Import-Module { throw 'The specified module was not loaded' }
         { InModuleScope VeeamExporter { Import-VeeamBackupModule } } | Should -Throw '*Veeam.Backup.PowerShell*not loaded*'
         Should -Invoke -ModuleName VeeamExporter Import-Module -Times 1 -Exactly -ParameterFilter { $Name -eq 'Veeam.Backup.PowerShell' -and $Global }
