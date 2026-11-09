@@ -59,7 +59,7 @@ Hard rules (CLAUDE.md), what to look for:
 2. PowerShell 5.1 and 7: no `?:`, `??`, `?.`, `&&`, `||`, `ForEach-Object -Parallel`, `-SkipCertificateCheck`; `-UseBasicParsing`; TLS 1.2; source and test files ASCII only.
 3. Certificate: validation never disabled wholesale; thumbprint pinning (5.1 callback, 7 handler).
 4. REST: `x-api-version` on every request including the token request; revision order 1.3-rev2, 1.3-rev1, 1.3-rev0; paging via `skip`/`limit` to the end.
-5. Files: UTF-8 without BOM, LF, newline at the end; `<name>.prom.tmp` then `Move-Item -Force`; no `Out-File`/`Set-Content`/`Add-Content` without explicit encoding.
+5. Files: UTF-8 without BOM, LF, newline at the end; `<name>.prom.tmp` then a one-step replace through `Write-PromFile`/`Move-VeeamPromFile` (no delete before the rename); no `Out-File`/`Set-Content`/`Add-Content` without explicit encoding.
 6. One file per collector, replaced only on success; `veeam_exporter.prom` on every run.
 7. try/catch per collector; one failing collector does not stop the others.
 8. Prometheus format: `# HELP`/`# TYPE` once per metric; label values escaped (`\`, `"`, newline); no timestamps; snake_case with unit suffix.

@@ -40,14 +40,81 @@ Describe 'Write-PromFile' {
         @(Get-ChildItem -LiteralPath $script:Dir).Count | Should -Be 1
     }
 
-    It 'writes <name>.prom.tmp first and then moves it' {
-        Mock -ModuleName VeeamExporter Move-Item { throw 'move failed' }
+    It 'writes <name>.prom.tmp first and gives up after five attempts to put it in place' {
+        Mock -ModuleName VeeamExporter Move-VeeamPromFile { throw (New-Object System.IO.IOException 'move failed') }
         { Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "a 1`n" } | Should -Throw '*move failed*'
-        Should -Invoke -ModuleName VeeamExporter Move-Item -Times 1 -Exactly -ParameterFilter {
-            $LiteralPath -like '*veeam_test.prom.tmp' -and $Destination -like '*veeam_test.prom' -and $Force
+        Should -Invoke -ModuleName VeeamExporter Move-VeeamPromFile -Times 5 -Exactly -ParameterFilter {
+            $Source -like '*veeam_test.prom.tmp' -and $Destination -like '*veeam_test.prom'
         }
         Test-Path -LiteralPath $script:Target | Should -BeFalse
         Test-Path -LiteralPath ($script:Target + '.tmp') | Should -BeFalse
+    }
+
+    It 'keeps the old file when every attempt fails' {
+        [System.IO.File]::WriteAllText($script:Target, "old 1`n")
+        Mock -ModuleName VeeamExporter Move-VeeamPromFile { throw (New-Object System.IO.IOException 'in use') }
+        { Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "new 1`n" } | Should -Throw '*in use*'
+        Get-FileText -Path $script:Target | Should -BeExactly "old 1`n"
+        Test-Path -LiteralPath ($script:Target + '.tmp') | Should -BeFalse
+    }
+
+    It 'tries again while the target is in use' {
+        [System.IO.File]::WriteAllText($script:Target, "old 1`n")
+        $script:MoveCalls = 0
+        Mock -ModuleName VeeamExporter Move-VeeamPromFile {
+            $script:MoveCalls++
+            if ($script:MoveCalls -lt 3) { throw (New-Object System.IO.IOException 'The process cannot access the file because it is being used by another process.') }
+            [System.IO.File]::Copy($Source, $Destination, $true)
+            [System.IO.File]::Delete($Source)
+        }
+        Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "new 1`n"
+        $script:MoveCalls | Should -Be 3
+        Get-FileText -Path $script:Target | Should -BeExactly "new 1`n"
+        Test-Path -LiteralPath ($script:Target + '.tmp') | Should -BeFalse
+    }
+
+    It 'replaces a read-only target' {
+        [System.IO.File]::WriteAllText($script:Target, "old 1`n")
+        [System.IO.File]::SetAttributes($script:Target, [System.IO.FileAttributes]::ReadOnly)
+        Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "new 1`n"
+        Get-FileText -Path $script:Target | Should -BeExactly "new 1`n"
+    }
+
+    It 'waits for a reader that holds the target open without FILE_SHARE_DELETE (Windows)' {
+        if (-not ($PSVersionTable.PSEdition -eq 'Desktop' -or $IsWindows)) { Set-ItResult -Skipped -Because 'Windows share modes only'; return }
+        # Opens the file like windows_exporter (read, sharing read and write but
+        # not delete) and closes it after the given time on a timer thread.
+        if (-not ('VeeamExporterTest.FileHolder' -as [type])) {
+            Add-Type -TypeDefinition @'
+using System.Collections.Generic;
+using System.IO;
+using System.Threading;
+namespace VeeamExporterTest
+{
+    public static class FileHolder
+    {
+        private static readonly List<Timer> Timers = new List<Timer>();
+        public static void HoldFor(string path, int milliseconds)
+        {
+            FileStream stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            lock (Timers) { Timers.Add(new Timer(_ => stream.Dispose(), null, milliseconds, Timeout.Infinite)); }
+        }
+    }
+}
+'@
+        }
+        [System.IO.File]::WriteAllText($script:Target, "old 1`n")
+        $tmp = $script:Target + '.probe'
+        [System.IO.File]::WriteAllText($tmp, "probe 1`n")
+        [VeeamExporterTest.FileHolder]::HoldFor($script:Target, 1500)
+        # The single step alone is refused while the reader holds the file.
+        { InModuleScope VeeamExporter -Parameters @{ Source = $tmp; Destination = $script:Target } { param($Source, $Destination) Move-VeeamPromFile -Source $Source -Destination $Destination } } | Should -Throw
+        Remove-Item -LiteralPath $tmp
+        Start-Sleep -Milliseconds 2000
+        # A reader shorter than the five attempts (about 1 s) is waited out.
+        [VeeamExporterTest.FileHolder]::HoldFor($script:Target, 500)
+        Write-PromFile -Directory $script:Dir -Name 'veeam_test.prom' -Content "new 1`n"
+        Get-FileText -Path $script:Target | Should -BeExactly "new 1`n"
     }
 
     It 'does not write through an existing .tmp file that is a link' {

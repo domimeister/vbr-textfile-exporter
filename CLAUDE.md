@@ -27,7 +27,7 @@ docs/metrics.md
 - **Compatible with PowerShell 5.1 and 7.** No PS7-only syntax (`?:`, `??`, `&&`, `||`, `ForEach-Object -Parallel`, `-SkipCertificateCheck`). In 5.1 set `-UseBasicParsing` and enable TLS 1.2.
 - **Certificate:** never disable validation wholesale. Pin the thumbprint of the local VBR certificate (configuration), under 5.1 via a validation callback, under 7 via the handler.
 - **REST:** `x-api-version` in every request, including the token request. Pick the highest available revision: 1.3-rev2, 1.3-rev1, 1.3-rev0. Always page via `skip`/`limit` to the end.
-- **Writing files:** UTF-8 without BOM, LF, newline at end of file. Write `<name>.prom.tmp` first, then `Move-Item -Force` (atomic). Never `Out-File` or `Set-Content` without an explicit encoding.
+- **Writing files:** UTF-8 without BOM, LF, newline at end of file. Write `<name>.prom.tmp` first, then replace the target in one step (`Move-VeeamPromFile`, retried while windows_exporter reads the file); never delete the target first. Never `Out-File` or `Set-Content` without an explicit encoding.
 - **One file per collector** (`veeam_jobs.prom`, `veeam_objects.prom`, `veeam_repositories.prom`, `veeam_license.prom`), replaced only on success. Write `veeam_exporter.prom` with the health metrics on every run.
 - **Isolate failures:** try/catch per collector. A failed collector must not stop the others.
 - **Prometheus format:** `# HELP` and `# TYPE` exactly once per metric. Escape label values (`\` → `\\`, `"` → `\"`, newline → `\n`). No timestamps on samples. snake_case with unit suffix (`_bytes`, `_seconds`, `_timestamp_seconds`).
