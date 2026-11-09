@@ -249,6 +249,16 @@ Describe 'Invoke-VeeamExporterRun' {
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/oauth2/logout' }
     }
 
+    It 'keeps the old veeam_repositories.prom and reports 0 when the answer has no data array' {
+        [System.IO.File]::WriteAllText($script:RepositoriesFile, "veeam_repository_online{repository=`"alt`"} 1`n")
+        Set-VeeamApiMock
+        $script:MockRepositoryStates = '{"repositories":[]}'
+        $result = Invoke-VeeamExporterRun -TextfileDirectory $script:Dir -Credential (New-TestCredential) -WarningAction SilentlyContinue
+        $result.Success | Should -BeFalse
+        Get-FileText -Path $script:RepositoriesFile | Should -BeExactly "veeam_repository_online{repository=`"alt`"} 1`n"
+        Get-FileText -Path $script:HealthFile | Should -Match 'veeam_exporter_collector_success\{collector="repositories"\} 0'
+    }
+
     It 'writes veeam_exporter.prom even if the login fails' {
         Set-VeeamApiMock -TokenStatus 400 -TokenContent $script:InvalidGrantJson
 
