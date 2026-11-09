@@ -135,7 +135,7 @@ A re-installation removes the files that no task writes any more: those of colle
 | `-SkipLicenseTask` | – | set up only the REST task |
 | `-RestIntervalMinutes` | `15` | interval of the REST task, 5 to 30 minutes (`VeeamExporterStale` fires once a REST file is older than 1 hour) |
 | `-LicenseTime` | `06:17` | time of day of the license task |
-| `-Collector` | `jobs,objects,repositories` | REST collectors |
+| `-Collector` | `jobs,objects,repositories` | REST collectors, also as a comma-separated list; the case does not matter, an unknown name is refused before anything changes |
 | `-ObjectLookbackDays` | `8` | lookback of the objects collector |
 | `-NoStart` | – | do not start the tasks after installation |
 | `-Force` | – | accept the certificate without confirmation |

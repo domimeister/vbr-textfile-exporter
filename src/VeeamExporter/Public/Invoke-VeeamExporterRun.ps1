@@ -42,7 +42,9 @@ function Invoke-VeeamExporterRun {
     # writes veeam_exporter.prom on every run (CLAUDE.md).
     try {
         try {
-            $Collector = @(Split-VeeamListParameter -Value $Collector)
+            # Collector names become file names and label values: lower case,
+            # each one once ("Jobs,jobs" -> jobs).
+            $Collector = @(Split-VeeamListParameter -Value $Collector | ForEach-Object { $_.ToLowerInvariant() } | Select-Object -Unique)
             $ObjectSessionType = @(Split-VeeamListParameter -Value $ObjectSessionType)
             foreach ($name in $Collector) {
                 if (-not $collectorCommands.ContainsKey($name)) {

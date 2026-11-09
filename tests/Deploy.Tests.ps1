@@ -228,6 +228,24 @@ Describe 'Task arguments' {
         $d.ExecutionTimeLimit.TotalMinutes | Should -Be 10
     }
 
+    It 'puts the collectors into the REST task in lower case, each one once' {
+        $d = InModuleScope VeeamExporterDeploy {
+            Get-VeeamExporterTaskDefinition -Kind Rest -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory 'C:\t' -Collector 'Jobs, objects', 'JOBS', ' repositories '
+        }
+        $d.Argument | Should -BeLikeExactly '* -Collector jobs,objects,repositories *'
+    }
+
+    It 'refuses <Case> for the REST task' -TestCases @(
+        @{ Case = 'an unknown collector'; Collector = @('jobs', 'repository'); Message = "*Unknown collector 'repository'. Valid: jobs, objects, repositories*" }
+        @{ Case = 'an empty list'; Collector = @(' , '); Message = '*No collector selected*' }
+    ) {
+        param($Case, $Collector, $Message)
+        InModuleScope VeeamExporterDeploy -Parameters @{ Collector = $Collector; Message = $Message } {
+            param($Collector, $Message)
+            { Get-VeeamExporterTaskDefinition -Kind Rest -HostPath 'p.exe' -InstallPath 'C:\i' -DataPath 'C:\d' -TextfileDirectory 'C:\t' -Collector $Collector } | Should -Throw $Message
+        }
+    }
+
     It 'builds the license task' {
         $d = InModuleScope VeeamExporterDeploy -Parameters @{ Pwsh = $script:Pwsh } {
             param($Pwsh)
@@ -453,6 +471,23 @@ Describe 'Install-VeeamExporter' {
         }
         $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue @Extra
         Get-SortedFileName -Directory $script:Textfile | Should -BeExactly $Left
+    }
+
+    It 'refuses an unknown collector before it changes anything' {
+        [System.IO.File]::WriteAllText((Join-Path $script:Textfile 'veeam_repositories.prom'), "x 1`n")
+        { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -Collector 'jobs,objects,repository' } |
+            Should -Throw "*Unknown collector 'repository'*"
+        Test-Path -LiteralPath $script:Install | Should -BeFalse
+        Test-Path -LiteralPath $script:Data | Should -BeFalse
+        Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
+        Get-SortedFileName -Directory $script:Textfile | Should -BeExactly 'veeam_repositories.prom'
+    }
+
+    It 'keeps the files of collectors given in another case on a re-install' {
+        foreach ($n in 'veeam_jobs.prom', 'veeam_objects.prom', 'veeam_repositories.prom') { [System.IO.File]::WriteAllText((Join-Path $script:Textfile $n), "x 1`n") }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -Collector 'Jobs,OBJECTS'
+        Get-SortedFileName -Directory $script:Textfile | Should -BeExactly 'veeam_jobs.prom,veeam_objects.prom'
+        $script:Registered[0].Argument | Should -BeLikeExactly '* -Collector jobs,objects *'
     }
 
     It 'removes the exporter files in the textfile directory the tasks used before' {
