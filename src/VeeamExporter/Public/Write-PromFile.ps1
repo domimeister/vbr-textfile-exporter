@@ -23,7 +23,9 @@ function Move-VeeamPromFile {
         [System.IO.File]::Move($Source, $Destination, $true)
     }
     elseif ([System.IO.File]::Exists($Destination)) {
-        [System.IO.File]::Replace($Source, $Destination, $null, $true)
+        # No backup file: [NullString]::Value, because PowerShell passes $null
+        # to a string parameter as "", which ReplaceFile refuses as a path.
+        [System.IO.File]::Replace($Source, $Destination, [NullString]::Value, $true)
     }
     else {
         [System.IO.File]::Move($Source, $Destination)
