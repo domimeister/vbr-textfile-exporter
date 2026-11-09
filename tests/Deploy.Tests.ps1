@@ -424,6 +424,12 @@ Describe 'Install-VeeamExporter' {
         (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -Not -BeLike '*textfile collector*'
     }
 
+    It 'warns about a copy of an exporter file in the textfile directory' {
+        [System.IO.File]::WriteAllText((Join-Path $script:Textfile 'veeam_jobs - Kopie.prom'), "veeam_job_enabled{job_name=`"a`"} 1`n")
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+        (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -BeLike '*hold Veeam metrics: veeam_jobs - Kopie.prom*can hide*'
+    }
+
     It 'installs files, credential and both tasks and starts them once' {
         $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue
 
@@ -828,6 +834,22 @@ Describe 'Uninstall-VeeamExporter' {
         Mock -ModuleName VeeamExporterDeploy Start-Sleep { }
         $null = Uninstall-VeeamExporter -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -Confirm:$false
         ($script:Order -join ',') | Should -BeExactly 'stop Veeam Exporter REST,unregister Veeam Exporter REST,unregister Veeam Exporter License'
+    }
+}
+
+Describe 'Other files with Veeam metrics in the textfile directory' {
+    It 'finds copies and other files with Veeam metrics, not its own files or other metrics' {
+        $dir = New-TestDirectory -Name 'textfile'
+        $files = [ordered]@{
+            'veeam_jobs.prom'                 = "veeam_job_enabled{job_name=`"a`"} 1`n"
+            'veeam_repositories - Kopie.prom' = "# HELP veeam_repository_online x`n# TYPE veeam_repository_online gauge`nveeam_repository_online{repository=`"R`"} 1`n"
+            'old_exporter.prom'               = "veeam_license_valid 1`n"
+            'node_custom.prom'                = "# veeam_ in a comment is no metric`nnode_custom 1`n"
+            'veeam_jobs.prom.tmp'             = "veeam_job_enabled{job_name=`"a`"} 1`n"
+        }
+        foreach ($n in $files.Keys) { [System.IO.File]::WriteAllText((Join-Path $dir $n), $files[$n]) }
+        $found = @(InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) Get-VeeamExporterForeignPromFile -Directory $Dir }) | Sort-Object
+        ($found -join ',') | Should -BeExactly 'old_exporter.prom,veeam_repositories - Kopie.prom'
     }
 }
 

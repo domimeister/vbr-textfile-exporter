@@ -150,6 +150,14 @@ function Invoke-VeeamExporterRun {
         catch {
             Write-Warning ('Writing veeam_exporter.prom failed: {0}' -f $_.Exception.Message)
         }
+        # After the health file, so even a warning turned into an error cannot stop it.
+        try {
+            $foreign = @(Get-VeeamForeignPromFile -Directory $TextfileDirectory)
+            if ($foreign.Count -gt 0) {
+                Write-Warning ('Other files in {0} hold Veeam metrics and can hide this data (windows_exporter keeps only one of two files with the same series): {1}' -f $TextfileDirectory, ($foreign -join ', '))
+            }
+        }
+        catch { Write-Verbose ('Check for other files with Veeam metrics failed: {0}' -f $_.Exception.Message) }
     }
 
     if ($null -ne $configError) { throw $configError }
