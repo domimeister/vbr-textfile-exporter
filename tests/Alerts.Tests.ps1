@@ -14,7 +14,7 @@ BeforeAll {
     $script:LogicTestPath = Join-Path -Path (Join-Path -Path $PSScriptRoot -ChildPath 'alerting') -ChildPath 'veeam-alerts.test.yml'
     $script:Spec = Get-FileText -Path (Join-Path -Path (Join-Path -Path $script:RepoRoot -ChildPath 'docs') -ChildPath 'metrics.md')
     $script:DatasourceUid = '${VEEAM_PROMETHEUS_DATASOURCE_UID}'
-    $script:MetricPattern = '\b(?:veeam|windows_textfile)_[a-z_]+'
+    $script:MetricPattern = '\b(?:veeam|windows_textfile|windows_exporter)_[a-z_]+'
     # Threshold types of Grafana's threshold expression and their PromQL operators.
     $script:Operators = @{ gt = '>'; lt = '<'; eq = '==' }
 

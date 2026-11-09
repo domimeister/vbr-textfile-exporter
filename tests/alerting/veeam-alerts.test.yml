@@ -230,16 +230,93 @@ tests:
         values: '1x1600'
       - series: 'veeam_job_info{instance="vbr02:9182",job="windows",job_name="Old Exporter Job"}'
         values: '1x1600'
+      # 30 minutes without data after 20 hours (reboot): two quarter hours are
+      # missing, the rule fires 30 minutes later instead of starting again.
+      - series: 'veeam_job_last_result{instance="vbr03:9182",job="windows",job_name="Gap Job",job_type="VSphereBackup"}'
+        values: '-1x1200 _x30 -1x370'
+      - series: 'veeam_job_enabled{instance="vbr03:9182",job="windows",job_name="Gap Job"}'
+        values: '1x1200 _x30 1x370'
+      - series: 'veeam_job_info{instance="vbr03:9182",job="windows",job_name="Gap Job",schedule="scheduled"}'
+        values: '1x1200 _x30 1x370'
     alert_rule_test:
-      - eval_time: 25h59m
+      # 104 of the quarter hours of the last 28 hours = 26 hours (0 to 25h45m).
+      - eval_time: 25h44m
         alertname: VeeamJobNeverRun
         exp_alerts: []
-      - eval_time: 26h1m
+      - eval_time: 25h46m
         alertname: VeeamJobNeverRun
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: New Job, job_type: VSphereBackup}
           - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Chained Job, job_type: FileBackup}
           - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, job_name: Old Exporter Job, job_type: VSphereBackup}
+      - eval_time: 26h16m
+        alertname: VeeamJobNeverRun
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: New Job, job_type: VSphereBackup}
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Chained Job, job_type: FileBackup}
+          - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, job_name: Old Exporter Job, job_type: VSphereBackup}
+          - exp_labels: {severity: warning, instance: 'vbr03:9182', job: windows, job_name: Gap Job, job_type: VSphereBackup}
       - eval_time: 26h1m
         alertname: VeeamJobNotRun
         exp_alerts: []
+
+  - name: data source, collectors and license state
+    interval: 1m
+    input_series:
+      # vbr01 delivered data for an hour, then nothing: VeeamExporterMissing after 15 more minutes.
+      - series: 'veeam_exporter_info{instance="vbr01:9182",job="windows",script_version="0.3.0",api_version="1.3-rev2",vbr_version="13.1.2.57"}'
+        values: '1x60 _x120'
+      # vbr02 keeps delivering; its textfile collector fails from minute 11.
+      - series: 'veeam_exporter_info{instance="vbr02:9182",job="windows",script_version="0.3.0",api_version="1.3-rev2",vbr_version="13.1.2.57"}'
+        values: '1x180'
+      - series: 'windows_exporter_collector_success{collector="textfile",instance="vbr02:9182",job="windows"}'
+        values: '1x10 0x170'
+      # A server without Veeam data: its textfile collector is not watched.
+      - series: 'windows_exporter_collector_success{collector="textfile",instance="web01:9182",job="windows"}'
+        values: '0x180'
+      # One failed phase of 16 minutes (one run) and one that lasts.
+      - series: 'veeam_exporter_collector_success{collector="jobs",instance="vbr02:9182",job="windows"}'
+        values: '1x10 0x15 1x10 0x60'
+      - series: 'veeam_license_valid{instance="vbr02:9182",job="windows"}'
+        values: '0x90'
+      # Support ends after 20 days (vbr02) and after 40 days (vbr03).
+      - series: 'veeam_license_support_expiration_timestamp_seconds{instance="vbr02:9182",job="windows"}'
+        values: '1728000x90'
+      - series: 'veeam_license_support_expiration_timestamp_seconds{instance="vbr03:9182",job="windows"}'
+        values: '3456000x90'
+    alert_rule_test:
+      - eval_time: 79m
+        alertname: VeeamExporterMissing
+        exp_alerts: []
+      - eval_time: 82m
+        alertname: VeeamExporterMissing
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182'}
+      - eval_time: 25m
+        alertname: VeeamExporterTextfileError
+        exp_alerts: []
+      - eval_time: 27m
+        alertname: VeeamExporterTextfileError
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, collector: textfile}
+      - eval_time: 26m
+        alertname: VeeamExporterCollectorFailed
+        exp_alerts: []
+      - eval_time: 67m
+        alertname: VeeamExporterCollectorFailed
+        exp_alerts: []
+      - eval_time: 69m
+        alertname: VeeamExporterCollectorFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, collector: jobs}
+      - eval_time: 59m
+        alertname: VeeamLicenseInvalid
+        exp_alerts: []
+      - eval_time: 61m
+        alertname: VeeamLicenseInvalid
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr02:9182', job: windows}
+      - eval_time: 5m
+        alertname: VeeamSupportExpiring
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows}
