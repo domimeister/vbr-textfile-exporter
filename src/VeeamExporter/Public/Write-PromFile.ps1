@@ -8,12 +8,15 @@ $script:PromFileReplaceAttempts = 5
 $script:PromFileReplaceDelayMs = 200
 
 function Move-VeeamPromFile {
-    # One attempt to put the written .tmp in place of the target, in one step:
-    # an existing target is replaced, never deleted first, so its name always
-    # points to the old or to the new file. PowerShell 7: File.Move with
-    # overwrite (MoveFileEx with MOVEFILE_REPLACE_EXISTING on Windows, rename
-    # elsewhere). Windows PowerShell 5.1 has no such overload: File.Replace
-    # (ReplaceFile) for an existing target, File.Move for a new one.
+    # One attempt to put the written .tmp in place of the target with a single
+    # rename (MoveFileEx with MOVEFILE_REPLACE_EXISTING): the target is never
+    # deleted first, so a failed attempt changes nothing. PowerShell 7:
+    # File.Move with overwrite. Windows PowerShell 5.1 has no such overload;
+    # FileSystem.MoveFile of Microsoft.VisualBasic calls MoveFileEx with the
+    # same flag (flags 11, checked in the lab) and needs no compiled code.
+    # File.Replace (ReplaceFile) is no option: it holds the target while it
+    # copies metadata, and windows_exporter fails to read it then (lab: 1412
+    # of 1461 scrapes during continuous writes).
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$Source,
@@ -21,15 +24,10 @@ function Move-VeeamPromFile {
     )
     if ($null -ne [System.IO.File].GetMethod('Move', [type[]]@([string], [string], [bool]))) {
         [System.IO.File]::Move($Source, $Destination, $true)
+        return
     }
-    elseif ([System.IO.File]::Exists($Destination)) {
-        # No backup file: [NullString]::Value, because PowerShell passes $null
-        # to a string parameter as "", which ReplaceFile refuses as a path.
-        [System.IO.File]::Replace($Source, $Destination, [NullString]::Value, $true)
-    }
-    else {
-        [System.IO.File]::Move($Source, $Destination)
-    }
+    if (-not ('Microsoft.VisualBasic.FileIO.FileSystem' -as [type])) { Add-Type -AssemblyName Microsoft.VisualBasic }
+    [Microsoft.VisualBasic.FileIO.FileSystem]::MoveFile($Source, $Destination, $true)
 }
 
 function Write-PromFile {
