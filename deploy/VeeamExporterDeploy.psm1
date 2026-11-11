@@ -24,6 +24,11 @@ $script:SidOwnerPlaceholders = @('S-1-3-0', 'S-1-3-4')
 # (also: create files and subfolders), delete child, delete, change
 # permissions, take ownership, GENERIC_ALL, GENERIC_WRITE.
 $script:WriteRightsMask = [int64](0x2 -bor 0x4 -bor 0x40 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000 -bor 0x40000000)
+# Rights that let an account put another folder in the place of a folder: on
+# the folder itself delete (needed to rename it), change permissions, take
+# ownership and GENERIC_ALL; on its parent delete child. Creating files and
+# folders is not among them: Windows allows that to users on a drive root.
+$script:ReplaceRightsMask = [int64](0x40 -bor 0x10000 -bor 0x40000 -bor 0x80000 -bor 0x10000000)
 # Any access at all (data directory: credential and transfer file).
 $script:AnyRightsMask = [int64]4294967295
 
@@ -826,6 +831,8 @@ function Get-VeeamExporterItemSecurity {
             Sid    = $rule.IdentityReference.Value
             Rights = ([int64][int]$rule.FileSystemRights) -band [int64]4294967295
             Allow  = ($rule.AccessControlType -eq [System.Security.AccessControl.AccessControlType]::Allow)
+            # Applies to what is created below only, not to the item itself.
+            InheritOnly = (($rule.PropagationFlags -band [System.Security.AccessControl.PropagationFlags]::InheritOnly) -ne 0)
         }
     }
     return [pscustomobject]@{ Owner = $acl.GetOwner($sidType).Value; Rules = @($rules) }
@@ -837,6 +844,7 @@ function Get-VeeamExporterAccessProblem {
     allow rule of another account may contain a right from RightsMask
     (0: rules are not checked). CREATOR OWNER and OWNER RIGHTS stand for the
     owner, which is checked on its own. Deny rules are ignored (conservative).
+    IgnoreInheritOnly leaves out rules that only apply to items created below.
     #>
     [CmdletBinding()]
     [OutputType([string[]])]
@@ -844,7 +852,8 @@ function Get-VeeamExporterAccessProblem {
         [Parameter(Mandatory = $true)][object]$Security,
         [Parameter(Mandatory = $true)][string[]]$TrustedSid,
         [Parameter(Mandatory = $true)][string]$Path,
-        [int64]$RightsMask = 0
+        [int64]$RightsMask = 0,
+        [switch]$IgnoreInheritOnly
     )
     $problems = New-Object -TypeName System.Collections.Generic.List[string]
     if ($TrustedSid -notcontains [string]$Security.Owner) {
@@ -854,6 +863,7 @@ function Get-VeeamExporterAccessProblem {
         $reported = @()
         foreach ($rule in @($Security.Rules)) {
             if (-not $rule.Allow) { continue }
+            if ($IgnoreInheritOnly -and $rule.PSObject.Properties['InheritOnly'] -and $rule.InheritOnly) { continue }
             $sid = [string]$rule.Sid
             if ($TrustedSid -contains $sid -or $script:SidOwnerPlaceholders -contains $sid -or $reported -contains $sid) { continue }
             if (([int64]$rule.Rights -band $RightsMask) -ne 0) {
@@ -1076,27 +1086,66 @@ function Assert-VeeamExporterDirectorySecure {
 function Assert-VeeamExporterTrustedFile {
     <#
     A file that a SYSTEM task runs or imports (pwsh.exe, the Veeam module
-    manifest) and the folder it sits in must not be changeable by other
-    accounts: whoever can replace them runs code as SYSTEM. Same rules as for
-    the installation folder (owner, write rights), without the subfolders. A
-    path that does not exist is left to the task, which then fails visibly.
+    manifest) must not be replaceable by other accounts: whoever can replace
+    it, or a file it loads, runs code as SYSTEM.
+    - The folder of the file with everything in it (or TreeRoot, when the
+      file loads from a folder further up): same rules as for the
+      installation folder (owner, write rights, no links).
+    - Every folder above, up to the drive: nobody else may delete or rename
+      the folder below, or change the permissions (ReplaceRightsMask). On the
+      drive itself, deleting it means nothing and is left out.
+    A path that does not exist is left to the task, which then fails visibly.
     #>
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$Path,
-        [Parameter(Mandatory = $true)][string]$Purpose
+        [Parameter(Mandatory = $true)][string]$Purpose,
+        [string]$TreeRoot
     )
     if (-not (Test-Path -LiteralPath $Path)) {
         Write-Verbose ('{0} not found, not checked: {1}' -f $Purpose, $Path)
         return
     }
     $item = Get-Item -LiteralPath $Path -Force
-    $paths = @($item.FullName)
-    if (-not $item.PSIsContainer) { $paths = @((Split-Path -Parent $item.FullName), $item.FullName) }
-    $problems = @(foreach ($p in $paths) { Get-VeeamExporterPathProblem -Path $p -RightsMask $script:WriteRightsMask -NoRecurse })
-    if ($problems.Count -gt 0) {
-        throw ("{0} ({1}) can be changed by other accounts, and the license task would run it as SYSTEM every day. Use one in a folder that only administrators can change, or pass -SkipLicenseTask.`n  {2}" -f $Purpose, $Path, ($problems -join "`n  "))
+    $tree = $item.FullName
+    if (-not $item.PSIsContainer) { $tree = Split-Path -Parent $item.FullName }
+    if ($TreeRoot) { $tree = (Get-Item -LiteralPath $TreeRoot -Force).FullName }
+    $trusted = Get-VeeamExporterTrustedSid
+    $problems = New-Object -TypeName System.Collections.Generic.List[string]
+    foreach ($p in (Get-VeeamExporterPathProblem -Path $tree -RightsMask $script:WriteRightsMask -TrustedSid $trusted)) { $problems.Add($p) }
+    # GetDirectoryName: $null above a drive ("C:\") or a share.
+    $parent = [System.IO.Path]::GetDirectoryName($tree)
+    while ($parent) {
+        $above = [System.IO.Path]::GetDirectoryName($parent)
+        $mask = $script:ReplaceRightsMask
+        if (-not $above) { $mask = $mask -band (-bnot [int64]0x10000) }
+        $security = Get-VeeamExporterItemSecurity -Path $parent
+        foreach ($p in (Get-VeeamExporterAccessProblem -Security $security -TrustedSid $trusted -Path $parent -RightsMask $mask -IgnoreInheritOnly)) { $problems.Add($p) }
+        $parent = $above
     }
+    if ($problems.Count -gt 0) {
+        $shown = @($problems | Select-Object -First 20)
+        if ($problems.Count -gt $shown.Count) { $shown += ('... and {0} more' -f ($problems.Count - $shown.Count)) }
+        throw ("{0} ({1}) or a folder it is loaded from can be changed by other accounts, and the license task would run it as SYSTEM every day. Use one in a folder that only administrators can change, or pass -SkipLicenseTask.`n  {2}" -f $Purpose, $Path, ($shown -join "`n  "))
+    }
+}
+
+function Get-VeeamModuleLoadRoot {
+    <#
+    The folder the Veeam module loads its code from. VBR 13 installs the
+    manifest in Console\Veeam.Backup.PowerShell, and its root module loads
+    Veeam.Backup.PowerShell.dll and its dependencies from Console (lab, VBR
+    13.1). With that layout the folder above the manifest's folder, otherwise
+    the manifest's folder.
+    #>
+    [CmdletBinding()]
+    [OutputType([string])]
+    param([Parameter(Mandatory = $true)][string]$ManifestPath)
+    $folder = Split-Path -Parent $ManifestPath
+    $above = Split-Path -Parent $folder
+    $name = [System.IO.Path]::GetFileNameWithoutExtension($ManifestPath)
+    if ($above -and (Split-Path -Leaf $folder) -eq $name -and (Test-Path -LiteralPath (Join-Path -Path $above -ChildPath ($name + '.dll')) -PathType Leaf)) { return $above }
+    return $folder
 }
 
 function Initialize-VeeamExporterDataDirectory {
@@ -1398,7 +1447,11 @@ function Install-VeeamExporter {
         $licenseHostPath = Resolve-VeeamLicenseHost -ModuleVersion $moduleVersion -PwshPath $hosts.Pwsh
         # Both run as SYSTEM every day: refuse what other accounts can change.
         Assert-VeeamExporterTrustedFile -Path $licenseHostPath -Purpose 'PowerShell 7 (pwsh.exe)'
-        if ($VeeamModule -match '[\\/]') { Assert-VeeamExporterTrustedFile -Path $VeeamModule -Purpose 'The Veeam PowerShell module' }
+        if ($VeeamModule -match '[\\/]') {
+            $moduleTree = $null
+            if (Test-Path -LiteralPath $VeeamModule -PathType Leaf) { $moduleTree = Get-VeeamModuleLoadRoot -ManifestPath $VeeamModule }
+            Assert-VeeamExporterTrustedFile -Path $VeeamModule -Purpose 'The Veeam PowerShell module' -TreeRoot $moduleTree
+        }
         else { Write-Warning ("The license task loads the Veeam module '{0}' by name from the module path of SYSTEM. Pass the path of its .psd1 with -VeeamModule to fix it." -f $VeeamModule) }
         Write-Information ('License task: {0} with {1}' -f $licenseHostPath, $VeeamModule)
     }

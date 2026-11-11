@@ -653,6 +653,19 @@ Describe 'Install-VeeamExporter' {
         Should -Invoke -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile -Times 1 -Exactly -ParameterFilter { $Path -eq 'C:\Veeam\Veeam.Backup.PowerShell.psd1' }
     }
 
+    It 'checks the folder the Veeam module loads its DLLs from' {
+        $console = New-TestDirectory -Name 'Console'
+        $moduleDir = Join-Path -Path $console -ChildPath 'Veeam.Backup.PowerShell'
+        $null = New-Item -ItemType Directory -Path $moduleDir
+        $script:Manifest = Join-Path -Path $moduleDir -ChildPath 'Veeam.Backup.PowerShell.psd1'
+        [System.IO.File]::WriteAllText($script:Manifest, "@{ ModuleVersion = '13.0.1.1' }")
+        [System.IO.File]::WriteAllText((Join-Path -Path $console -ChildPath 'Veeam.Backup.PowerShell.dll'), 'MZ')
+        $script:Console = $console
+        Mock -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile { }
+        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -VeeamModule $script:Manifest -InformationAction SilentlyContinue
+        Should -Invoke -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile -Times 1 -Exactly -ParameterFilter { $Path -eq $script:Manifest -and $TreeRoot -eq $script:Console }
+    }
+
     It 'refuses a pwsh.exe that other accounts can change, before it changes anything' {
         Mock -ModuleName VeeamExporterDeploy Assert-VeeamExporterTrustedFile { throw 'PowerShell 7 (pwsh.exe) can be changed by other accounts' } -ParameterFilter { $Path -eq $script:Pwsh }
         { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } | Should -Throw '*can be changed by other accounts*'
@@ -862,7 +875,98 @@ Describe 'Permissions: files the license task runs' {
     It 'accepts a file and folder that only trusted accounts can change' {
         Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $script:RightsReadExecute) }
         { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $script:File } { param($Path) Assert-VeeamExporterTrustedFile -Path $Path -Purpose 'PowerShell 7 (pwsh.exe)' } } | Should -Not -Throw
-        Should -Invoke -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity -Times 2 -Exactly
+        Should -Invoke -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity -Times 1 -Exactly -ParameterFilter { $Path -eq $script:File }
+        Should -Invoke -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity -Times 1 -Exactly -ParameterFilter { $Path -eq $script:Dir }
+    }
+
+    Context 'the other files in the folder and the folders above' {
+        BeforeEach {
+            $script:Sub = Join-Path -Path $script:Dir -ChildPath 'Modules'
+            $null = New-Item -ItemType Directory -Path $script:Sub
+            $script:Dll = Join-Path -Path $script:Sub -ChildPath 'loaded.dll'
+            [System.IO.File]::WriteAllText($script:Dll, 'MZ')
+            $script:Above = Split-Path -Parent $script:Dir
+            $script:Drive = [System.IO.Path]::GetPathRoot($script:Dir)
+            $script:Checked = New-Object System.Collections.Generic.List[string]
+            Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { $script:Checked.Add($Path); New-TestSecurity }
+            function Test-TrustedFile {
+                InModuleScope VeeamExporterDeploy -Parameters @{ Path = $script:File } { param($Path) Assert-VeeamExporterTrustedFile -Path $Path -Purpose 'PowerShell 7 (pwsh.exe)' }
+            }
+        }
+
+        It 'checks everything in the folder and every folder above, up to the drive' {
+            { Test-TrustedFile } | Should -Not -Throw
+            foreach ($path in @($script:File, $script:Dir, $script:Sub, $script:Dll, $script:Above, $script:Drive)) { $script:Checked | Should -Contain $path }
+            $between = $script:Above
+            while ($between -and $between -ne $script:Drive) { $script:Checked | Should -Contain $between; $between = Split-Path -Parent $between }
+        }
+
+        It 'refuses <Case>' -TestCases @(
+            @{ Case = 'another file in a subfolder that Users may write'; Where = 'Dll'; Rights = [int64]2; Owner = $null }
+            @{ Case = 'a subfolder where Users may create files'; Where = 'Sub'; Rights = [int64]2; Owner = $null }
+            @{ Case = 'a folder above from which Users may delete (delete child)'; Where = 'Above'; Rights = [int64]0x40; Owner = $null }
+            @{ Case = 'a folder above that Users may rename (delete)'; Where = 'Above'; Rights = [int64]0x10000; Owner = $null }
+            @{ Case = 'a folder above whose permissions Users may change'; Where = 'Above'; Rights = [int64]0x40000; Owner = $null }
+            @{ Case = 'a folder above that Users may modify'; Where = 'Above'; Rights = [int64]1245631; Owner = $null }
+            @{ Case = 'a folder above owned by another account'; Where = 'Above'; Rights = [int64]0; Owner = 'S-1-5-21-1-2-3-1001' }
+            @{ Case = 'a drive from which Users may delete (delete child)'; Where = 'Drive'; Rights = [int64]0x40; Owner = $null }
+        ) {
+            param($Case, $Where, $Rights, $Owner)
+            $script:Weak = Get-Variable -Scope Script -Name $Where -ValueOnly
+            $script:WeakSecurity = New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights $Rights)
+            if ($Owner) { $script:WeakSecurity = New-TestSecurity -Owner $Owner }
+            Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { $script:WeakSecurity } -ParameterFilter { $Path -eq $script:Weak }
+            { Test-TrustedFile } | Should -Throw '*or a folder it is loaded from can be changed by other accounts*'
+        }
+
+        It 'accepts <Case>' -TestCases @(
+            @{ Case = 'a folder above where Users may create files and folders'; Where = 'Above'; Rights = [int64]6; InheritOnly = $false }
+            @{ Case = 'a folder above with a modify rule for Users that only applies to new items'; Where = 'Above'; Rights = [int64]1245631; InheritOnly = $true }
+            @{ Case = 'a drive with the delete right for Users (a drive cannot be renamed)'; Where = 'Drive'; Rights = [int64]0x10006; InheritOnly = $false }
+        ) {
+            param($Case, $Where, $Rights, $InheritOnly)
+            $script:Weak = Get-Variable -Scope Script -Name $Where -ValueOnly
+            $rule = New-TestRule -Sid $script:SidUsers -Rights $Rights
+            $rule | Add-Member -NotePropertyName InheritOnly -NotePropertyValue $InheritOnly
+            $script:WeakSecurity = New-TestSecurity -Rules @($rule)
+            Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { $script:WeakSecurity } -ParameterFilter { $Path -eq $script:Weak }
+            { Test-TrustedFile } | Should -Not -Throw
+        }
+
+        It 'still counts a rule that only applies to new items inside the folder itself' {
+            $rule = New-TestRule -Sid $script:SidUsers -Rights ([int64]1245631)
+            $rule | Add-Member -NotePropertyName InheritOnly -NotePropertyValue $true
+            $script:WeakSecurity = New-TestSecurity -Rules @($rule)
+            Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { $script:WeakSecurity } -ParameterFilter { $Path -eq $script:Dir }
+            { Test-TrustedFile } | Should -Throw '*has access*'
+        }
+
+        It 'checks the folder given as TreeRoot instead of the folder of the file' {
+            { InModuleScope VeeamExporterDeploy -Parameters @{ Path = $script:Dll; Root = $script:Dir } { param($Path, $Root) Assert-VeeamExporterTrustedFile -Path $Path -Purpose 'The Veeam PowerShell module' -TreeRoot $Root } } | Should -Not -Throw
+            $script:Checked | Should -Contain $script:File
+        }
+
+        It 'lists at most 20 problems' {
+            1..30 | ForEach-Object { [System.IO.File]::WriteAllText((Join-Path -Path $script:Sub -ChildPath ('f{0}.dll' -f $_)), 'MZ') }
+            Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterItemSecurity { New-TestSecurity -Rules @(New-TestRule -Sid $script:SidUsers -Rights ([int64]2)) }
+            $message = $null
+            try { Test-TrustedFile } catch { $message = $_.Exception.Message }
+            @($message -split "`n" | Where-Object { $_ -like '*has access*' }).Count | Should -Be 20
+            $message | Should -Match '\.\.\. and \d+ more'
+        }
+    }
+
+    Context 'the folder the Veeam module loads from' {
+        It 'is the folder above a module folder that has the DLL next to it (VBR 13)' {
+            $console = New-TestDirectory -Name 'Console'
+            $moduleDir = Join-Path -Path $console -ChildPath 'Veeam.Backup.PowerShell'
+            $null = New-Item -ItemType Directory -Path $moduleDir
+            $manifest = Join-Path -Path $moduleDir -ChildPath 'Veeam.Backup.PowerShell.psd1'
+            [System.IO.File]::WriteAllText($manifest, '@{}')
+            InModuleScope VeeamExporterDeploy -Parameters @{ Path = $manifest } { param($Path) Get-VeeamModuleLoadRoot -ManifestPath $Path } | Should -BeExactly $moduleDir
+            [System.IO.File]::WriteAllText((Join-Path -Path $console -ChildPath 'Veeam.Backup.PowerShell.dll'), 'MZ')
+            InModuleScope VeeamExporterDeploy -Parameters @{ Path = $manifest } { param($Path) Get-VeeamModuleLoadRoot -ManifestPath $Path } | Should -BeExactly $console
+        }
     }
 
     It 'refuses <Case>' -TestCases @(
