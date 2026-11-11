@@ -504,7 +504,7 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "Veeam support on {{ $labels.instance }} ends in {{ printf \"%.0f\" $values.A.Value }} days"
+            "summary": "{{ if lt $values.A.Value 0.0 }}Veeam support on {{ $labels.instance }} has ended{{ else }}Veeam support on {{ $labels.instance }} ends in {{ printf \"%.0f\" $values.A.Value }} days{{ end }}"
           }
         },
         {
@@ -621,7 +621,7 @@
               "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
               "model": {
                 "refId": "A",
-                "expr": "veeam_exporter_collector_success",
+                "expr": "veeam_exporter_collector_success{collector!=\"license\"}",
                 "instant": true,
                 "range": false
               }
@@ -658,6 +658,56 @@
           }
         },
         {
+          "uid": "veeam-exporter-license-collector-failed",
+          "title": "VeeamExporterLicenseCollectorFailed",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "max_over_time(veeam_exporter_collector_success{collector=\"license\"}[25h])",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        0
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "labels": {
+            "severity": "warning"
+          },
+          "annotations": {
+            "summary": "Veeam exporter collector license on {{ $labels.instance }} has not succeeded for 25 hours"
+          }
+        },
+        {
           "uid": "veeam-exporter-missing",
           "title": "VeeamExporterMissing",
           "condition": "B",
@@ -671,7 +721,7 @@
               "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
               "model": {
                 "refId": "A",
-                "expr": "max by (instance) (max_over_time(veeam_exporter_info[1d])) unless on(instance) veeam_exporter_info",
+                "expr": "max by (instance) (max_over_time(veeam_exporter_info[7d])) unless on(instance) veeam_exporter_info",
                 "instant": true,
                 "range": false
               }
@@ -721,7 +771,7 @@
               "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
               "model": {
                 "refId": "A",
-                "expr": "windows_exporter_collector_success{collector=\"textfile\"} and on(instance) max by (instance) (max_over_time(veeam_exporter_info[1d]))",
+                "expr": "windows_exporter_collector_success{collector=\"textfile\"} and on(instance) max by (instance) (max_over_time(veeam_exporter_info[7d]))",
                 "instant": true,
                 "range": false
               }
