@@ -38,6 +38,18 @@ BeforeAll {
 
     $script:WinPs = 'C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe'
 
+    # What Find-WindowsExporterTextfileDirectory returns for a running
+    # windows_exporter with the textfile collector; -Change overrides fields.
+    function New-TestWindowsExporter {
+        param([string]$Directory, [hashtable]$Change = @{})
+        $found = [ordered]@{
+            Directory = $Directory; Source = 'argument'; TextfileEnabled = $true; MetricsUri = 'http://localhost:9182/metrics'
+            ServiceFound = $true; ServiceName = 'windows_exporter'; ServiceRunning = $true; TextfileCheck = 'metrics'; MetricsTried = @('http://localhost:9182/metrics')
+        }
+        foreach ($key in $Change.Keys) { $found[$key] = $Change[$key] }
+        return [pscustomobject]$found
+    }
+
     $script:SidSystem = 'S-1-5-18'
     $script:SidAdmins = 'S-1-5-32-544'
     $script:SidUsers = 'S-1-5-32-545'
@@ -188,9 +200,12 @@ Describe 'Image path parser shared with the exporter' {
 
 Describe 'windows_exporter: service lookup' {
     BeforeEach {
-        $script:Key = 'HKLM:\SYSTEM\CurrentControlSet\Services\windows_exporter'
-        Mock -ModuleName VeeamExporterDeploy Test-Path { $true } -ParameterFilter { $LiteralPath -eq $script:Key }
-        Mock -ModuleName VeeamExporterDeploy Get-ItemProperty { [pscustomobject]@{ ImagePath = '"C:\Program Files\windows_exporter\windows_exporter.exe" --collectors.enabled "[defaults],textfile"' } }
+        $script:Services = @(
+            [pscustomobject]@{ Name = 'Spooler'; PathName = 'C:\Windows\System32\spoolsv.exe'; State = 'Running'; ProcessId = 700 }
+            [pscustomobject]@{ Name = 'windows_exporter'; PathName = '"C:\Program Files\windows_exporter\windows_exporter.exe" --collectors.enabled "[defaults],textfile"'; State = 'Running'; ProcessId = 4321 }
+        )
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterWindowsService { $script:Services }
+        Mock -ModuleName VeeamExporterDeploy Get-VeeamExporterListenEndpoint { }
     }
 
     It 'prefers the answer of the running service over the command line' {
@@ -199,6 +214,8 @@ Describe 'windows_exporter: service lookup' {
         $result.TextfileEnabled | Should -BeFalse
         $result.TextfileCheck | Should -BeExactly 'metrics'
         $result.ServiceFound | Should -BeTrue
+        $result.ServiceRunning | Should -BeTrue
+        $result.ServiceName | Should -BeExactly 'windows_exporter'
     }
 
     It 'falls back to the command line if /metrics is not reachable' {
@@ -498,7 +515,9 @@ Describe 'Install-VeeamExporter' {
         $script:Registered = New-Object System.Collections.Generic.List[object]
         $script:ModuleVersion = [version]'13.0.1.1'
         Mock -ModuleName VeeamExporterDeploy Test-VeeamExporterAdministrator { $true }
-        Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { [pscustomobject]@{ Directory = $script:Textfile; Source = 'argument'; TextfileEnabled = $true; ServiceFound = $true } }
+        Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { New-TestWindowsExporter -Directory $script:Textfile }
+        Mock -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin { }
+        Mock -ModuleName VeeamExporterDeploy Test-WindowsExporterExport { $true }
         Mock -ModuleName VeeamExporterDeploy Get-TlsCertificateInfo { [pscustomobject]@{ Thumbprint = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00'; Subject = 'CN=vbr01'; NotAfter = (Get-Date).AddYears(5) } }
         Mock -ModuleName VeeamExporterDeploy Find-PowerShellHost { [pscustomobject]@{ WindowsPowerShell = $script:WinPs; Pwsh = $script:Pwsh } }
         Mock -ModuleName VeeamExporterDeploy Find-VeeamPowerShellModule { [pscustomobject]@{ Module = 'C:\Veeam\Veeam.Backup.PowerShell.psd1'; Version = $script:ModuleVersion } }
@@ -516,20 +535,98 @@ Describe 'Install-VeeamExporter' {
         $script:Cred = New-TestCredential
     }
 
-    It 'warns about the textfile collector when it is <Case>' -TestCases @(
-        @{ Case = 'off'; Enabled = $false; Pattern = '*runs without the textfile collector*' }
-        @{ Case = 'unknown'; Enabled = $null; Pattern = '*Could not verify*textfile*' }
-    ) {
-        param($Case, $Enabled, $Pattern)
-        $script:TfEnabled = $Enabled
-        Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { [pscustomobject]@{ Directory = $script:Textfile; Source = 'default'; TextfileEnabled = $script:TfEnabled; ServiceFound = $true; MetricsUri = 'http://localhost:9182/metrics'; TextfileCheck = 'config' } }
-        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
-        (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -BeLike $Pattern
+    Context 'windows_exporter as a prerequisite' {
+        It 'stops before any change when <Case>' -TestCases @(
+            @{ Case = 'the service is not installed'; Change = @{ ServiceFound = $false; ServiceName = ''; ServiceRunning = $false; TextfileCheck = 'config'; TextfileEnabled = $null }; Pattern = '*windows_exporter is not installed on this server*Nothing was changed*' }
+            @{ Case = 'the service is stopped'; Change = @{ ServiceRunning = $false; TextfileCheck = 'config' }; Pattern = "*service 'windows_exporter' is not running*Nothing was changed*" }
+            @{ Case = '/metrics does not answer'; Change = @{ TextfileCheck = 'config'; MetricsTried = @('http://localhost:9999/metrics', 'http://localhost:9182/metrics') }; Pattern = '*does not answer on http://localhost:9999/metrics, http://localhost:9182/metrics*Nothing was changed*' }
+            @{ Case = 'the textfile collector is off'; Change = @{ TextfileEnabled = $false }; Pattern = "*runs without the textfile collector*'``[defaults``],textfile'*Nothing was changed*" }
+        ) {
+            param($Case, $Change, $Pattern)
+            $script:Change = $Change
+            Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { New-TestWindowsExporter -Directory $script:Textfile -Change $script:Change }
+            foreach ($extra in @(@{}, @{ TextfileDirectory = $script:Textfile })) {
+                { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue @extra } | Should -Throw $Pattern
+            }
+            Test-Path -LiteralPath $script:Install | Should -BeFalse
+            Test-Path -LiteralPath $script:Data | Should -BeFalse
+            Should -Invoke -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin -Times 0 -Exactly
+            Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
+            @(Get-ChildItem -LiteralPath $script:Textfile).Count | Should -Be 0
+        }
+
+        It 'only warns with -SkipWindowsExporterCheck when <Case>' -TestCases @(
+            @{ Case = 'the service is not installed'; Change = @{ ServiceFound = $false; ServiceName = ''; ServiceRunning = $false; TextfileCheck = 'config'; TextfileEnabled = $null }; Pattern = '*Service windows_exporter not found*' }
+            @{ Case = 'the textfile collector is off'; Change = @{ TextfileEnabled = $false }; Pattern = '*runs without the textfile collector*' }
+            @{ Case = 'the collector cannot be checked'; Change = @{ TextfileCheck = 'config'; TextfileEnabled = $null }; Pattern = '*Could not verify*textfile*' }
+        ) {
+            param($Case, $Change, $Pattern)
+            $script:Change = $Change
+            Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { New-TestWindowsExporter -Directory $script:Textfile -Change $script:Change }
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -SkipWindowsExporterCheck -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+            (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -BeLike $Pattern
+            $script:Registered.Count | Should -Be 2
+        }
+
+        It 'does not ask the service with -SkipWindowsExporterCheck and -TextfileDirectory' {
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $script:Textfile -Credential $script:Cred -Force -NoStart -SkipWindowsExporterCheck -InformationAction SilentlyContinue
+            Should -Invoke -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory -Times 0 -Exactly
+        }
+
+        It 'passes -WindowsExporterService on and keeps a given -TextfileDirectory' {
+            $other = New-TestDirectory -Name 'other-textfile'
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -TextfileDirectory $other -WindowsExporterService 'prom_win' -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+            Should -Invoke -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory -Times 1 -Exactly -ParameterFilter { $ServiceName -eq 'prom_win' }
+            $script:Registered[0].Argument | Should -BeLike ('*' + $other + '*')
+        }
+
+        It 'does not warn when the service runs with the collector' {
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+            (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -Not -BeLike '*textfile collector*'
+        }
+
+        It 'checks after the first run that the windows_exporter exports the data, and warns if it does not' {
+            Mock -ModuleName VeeamExporterDeploy Start-ScheduledTask { [System.IO.File]::WriteAllText((Join-Path $script:Textfile 'veeam_exporter.prom'), "veeam_exporter_info{script_version=`"0.2.1`"} 1`n") }
+            $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+            $result.Exported | Should -BeTrue
+            @($warnings).Count | Should -Be 0
+            Mock -ModuleName VeeamExporterDeploy Test-WindowsExporterExport { $false }
+            $result = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+            $result.Exported | Should -BeFalse
+            (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -BeLike '*does not export veeam_exporter_info*reads another directory*-TextfileDirectory*'
+        }
     }
 
-    It 'does not warn about the textfile collector when it runs' {
-        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
-        (@($warnings | ForEach-Object { [string]$_ }) -join "`n") | Should -Not -BeLike '*textfile collector*'
+    Context 'the Veeam account is tried before anything changes' {
+        It 'stops when the account cannot read the REST API' {
+            Mock -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin { throw 'The Veeam account VBR01\veeam-viewer cannot read the REST API on localhost:9419: HTTP 401. Nothing was changed.' }
+            { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } | Should -Throw '*cannot read the REST API*'
+            Test-Path -LiteralPath $script:Install | Should -BeFalse
+            Test-Path -LiteralPath $script:Data | Should -BeFalse
+            Should -Invoke -ModuleName VeeamExporterDeploy Save-VeeamExporterCredentialAsSystem -Times 0 -Exactly
+            Should -Invoke -ModuleName VeeamExporterDeploy Register-VeeamExporterTask -Times 0 -Exactly
+        }
+
+        It 'tries the account with the pinned thumbprint and the module of the source' {
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+            Should -Invoke -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin -Times 1 -Exactly -ParameterFilter {
+                $Credential.UserName -eq $script:Cred.UserName -and $CertificateThumbprint -eq 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00' -and $ModuleManifest -eq $script:ModuleManifest
+            }
+        }
+
+        It 'does not try an account it would not store (update with a kept credential)' {
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+            Should -Invoke -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin -Times 1 -Exactly
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -UpdateCredential -Force -NoStart -InformationAction SilentlyContinue
+            Should -Invoke -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin -Times 2 -Exactly
+        }
+
+        It 'tries a given account with -WhatIf as well, and changes nothing' {
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -WhatIf -InformationAction SilentlyContinue
+            Should -Invoke -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin -Times 1 -Exactly
+            Test-Path -LiteralPath $script:Install | Should -BeFalse
+        }
     }
 
     It 'warns about a copy of an exporter file in the textfile directory' {
@@ -1480,6 +1577,8 @@ Describe 'Permissions: install and uninstall' {
         Mock -ModuleName VeeamExporterDeploy Register-VeeamExporterTask { }
         Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { }
         Mock -ModuleName VeeamExporterDeploy Unregister-ScheduledTask { }
+        Mock -ModuleName VeeamExporterDeploy Find-WindowsExporterTextfileDirectory { New-TestWindowsExporter -Directory $script:Textfile }
+        Mock -ModuleName VeeamExporterDeploy Test-VeeamExporterLogin { }
         $script:InstallArgs = @{
             SourceRoot = $script:RepoRoot; InstallPath = $script:Install; DataPath = $script:Data; TextfileDirectory = $script:Textfile
             Credential = (New-TestCredential); CertificateThumbprint = 'C0FFEE00C0FFEE00C0FFEE00C0FFEE00C0FFEE00'; SkipLicenseTask = $true; NoStart = $true; InformationAction = 'SilentlyContinue'

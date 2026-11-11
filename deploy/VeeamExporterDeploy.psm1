@@ -190,33 +190,136 @@ function Test-WindowsExporterTextfileCollector {
     return ([string]$response.Content -match '(?m)^windows_exporter_collector_success\{collector="textfile"\}\s')
 }
 
-function Find-WindowsExporterTextfileDirectory {
-    # Reads the windows_exporter service from the registry (Windows only).
+function Get-VeeamExporterWindowsService {
+    # All services with name, command line, state and process id (Windows
+    # only, mocked in tests).
     [CmdletBinding()]
     param()
+    return @(Get-CimInstance -ClassName Win32_Service -Property Name, PathName, State, ProcessId -ErrorAction Stop)
+}
+
+function Get-VeeamExporterListenEndpoint {
+    # The TCP endpoints a process listens on (Windows only, mocked in tests).
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][int]$ProcessId)
+    if (-not (Get-Command -Name 'Get-NetTCPConnection' -ErrorAction SilentlyContinue)) { return @() }
+    return @(Get-NetTCPConnection -State Listen -OwningProcess $ProcessId -ErrorAction SilentlyContinue | Select-Object -Property LocalAddress, LocalPort)
+}
+
+function Find-WindowsExporterService {
+    <#
+    The windows_exporter service: the one given by name, else the service
+    named windows_exporter, else the only service that runs
+    windows_exporter*.exe (a renamed service). $null if there is none;
+    several candidates are an error, the name must be given then.
+    #>
+    [CmdletBinding()]
+    param([string]$Name)
+    $services = @(Get-VeeamExporterWindowsService)
+    if ($Name) {
+        $match = @($services | Where-Object { $_.Name -eq $Name })
+        if ($match.Count -eq 0) { throw ("Service '{0}' not found (-WindowsExporterService)." -f $Name) }
+        return $match[0]
+    }
+    $match = @($services | Where-Object { $_.Name -eq 'windows_exporter' })
+    if ($match.Count -eq 0) { $match = @($services | Where-Object { [string]$_.PathName -match '(?i)windows_exporter[^\\/"]*\.exe' }) }
+    if ($match.Count -gt 1) {
+        throw ('Several services run windows_exporter: {0}. Pass the one to use with -WindowsExporterService <name>.' -f (($match | ForEach-Object { $_.Name }) -join ', '))
+    }
+    if ($match.Count -eq 0) { return $null }
+    return $match[0]
+}
+
+function Find-WindowsExporterTextfileDirectory {
+    <#
+    Reads the windows_exporter service (Windows only): its textfile directory
+    and whether the textfile collector runs. /metrics is asked on the ports
+    the service process listens on, then on the address from its command line
+    or config file, so a changed port is found either way.
+    #>
+    [CmdletBinding()]
+    param([string]$ServiceName)
     $imagePath = $null
     $configText = $null
-    $key = 'HKLM:\SYSTEM\CurrentControlSet\Services\windows_exporter'
-    if (Test-Path -LiteralPath $key) {
-        $imagePath = [string](Get-ItemProperty -LiteralPath $key -Name 'ImagePath' -ErrorAction SilentlyContinue).ImagePath
-    }
+    $service = Find-WindowsExporterService -Name $ServiceName
+    if ($null -ne $service) { $imagePath = [string]$service.PathName }
     if ($imagePath -and $imagePath -match '--config\.file(?:=|\s+)(?:"([^"]*)"|(\S+))') {
         $configFile = $Matches[1]
         if (-not $configFile) { $configFile = $Matches[2] }
         if (Test-Path -LiteralPath $configFile) { $configText = [System.IO.File]::ReadAllText($configFile) }
     }
     $result = Get-WindowsExporterTextfileDirectory -ImagePath $imagePath -ConfigText $configText
-    $result | Add-Member -NotePropertyName ServiceFound -NotePropertyValue ([bool]$imagePath)
+    $running = ($null -ne $service -and [string]$service.State -eq 'Running')
+    $result | Add-Member -NotePropertyName ServiceFound -NotePropertyValue ($null -ne $service)
+    $result | Add-Member -NotePropertyName ServiceName -NotePropertyValue $(if ($null -ne $service) { [string]$service.Name } else { '' })
+    $result | Add-Member -NotePropertyName ServiceRunning -NotePropertyValue $running
     # The running service is the reliable source: the default collector set
     # depends on the windows_exporter version.
+    $uris = New-Object -TypeName System.Collections.Generic.List[string]
+    if ($running -and $service.ProcessId) {
+        foreach ($endpoint in @(Get-VeeamExporterListenEndpoint -ProcessId ([int]$service.ProcessId))) {
+            $address = [string]$endpoint.LocalAddress
+            if ($address -in @('0.0.0.0', '::', '')) { $address = 'localhost' }
+            elseif ($address.Contains(':')) { $address = '[' + $address + ']' }
+            $uri = 'http://{0}:{1}/metrics' -f $address, $endpoint.LocalPort
+            if (-not $uris.Contains($uri)) { $uris.Add($uri) }
+        }
+    }
+    if (-not $uris.Contains($result.MetricsUri)) { $uris.Add($result.MetricsUri) }
     $check = 'config'
-    if ($imagePath) {
-        $live = Test-WindowsExporterTextfileCollector -MetricsUri $result.MetricsUri
-        if ($null -ne $live) { $result.TextfileEnabled = $live; $check = 'metrics' }
+    if ($null -ne $service) {
+        foreach ($uri in $uris) {
+            $live = Test-WindowsExporterTextfileCollector -MetricsUri $uri
+            if ($null -ne $live) { $result.TextfileEnabled = $live; $result.MetricsUri = $uri; $check = 'metrics'; break }
+        }
     }
     $result | Add-Member -NotePropertyName TextfileCheck -NotePropertyValue $check
+    $result | Add-Member -NotePropertyName MetricsTried -NotePropertyValue ([string[]]$uris.ToArray())
     return $result
 }
+
+function Test-WindowsExporterExport {
+    # $true if /metrics of the windows_exporter has veeam_exporter_info, i.e.
+    # it reads the directory the exporter writes to; $null if not reachable.
+    [CmdletBinding()]
+    param([Parameter(Mandatory = $true)][string]$MetricsUri)
+    try { $response = Invoke-WebRequest -Uri $MetricsUri -UseBasicParsing -TimeoutSec 10 -MaximumRedirection 0 -ErrorAction Stop }
+    catch {
+        Write-Verbose ('{0} not reachable: {1}' -f $MetricsUri, $_.Exception.Message)
+        return $null
+    }
+    return ([string]$response.Content -match '(?m)^veeam_exporter_info\{')
+}
+
+function Test-VeeamExporterLogin {
+    <#
+    Logs the REST account on once, reads one job state (the role the
+    collectors need) and logs off, with the exporter's own module. Throws
+    with the reason when that fails. Read-only.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true)][System.Management.Automation.PSCredential]$Credential,
+        [Parameter(Mandatory = $true)][string]$CertificateThumbprint,
+        [Parameter(Mandatory = $true)][string]$ModuleManifest
+    )
+    $session = $null
+    try {
+        Import-Module -Name $ModuleManifest -ErrorAction Stop
+        $session = Connect-VeeamServer -Credential $Credential -CertificateThumbprint $CertificateThumbprint
+        $null = & (Get-Module -Name VeeamExporter) { param($s) Invoke-VeeamRestGet -Session $s -Path '/api/v1/jobs/states' -Query @{ limit = 1 } } $session
+    }
+    catch {
+        throw ('The Veeam account {0} cannot read the REST API on localhost:9419: {1} Check the user name, the password and the role Veeam Backup Viewer; if multi-factor authentication is enabled in VBR, the account must be exempt from it (service account). Nothing was changed.' -f $Credential.UserName, $_.Exception.Message)
+    }
+    finally {
+        if ($null -ne $session) {
+            try { Disconnect-VeeamServer -Session $session }
+            catch { Write-Verbose ('Logout failed: {0}' -f $_.Exception.Message) }
+        }
+    }
+}
+
 
 # --------------------------------------------------------------- certificate --
 
@@ -1433,7 +1536,9 @@ function Install-VeeamExporter {
         [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
         [switch]$NoStart,
         [switch]$Force,
-        [switch]$AllowUnsafeTextfileDirectory
+        [switch]$AllowUnsafeTextfileDirectory,
+        [string]$WindowsExporterService,
+        [switch]$SkipWindowsExporterCheck
     )
     if (-not $InstallPath) { $InstallPath = Join-Path -Path $env:ProgramFiles -ChildPath 'VeeamExporter' }
     if (-not $DataPath) { $DataPath = Join-Path -Path $env:ProgramData -ChildPath 'VeeamExporter' }
@@ -1453,16 +1558,37 @@ function Install-VeeamExporter {
     Assert-VeeamExporterDirectoryTrusted -Path $InstallPath
     Assert-VeeamExporterDirectoryTrusted -Path $DataPath
 
-    # textfile directory
-    if (-not $TextfileDirectory) {
-        $found = Find-WindowsExporterTextfileDirectory
+    # windows_exporter is a prerequisite: installed as a service, running,
+    # and with the textfile collector, asked from the running service. Without
+    # it the installation stops here, before anything is created.
+    $found = $null
+    if (-not $SkipWindowsExporterCheck -or -not $TextfileDirectory) { $found = Find-WindowsExporterTextfileDirectory -ServiceName $WindowsExporterService }
+    if (-not $SkipWindowsExporterCheck) {
+        $hint = 'Nothing was changed. -SkipWindowsExporterCheck installs without this check.'
+        if (-not $found.ServiceFound) {
+            throw ('windows_exporter is not installed on this server: there is no service named windows_exporter and none that runs windows_exporter.exe. Install it with the textfile collector first, or name its service with -WindowsExporterService. {0}' -f $hint)
+        }
+        if (-not $found.ServiceRunning) {
+            throw ("The windows_exporter service '{0}' is not running. Start it first, or name another service with -WindowsExporterService. {1}" -f $found.ServiceName, $hint)
+        }
+        if ($found.TextfileCheck -ne 'metrics') {
+            throw ("The windows_exporter service '{0}' does not answer on {1}, so the textfile collector cannot be checked (TLS or authentication in front of /metrics?). {2}" -f $found.ServiceName, ($found.MetricsTried -join ', '), $hint)
+        }
+        if (-not $found.TextfileEnabled) {
+            throw ("The windows_exporter service '{0}' runs without the textfile collector ({1}), so the .prom files would not be exported. Enable it, e.g. in config.yaml: collectors: enabled: '[defaults],textfile' (windows_exporter 0.32 does not enable it by default), then restart the service. {2}" -f $found.ServiceName, $found.MetricsUri, $hint)
+        }
+        Write-Information ("windows_exporter: service '{0}' is running, textfile collector active ({1})" -f $found.ServiceName, $found.MetricsUri)
+    }
+    elseif ($null -ne $found) {
         if (-not $found.ServiceFound) { Write-Warning 'Service windows_exporter not found; using the default textfile directory.' }
         if ($found.TextfileEnabled -eq $false) {
             Write-Warning "windows_exporter runs without the textfile collector, so the .prom files are not exported. Enable it, e.g. in config.yaml: collectors: enabled: '[defaults],textfile' (windows_exporter 0.32 does not enable it by default), then restart the service."
         }
-        elseif ($null -eq $found.TextfileEnabled) {
+        elseif ($found.TextfileCheck -ne 'metrics') {
             Write-Warning ('Could not verify that windows_exporter runs the textfile collector ({0} not reachable). windows_exporter 0.32 does not enable it by default; check that /metrics contains windows_exporter_collector_success{{collector="textfile"}}.' -f $found.MetricsUri)
         }
+    }
+    if (-not $TextfileDirectory) {
         $TextfileDirectory = $found.Directory
         Write-Information ('Textfile directory ({0}): {1}' -f $found.Source, $TextfileDirectory)
     }
@@ -1522,6 +1648,20 @@ function Install-VeeamExporter {
         Write-Information ('License task: {0} with {1}' -f $licenseHostPath, $VeeamModule)
     }
 
+    # credential: ask now and try it, before anything is created. A wrong
+    # password would otherwise be tried by the task every 15 minutes.
+    $credentialPath = Join-Path -Path $DataPath -ChildPath $script:CredentialFileName
+    $needCredential = ($UpdateCredential -or -not (Test-Path -LiteralPath $credentialPath))
+    if ($needCredential -and -not $Credential -and -not $WhatIfPreference) {
+        $Credential = Get-Credential -Message 'Veeam account for the REST API (role Backup Viewer), e.g. VBR01\veeam-exporter'
+        if (-not $Credential) { throw 'No credential entered.' }
+    }
+    if ($needCredential -and $Credential) {
+        $manifest = Join-Path -Path (Join-Path -Path (Resolve-VeeamExporterSource -SourceRoot $SourceRoot -InstallPath $InstallPath).AppRoot -ChildPath 'VeeamExporter') -ChildPath 'VeeamExporter.psd1'
+        Test-VeeamExporterLogin -Credential $Credential -CertificateThumbprint $CertificateThumbprint -ModuleManifest $manifest
+        Write-Information ('Veeam account {0}: logon and read access to the REST API work' -f $Credential.UserName)
+    }
+
     # files
     # Installation and data directory: owner and ACL first, then the files.
     Initialize-VeeamExporterSecureDirectory -Path $InstallPath -Kind Install
@@ -1559,13 +1699,8 @@ function Install-VeeamExporter {
     if (-not $WhatIfPreference) { Assert-VeeamExporterDirectorySecure -Path $InstallPath -Kind Install }
     Initialize-VeeamExporterDataDirectory -Path $DataPath
 
-    # credential
-    $credentialPath = Join-Path -Path $DataPath -ChildPath $script:CredentialFileName
-    if (($UpdateCredential -or -not (Test-Path -LiteralPath $credentialPath)) -and
-        $PSCmdlet.ShouldProcess($credentialPath, 'Store Veeam credential for SYSTEM (DPAPI)')) {
-        if (-not $Credential) {
-            $Credential = Get-Credential -Message 'Veeam account for the REST API (role Backup Viewer), e.g. VBR01\veeam-exporter'
-        }
+    # credential (asked for and tried above)
+    if ($needCredential -and $PSCmdlet.ShouldProcess($credentialPath, 'Store Veeam credential for SYSTEM (DPAPI)')) {
         if (-not $Credential) { throw 'No credential entered.' }
         $worker = Join-Path -Path (Join-Path -Path $InstallPath -ChildPath 'deploy') -ChildPath 'Save-VeeamExporterSystemCredential.ps1'
         Save-VeeamExporterCredentialAsSystem -Credential $Credential -DataPath $DataPath -WorkerScript $worker -HostPath $restHost -Confirm:$false
@@ -1609,6 +1744,7 @@ function Install-VeeamExporter {
     if ($removedOutdated.Count -gt 0) { Write-Information ('Removed files no task writes any more: {0}' -f ($removedOutdated -join ', ')) }
 
     # first run
+    $exported = $null
     $results = New-Object -TypeName System.Collections.Generic.List[object]
     if (-not $NoStart -and -not $WhatIfPreference) {
         foreach ($d in $definitions) {
@@ -1640,6 +1776,17 @@ function Install-VeeamExporter {
         if (@($results | Where-Object { -not $_.Ok }).Count -gt 0) {
             Write-Warning ('A task reported an error. Logs: {0}' -f (Join-Path -Path $DataPath -ChildPath 'logs'))
         }
+        # End to end: does the windows_exporter serve what the task just wrote?
+        # If not, it reads another directory than the one the tasks write to.
+        $healthPath = Join-Path -Path $TextfileDirectory -ChildPath 'veeam_exporter.prom'
+        if ($null -ne $found -and $found.TextfileCheck -eq 'metrics' -and (Test-Path -LiteralPath $healthPath) -and
+            [System.IO.File]::ReadAllText($healthPath) -match '(?m)^veeam_exporter_info\{') {
+            $exported = Test-WindowsExporterExport -MetricsUri $found.MetricsUri
+            if ($exported -eq $false) {
+                Write-Warning ('windows_exporter ({0}) does not export veeam_exporter_info although the REST task wrote it to {1}: it reads another directory. Find its textfile directory and run the installation again with -TextfileDirectory.' -f $found.MetricsUri, $TextfileDirectory)
+            }
+            elseif ($exported) { Write-Information ('windows_exporter exports the data ({0})' -f $found.MetricsUri) }
+        }
     }
 
     return [pscustomobject]@{
@@ -1649,6 +1796,8 @@ function Install-VeeamExporter {
         CertificateThumbprint = $CertificateThumbprint
         Tasks                 = @($definitions | ForEach-Object { $_.TaskPath + $_.TaskName })
         FirstRun              = $results.ToArray()
+        # $true/$false after the first run, $null when it was not checked.
+        Exported              = $exported
     }
 }
 
@@ -1675,7 +1824,10 @@ function Uninstall-VeeamExporter {
     if ($TextfileDirectory) { $textfileDirectories = @($TextfileDirectory) }
     else {
         $textfileDirectories = @(Get-VeeamExporterTaskTextfileDirectory -Task $tasks)
-        if ($textfileDirectories.Count -eq 0) { $textfileDirectories = @((Find-WindowsExporterTextfileDirectory).Directory) }
+        if ($textfileDirectories.Count -eq 0) {
+            try { $textfileDirectories = @((Find-WindowsExporterTextfileDirectory).Directory) }
+            catch { Write-Warning ('Textfile directory not found, no .prom files removed: {0} Pass -TextfileDirectory.' -f $_.Exception.Message) }
+        }
     }
 
     foreach ($task in $tasks) {

@@ -7,7 +7,7 @@ The install script sets up the exporter on a VBR server: files, encrypted creden
 | What | Details |
 | --- | --- |
 | VBR | 13 or later (REST API on `localhost:9419`). VBR 12 is not supported; the install script refuses a Veeam module older than 13. |
-| windows_exporter | installed as a service, with the **textfile collector enabled**. windows_exporter 0.32 does not enable it by default, see below. |
+| windows_exporter | installed as a service, running, with the **textfile collector enabled**. windows_exporter 0.32 does not enable it by default, see below. The install script checks all three and stops before any change if one is missing. |
 | Veeam account for REST | local Windows user with the VBR role **Backup Viewer** (console: *Users and Roles*). It needs no Windows admin rights. |
 | License task | The Veeam PowerShell module, **PowerShell 7** and the installed Veeam console (VBR 13 setup installs all three). The task runs as SYSTEM; SYSTEM must be Backup Administrator in VBR (default via the local Administrators group). |
 | Execution | Windows PowerShell 5.1, **as Administrator** |
@@ -19,7 +19,15 @@ collectors:
   enabled: '[defaults],textfile'
 ```
 
-Then `Restart-Service windows_exporter`. `(Invoke-WebRequest -UseBasicParsing http://localhost:9182/metrics).Content -split "`n" | Select-String 'collector="textfile"'` must show `windows_exporter_collector_success{collector="textfile"} 1`. The install script asks the running service the same way and warns if the collector is off or cannot be checked.
+Then `Restart-Service windows_exporter`. `(Invoke-WebRequest -UseBasicParsing http://localhost:9182/metrics).Content -split "`n" | Select-String 'collector="textfile"'` must show `windows_exporter_collector_success{collector="textfile"} 1`. The install script asks the running service the same way.
+
+How the install script finds the windows_exporter:
+
+- **Service:** the service named `windows_exporter`, otherwise the one service whose executable is called `windows_exporter*.exe` (a renamed service). With another executable name, or with several such services, pass `-WindowsExporterService <name>`.
+- **Port:** it asks `/metrics` on the ports the service process listens on, then on the address from the command line or config file (`--web.listen-address`). A changed port is found either way.
+- **Textfile directory:** from the command line or config file of the service (`--collector.textfile.directories`), otherwise `textfile_inputs` next to the executable; `-TextfileDirectory` overrides it.
+- **Stops, with nothing changed,** if there is no such service, if it is not running, if `/metrics` does not answer (for example TLS or authentication in front of it), or if `/metrics` shows no textfile collector. `-SkipWindowsExporterCheck` turns these into warnings.
+- **After the first run** it asks `/metrics` for `veeam_exporter_info`. If the windows_exporter does not export it, it reads another directory than the tasks write to, and the script says so.
 
 Example for the REST account:
 
@@ -43,7 +51,7 @@ Get-ChildItem -Recurse | Unblock-File      # only after downloading as ZIP
 The script asks twice:
 
 - **Certificate:** it reads the certificate from `localhost:9419` and shows subject, expiration date and thumbprint. Answering *Yes* pins the thumbprint; from then on the exporter accepts only this certificate. If you already know the thumbprint, pass `-CertificateThumbprint`.
-- **Credential:** user and password of the REST account, e.g. `VBR01\veeam-exporter`.
+- **Credential:** user and password of the REST account, e.g. `VBR01\veeam-exporter`. The script logs on with it once, reads one job state and logs off. If that fails (wrong password, no role, multi-factor authentication), it stops before anything is created, so a wrong password never reaches the task that would try it every 15 minutes.
 
 It then starts both tasks once and shows the result:
 
@@ -54,7 +62,7 @@ veeam_exporter_collector_success{collector="repositories"} 1
 veeam_exporter_collector_success{collector="license"} 1
 ```
 
-Test without changes: `.\deploy\Install-VeeamExporter.ps1 -WhatIf`.
+Test without changes: `.\deploy\Install-VeeamExporter.ps1 -WhatIf`. It runs all checks: windows_exporter, textfile directory, certificate, the files of the license task, and with `-Credential` the logon.
 
 ## What gets installed
 
@@ -127,7 +135,7 @@ A re-installation removes the files that no task writes any more: those of colle
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `-CertificateThumbprint` | from `localhost:9419`, with confirmation | certificate of the REST API: the 40 hex digits of the SHA-1 thumbprint; blanks, colons and hyphens are fine, anything else is refused |
-| `-Credential` | prompt | REST account, only needed on first installation or with `-UpdateCredential` |
+| `-Credential` | prompt | REST account, only needed on first installation or with `-UpdateCredential`; tried once against the REST API before anything is stored |
 | `-UpdateCredential` | – | set the credential again |
 | `-TextfileDirectory` | from the windows_exporter service | target of the `.prom` files |
 | `-InstallPath` / `-DataPath` | `C:\Program Files\VeeamExporter` / `C:\ProgramData\VeeamExporter` | Relative paths (also for `-TextfileDirectory` and a `-VeeamModule` path) are made absolute against the current directory, because the tasks run in `C:\Windows\System32`. |
@@ -140,6 +148,8 @@ A re-installation removes the files that no task writes any more: those of colle
 | `-NoStart` | – | do not start the tasks after installation |
 | `-Force` | – | accept the certificate without confirmation |
 | `-AllowUnsafeTextfileDirectory` | – | only warn instead of aborting if other accounts may write to the textfile directory |
+| `-WindowsExporterService` | found by name or executable | name of the windows_exporter service, if it is not `windows_exporter` and its executable is not called `windows_exporter*.exe` |
+| `-SkipWindowsExporterCheck` | – | only warn instead of stopping if the windows_exporter service is missing, stopped or cannot be asked for its textfile collector |
 | `-WhatIf` | – | only show what would happen |
 
 ## To verify in the lab

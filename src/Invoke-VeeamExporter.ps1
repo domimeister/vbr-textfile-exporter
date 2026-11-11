@@ -28,7 +28,9 @@ accepted. Without it the default certificate validation applies.
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)][string]$CredentialPath,
-    [string]$TextfileDirectory = 'C:\Program Files\windows_exporter\textfile_inputs',
+    # No default: a run by hand without it would write into the directory
+    # the windows_exporter serves.
+    [Parameter(Mandatory = $true)][string]$TextfileDirectory,
     [string]$BaseUri = 'https://localhost:9419',
     [string]$CertificateThumbprint,
     [string]$ApiVersion,
