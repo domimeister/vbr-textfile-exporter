@@ -1569,7 +1569,7 @@ function Install-VeeamExporter {
             throw ('windows_exporter is not installed on this server: there is no service named windows_exporter and none that runs windows_exporter.exe. Install it with the textfile collector first, or name its service with -WindowsExporterService. {0}' -f $hint)
         }
         if (-not $found.ServiceRunning) {
-            throw ("The windows_exporter service '{0}' is not running. Start it first. {1}" -f $found.ServiceName, $hint)
+            throw ("The windows_exporter service '{0}' is not running. Start it first, or name another service with -WindowsExporterService. {1}" -f $found.ServiceName, $hint)
         }
         if ($found.TextfileCheck -ne 'metrics') {
             throw ("The windows_exporter service '{0}' does not answer on {1}, so the textfile collector cannot be checked (TLS or authentication in front of /metrics?). {2}" -f $found.ServiceName, ($found.MetricsTried -join ', '), $hint)
