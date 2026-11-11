@@ -1,6 +1,6 @@
 @{
     RootModule           = 'VeeamExporter.psm1'
-    ModuleVersion        = '0.2.0'
+    ModuleVersion        = '0.2.1'
     GUID                 = '6f0c7a52-3a4e-4f4b-9a57-6c1e2d9b8f10'
     Author               = 'domimeister'
     Description          = 'Veeam Backup & Replication exporter for the windows_exporter textfile collector (read-only REST).'
