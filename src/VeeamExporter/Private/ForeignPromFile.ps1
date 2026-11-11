@@ -11,10 +11,21 @@ function Get-VeeamForeignPromFile {
     $found = New-Object -TypeName System.Collections.Generic.List[string]
     foreach ($file in @(Get-ChildItem -LiteralPath $Directory -Filter '*.prom' -File -Force -ErrorAction SilentlyContinue)) {
         if ($file.Extension -ne '.prom' -or $own -contains $file.Name) { continue }
+        # The file belongs to someone else: open it so that its owner can
+        # still write, delete and rename it, and look at the first 1000
+        # lines only. A copy of an exporter file shows Veeam metrics in line 1.
         try {
-            foreach ($line in [System.IO.File]::ReadLines($file.FullName)) {
-                if ($line -match '^(# (HELP|TYPE) )?veeam_') { $found.Add($file.Name); break }
+            $share = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
+            $stream = New-Object -TypeName System.IO.FileStream -ArgumentList $file.FullName, ([System.IO.FileMode]::Open), ([System.IO.FileAccess]::Read), $share
+            try {
+                $reader = New-Object -TypeName System.IO.StreamReader -ArgumentList $stream
+                for ($n = 0; $n -lt 1000; $n++) {
+                    $line = $reader.ReadLine()
+                    if ($null -eq $line) { break }
+                    if ($line -match '^(# (HELP|TYPE) )?veeam_') { $found.Add($file.Name); break }
+                }
             }
+            finally { $stream.Dispose() }
         }
         catch { Write-Verbose ('{0} not readable: {1}' -f $file.FullName, $_.Exception.Message) }
     }
