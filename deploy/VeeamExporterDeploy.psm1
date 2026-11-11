@@ -58,20 +58,28 @@ function Test-VeeamExporterAdministrator {
 }
 
 # ------------------------------------------------- shared with the exporter --
-# ConvertFrom-ServiceImagePath: one parser for service image paths, also used
-# by the exporter for VeeamBackupSvc. Repository: src\VeeamExporter\Private;
-# installation: VeeamExporter\Private next to deploy\. Without the file (a
-# damaged installation, an update that was killed) this module still loads,
-# so that the uninstallation and a new installation can run.
+# Files of the exporter module that this module loads as well, so that there
+# is one implementation: ServiceImagePath.ps1 (ConvertFrom-ServiceImagePath,
+# the parser for service image paths) and ForeignPromFile.ps1
+# (Get-VeeamForeignPromFile, other .prom files with Veeam metrics).
+# Repository: src\VeeamExporter\Private; installation: VeeamExporter\Private
+# next to deploy\. Without the files (a damaged installation, an update that
+# was killed) this module still loads, so that the uninstallation and a new
+# installation can run.
 
-$script:ServiceImagePathScript = & {
+$script:SharedScript = @{}
+foreach ($sharedName in @('ServiceImagePath.ps1', 'ForeignPromFile.ps1')) {
     $parent = Split-Path -Parent $PSScriptRoot
     foreach ($appRoot in @((Join-Path -Path $parent -ChildPath 'src'), $parent)) {
-        $file = Join-Path -Path (Join-Path -Path (Join-Path -Path $appRoot -ChildPath 'VeeamExporter') -ChildPath 'Private') -ChildPath 'ServiceImagePath.ps1'
-        if (Test-Path -LiteralPath $file -PathType Leaf) { return $file }
+        $file = Join-Path -Path (Join-Path -Path (Join-Path -Path $appRoot -ChildPath 'VeeamExporter') -ChildPath 'Private') -ChildPath $sharedName
+        if (Test-Path -LiteralPath $file -PathType Leaf) {
+            $script:SharedScript[$sharedName] = $file
+            . $file
+            break
+        }
     }
 }
-if ($script:ServiceImagePathScript) { . $script:ServiceImagePathScript }
+$script:ServiceImagePathScript = $script:SharedScript['ServiceImagePath.ps1']
 
 # --------------------------------------------------------- windows_exporter --
 
@@ -1004,38 +1012,6 @@ function Get-VeeamExporterTextfileProblem {
     return [string[]]$problems.ToArray()
 }
 
-function Get-VeeamExporterForeignPromFile {
-    # Other .prom files in the textfile directory that hold Veeam metrics: a
-    # copy such as "veeam_jobs - Kopie.prom", a second exporter. Of two files
-    # with the same series windows_exporter 0.32.1 keeps the one that sorts
-    # first, so such a file can hide the exporter's current data.
-    [CmdletBinding()]
-    [OutputType([string[]])]
-    param([Parameter(Mandatory = $true)][string]$Directory)
-    $found = New-Object -TypeName System.Collections.Generic.List[string]
-    foreach ($file in @(Get-ChildItem -LiteralPath $Directory -Filter '*.prom' -File -Force -ErrorAction SilentlyContinue)) {
-        if ($file.Extension -ne '.prom' -or $script:PromFiles -contains $file.Name) { continue }
-        # The file belongs to someone else: open it so that its owner can
-        # still write, delete and rename it, and look at the first 1000
-        # lines only. A copy of an exporter file shows Veeam metrics in line 1.
-        try {
-            $share = [System.IO.FileShare]::ReadWrite -bor [System.IO.FileShare]::Delete
-            $stream = New-Object -TypeName System.IO.FileStream -ArgumentList $file.FullName, ([System.IO.FileMode]::Open), ([System.IO.FileAccess]::Read), $share
-            try {
-                $reader = New-Object -TypeName System.IO.StreamReader -ArgumentList $stream
-                for ($n = 0; $n -lt 1000; $n++) {
-                    $line = $reader.ReadLine()
-                    if ($null -eq $line) { break }
-                    if ($line -match '^(# (HELP|TYPE) )?veeam_') { $found.Add($file.Name); break }
-                }
-            }
-            finally { $stream.Dispose() }
-        }
-        catch { Write-Verbose ('{0} not readable: {1}' -f $file.FullName, $_.Exception.Message) }
-    }
-    return [string[]]$found.ToArray()
-}
-
 function Get-VeeamExporterDirectoryAclSpec {
     <#
     Target permissions (pure data): owner Administrators, no inheritance from
@@ -1499,7 +1475,8 @@ function Install-VeeamExporter {
         if ($AllowUnsafeTextfileDirectory) { Write-Warning $message }
         else { throw ($message + "`nOverride with -AllowUnsafeTextfileDirectory.") }
     }
-    $foreign = @(Get-VeeamExporterForeignPromFile -Directory $TextfileDirectory)
+    $foreign = @()
+    if ($script:SharedScript['ForeignPromFile.ps1']) { $foreign = @(Get-VeeamForeignPromFile -Directory $TextfileDirectory) }
     if ($foreign.Count -gt 0) {
         Write-Warning ("Other files in {0} hold Veeam metrics: {1}. Of two files with the same series windows_exporter keeps only one (0.32.1: the one whose name sorts first), so they can hide the exporter's current data. Remove them unless they belong to another exporter." -f $TextfileDirectory, ($foreign -join ', '))
     }

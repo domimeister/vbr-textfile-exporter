@@ -13,7 +13,7 @@ src/
   VeeamExporter/              # module: Public/ and Private/ functions
   Invoke-VeeamExporter.ps1    # REST collectors: jobs, objects, repositories
   Invoke-VeeamLicenseExporter.ps1  # license via Get-VBRInstalledLicense (separate task)
-deploy/                       # task definitions, install script, credential setup (dot-sources src/VeeamExporter/Private/ServiceImagePath.ps1)
+deploy/                       # task definitions, install script, credential setup (dot-sources ServiceImagePath.ps1 and ForeignPromFile.ps1 from src/VeeamExporter/Private)
 alerting/veeam-alerts.json    # Grafana alert rules (file provisioning)
 dashboards/                   # Grafana
 tests/                        # Pester 5

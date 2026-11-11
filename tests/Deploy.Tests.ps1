@@ -1228,7 +1228,7 @@ Describe 'Other files with Veeam metrics in the textfile directory' {
             'veeam_jobs.prom.tmp'             = "veeam_job_enabled{job_name=`"a`"} 1`n"
         }
         foreach ($n in $files.Keys) { [System.IO.File]::WriteAllText((Join-Path $dir $n), $files[$n]) }
-        $found = @(InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) Get-VeeamExporterForeignPromFile -Directory $Dir }) | Sort-Object
+        $found = @(InModuleScope VeeamExporterDeploy -Parameters @{ Dir = $dir } { param($Dir) Get-VeeamForeignPromFile -Directory $Dir }) | Sort-Object
         ($found -join ',') | Should -BeExactly 'old_exporter.prom,veeam_repositories - Kopie.prom'
     }
 }
