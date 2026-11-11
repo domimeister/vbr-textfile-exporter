@@ -17,6 +17,8 @@ BeforeAll {
         'Get-ScheduledTask'            = '[CmdletBinding()] param($TaskPath, $TaskName)'
         'Start-ScheduledTask'          = 'param($TaskPath, $TaskName)'
         'Stop-ScheduledTask'           = 'param($TaskPath, $TaskName)'
+        'Disable-ScheduledTask'        = 'param($TaskPath, $TaskName)'
+        'Enable-ScheduledTask'         = 'param($TaskPath, $TaskName)'
         'Get-ScheduledTaskInfo'        = 'param($TaskPath, $TaskName)'
         'Set-Acl'                      = 'param($LiteralPath, $AclObject)'
     }
@@ -168,12 +170,19 @@ Describe 'Image path parser shared with the exporter' {
         [System.IO.Path]::GetFullPath($r.Output) | Should -Be ([System.IO.Path]::GetFullPath($expected))
     }
 
-    It 'refuses to load without the parser file' {
+    It 'loads without the parser file, so that a damaged installation can be removed, and says so when it needs the parser' {
         $alone = Join-Path -Path (New-TestDirectory -Name 'alone') -ChildPath 'deploy'
         $null = New-Item -ItemType Directory -Path $alone
         Copy-Item -LiteralPath $script:DeployModule -Destination $alone
-        $r = Invoke-DeployModuleProbe -ModulePath (Join-Path -Path $alone -ChildPath 'VeeamExporterDeploy.psm1')
-        ($r.Output -replace '\s', '') | Should -Match 'ServiceImagePath\.ps1oftheexportermodulenotfound'
+        $modulePath = Join-Path -Path $alone -ChildPath 'VeeamExporterDeploy.psm1'
+        $command = "`$ErrorActionPreference = 'Stop'; Import-Module -Name '$modulePath'; 'commands=' + @(Get-Command -Module VeeamExporterDeploy -Name Uninstall-VeeamExporter, Install-VeeamExporter).Count; & (Get-Module -Name VeeamExporterDeploy) { 'directory=' + (Get-WindowsExporterTextfileDirectory -ImagePath '`"C:\Tools\we\windows_exporter.exe`"' -WarningVariable w -WarningAction SilentlyContinue).Directory; 'warning=' + (`$w -join ' ') }"
+        $encoded = [System.Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($command))
+        $ErrorActionPreference = 'Continue'
+        $output = (@(& (Get-Process -Id $PID).Path -NoProfile -NonInteractive -EncodedCommand $encoded 2>&1 | ForEach-Object { "$_" }) -join "`n")
+        $LASTEXITCODE | Should -Be 0 -Because $output
+        $output | Should -Match 'commands=2'
+        $output | Should -Match 'directory=C:\\Program Files\\windows_exporter\\textfile_inputs'
+        ($output -replace '\s', '') | Should -Match 'warning=ServiceImagePath\.ps1oftheexportermodulenotfound'
     }
 }
 
@@ -501,6 +510,8 @@ Describe 'Install-VeeamExporter' {
         Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { }
         Mock -ModuleName VeeamExporterDeploy Unregister-ScheduledTask { }
         Mock -ModuleName VeeamExporterDeploy Start-ScheduledTask { }
+        Mock -ModuleName VeeamExporterDeploy Disable-ScheduledTask { }
+        Mock -ModuleName VeeamExporterDeploy Enable-ScheduledTask { }
         Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTask { [pscustomobject]@{ LastTaskResult = 0 } }
         $script:Cred = New-TestCredential
     }
@@ -723,17 +734,70 @@ Describe 'Install-VeeamExporter' {
         @($result.FirstRun | Where-Object Ok).Count | Should -Be 2
     }
 
-    It 'waits for running tasks before it replaces the files' {
-        $script:Order = New-Object System.Collections.Generic.List[string]
-        $script:Tasks = @(
-            [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Running' }
-            [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter License'; State = 'Ready' }
-        )
-        Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { $script:Tasks }
-        Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTaskIdle { $script:Order.Add('wait ' + $TaskName + ' ' + $TimeoutSeconds) }
-        Mock -ModuleName VeeamExporterDeploy Copy-VeeamExporterFile { $script:Order.Add('copy') }
-        $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
-        ($script:Order -join ' | ') | Should -BeExactly 'wait Veeam Exporter REST 660 | wait Veeam Exporter License 1860 | copy'
+    Context 'tasks while the files are replaced' {
+        BeforeEach {
+            $script:Order = New-Object System.Collections.Generic.List[string]
+            $script:Tasks = @(
+                [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Running'; Settings = [pscustomobject]@{ Enabled = $true } }
+                [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter License'; State = 'Ready' }
+            )
+            Mock -ModuleName VeeamExporterDeploy Get-ScheduledTask { $script:Tasks }
+            Mock -ModuleName VeeamExporterDeploy Disable-ScheduledTask { $script:Order.Add('disable ' + $TaskName) }
+            Mock -ModuleName VeeamExporterDeploy Enable-ScheduledTask { $script:Order.Add('enable ' + $TaskName) }
+            Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTaskIdle { $script:Order.Add('wait ' + $TaskName + ' ' + $TimeoutSeconds) }
+            Mock -ModuleName VeeamExporterDeploy Copy-VeeamExporterFile { $script:Order.Add('copy') }
+        }
+
+        It 'disables all tasks, waits for the running ones, replaces the files and enables the tasks again' {
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+            ($script:Order -join ' | ') | Should -BeExactly 'disable Veeam Exporter REST | disable Veeam Exporter License | wait Veeam Exporter REST 660 | wait Veeam Exporter License 1860 | copy | enable Veeam Exporter REST | enable Veeam Exporter License'
+        }
+
+        It 'enables the tasks again when <Case>' -TestCases @(
+            @{ Case = 'the copy fails'; Message = 'There is not enough space on the disk.' }
+            @{ Case = 'a task does not finish in time'; Message = 'was still running after 660 s.' }
+        ) {
+            param($Case, $Message)
+            $script:Message = $Message
+            if ($Case -eq 'the copy fails') { Mock -ModuleName VeeamExporterDeploy Copy-VeeamExporterFile { throw $script:Message } }
+            else { Mock -ModuleName VeeamExporterDeploy Wait-VeeamExporterTaskIdle { throw $script:Message } }
+            { Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue } | Should -Throw ('*' + $Message + '*')
+            (@($script:Order | Where-Object { $_ -notlike 'wait *' }) -join ' | ') | Should -BeExactly 'disable Veeam Exporter REST | disable Veeam Exporter License | enable Veeam Exporter REST | enable Veeam Exporter License'
+            $script:Registered.Count | Should -Be 0
+        }
+
+        It 'leaves a task disabled that was disabled before' {
+            $script:Tasks = @(
+                [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter REST'; State = 'Ready'; Settings = [pscustomobject]@{ Enabled = $true } }
+                [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Veeam Exporter License'; State = 'Running'; Settings = [pscustomobject]@{ Enabled = $false } }
+                [pscustomobject]@{ TaskPath = '\VeeamExporter\'; TaskName = 'Other'; State = 'Disabled' }
+            )
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+            ($script:Order -join ' | ') | Should -BeExactly 'disable Veeam Exporter REST | wait Veeam Exporter REST 660 | wait Veeam Exporter License 1860 | wait Other 1860 | copy | enable Veeam Exporter REST'
+        }
+
+        It 'says how to enable a task that could not be enabled again' {
+            Mock -ModuleName VeeamExporterDeploy Enable-ScheduledTask { throw 'Access is denied.' } -ParameterFilter { $TaskName -eq 'Veeam Exporter REST' }
+            $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue -WarningVariable warnings -WarningAction SilentlyContinue
+            @($warnings | Where-Object { "$_" -like "Could not enable the task Veeam Exporter REST again: Access is denied.*Enable-ScheduledTask -TaskPath '\VeeamExporter\' -TaskName 'Veeam Exporter REST'" }).Count | Should -Be 1
+            $script:Order | Should -Contain 'enable Veeam Exporter License'
+        }
+
+        It 'leaves the tasks alone when <Case>' -TestCases @(
+            @{ Case = 'the source is the installation itself' }
+            @{ Case = '-WhatIf is given' }
+        ) {
+            param($Case)
+            if ($Case -eq '-WhatIf is given') {
+                $null = Install-VeeamExporter -SourceRoot $script:RepoRoot -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -WhatIf -InformationAction SilentlyContinue
+            }
+            else {
+                $null = New-Item -ItemType Directory -Path $script:Install
+                [System.IO.File]::WriteAllText((Join-Path -Path $script:Install -ChildPath 'Invoke-VeeamExporter.ps1'), '# installed')
+                $null = Install-VeeamExporter -SourceRoot $script:Install -InstallPath $script:Install -DataPath $script:Data -Credential $script:Cred -Force -NoStart -InformationAction SilentlyContinue
+            }
+            (@($script:Order | Where-Object { $_ -ne 'copy' }) -join ' | ') | Should -BeNullOrEmpty
+        }
     }
 
     It 'goes on with the next task and returns the summary if a first run is not finished in time' {
