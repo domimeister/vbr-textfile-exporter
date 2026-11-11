@@ -73,7 +73,7 @@ Manually per VBR server, in a PowerShell as Administrator:
 .\deploy\Install-VeeamExporter.ps1
 ```
 
-The script reads the thumbprint of the REST API (with confirmation), asks for the Veeam account (role **Backup Viewer**), stores it with DPAPI for SYSTEM and sets up two tasks: REST every 15 minutes, license daily. It then starts both once. Details, prerequisites, update and uninstallation: [`deploy/README.md`](deploy/README.md).
+The script first checks the prerequisites and stops before any change if one is missing: the windows_exporter service must be running with the textfile collector, and the Veeam account must be able to log on and read. It reads the thumbprint of the REST API (with confirmation), asks for the Veeam account (role **Backup Viewer**), stores it with DPAPI for SYSTEM and sets up two tasks: REST every 15 minutes, license daily. It then starts both once and checks that the windows_exporter exports the data. Details, prerequisites, update and uninstallation: [`deploy/README.md`](deploy/README.md).
 
 `vbr_version` in `veeam_exporter_info` is the file version of the Veeam backup service on the server, read locally, because only Backup Administrator may read it through REST (`/api/v1/serverInfo`, OP-13 in `docs/metrics.md`).
 
@@ -81,13 +81,13 @@ The script reads the thumbprint of the REST API (with confirmation), asks for th
 
 ```powershell
 .\src\Invoke-VeeamExporter.ps1 `
-    -CredentialPath 'C:\ProgramData\VeeamExporter\veeam.cred.xml' `
+    -CredentialPath '<your own credential file, see below>' `
     -CertificateThumbprint '<SHA-1 thumbprint>' `
     -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs'
 .\src\Invoke-VeeamLicenseExporter.ps1 -TextfileDirectory 'C:\Program Files\windows_exporter\textfile_inputs'
 ```
 
-The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.ps1` therefore needs its own credential, created in your own account with `Get-Credential | Export-Clixml -LiteralPath <file>`. Without `-CertificateThumbprint` the normal .NET certificate validation applies, and the self-signed VBR certificate is rejected. Exit code 0 if all collectors succeeded, otherwise 1. A parameter value outside its range is a configuration error: the run writes `veeam_exporter.prom` with the requested collectors at 0, then stops with the error.
+The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.ps1` therefore needs its own credential, created in your own account with `Get-Credential | Export-Clixml -LiteralPath <file>`. `-TextfileDirectory` has no default: for a trial run give an empty folder, the directory of the windows_exporter makes the run live. Without `-CertificateThumbprint` the normal .NET certificate validation applies, and the self-signed VBR certificate is rejected. Exit code 0 if all collectors succeeded, otherwise 1. A parameter value outside its range is a configuration error: the run writes `veeam_exporter.prom` with the requested collectors at 0, then stops with the error.
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |

@@ -6,6 +6,8 @@ Copies the exporter to C:\Program Files\VeeamExporter, stores the Veeam
 credential for SYSTEM (DPAPI) in C:\ProgramData\VeeamExporter, registers the
 scheduled tasks "\VeeamExporter\Veeam Exporter REST" (every 15 minutes) and
 "\VeeamExporter\Veeam Exporter License" (daily) and runs both once.
+Stops before any change unless the windows_exporter service runs with the
+textfile collector and the Veeam account can read the REST API.
 Re-running it updates files and tasks and keeps the credential.
 See deploy\README.md.
 .PARAMETER CertificateThumbprint
@@ -16,7 +18,14 @@ Only warn (instead of aborting) when other accounts may write to the
 textfile directory of the windows_exporter.
 .PARAMETER Credential
 Veeam account for the REST API (role Backup Viewer). Asked for when the
-credential file is missing or -UpdateCredential is set.
+credential file is missing or -UpdateCredential is set. The installation
+tries it once against the REST API and stops if that fails.
+.PARAMETER WindowsExporterService
+Name of the windows_exporter service if it is not windows_exporter and its
+executable is not called windows_exporter*.exe.
+.PARAMETER SkipWindowsExporterCheck
+Install although the windows_exporter service cannot be found or asked for
+its textfile collector (only warnings then).
 .EXAMPLE
 .\Install-VeeamExporter.ps1
 .EXAMPLE
@@ -40,7 +49,9 @@ param(
     [ValidateRange(1, 90)][int]$ObjectLookbackDays = 8,
     [switch]$NoStart,
     [switch]$Force,
-    [switch]$AllowUnsafeTextfileDirectory
+    [switch]$AllowUnsafeTextfileDirectory,
+    [string]$WindowsExporterService,
+    [switch]$SkipWindowsExporterCheck
 )
 
 $ErrorActionPreference = 'Stop'

@@ -15,7 +15,9 @@ pwsh.exe -NoProfile -File .\Invoke-VeeamLicenseExporter.ps1 -TextfileDirectory '
 #>
 [CmdletBinding()]
 param(
-    [string]$TextfileDirectory = 'C:\Program Files\windows_exporter\textfile_inputs',
+    # No default: a run by hand without it would write into the directory
+    # the windows_exporter serves.
+    [Parameter(Mandatory = $true)][string]$TextfileDirectory,
     [string]$ModuleName = 'Veeam.Backup.PowerShell',
     [string]$LogPath
 )
