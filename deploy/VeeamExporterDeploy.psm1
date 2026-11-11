@@ -55,7 +55,9 @@ function Test-VeeamExporterAdministrator {
 # ------------------------------------------------- shared with the exporter --
 # ConvertFrom-ServiceImagePath: one parser for service image paths, also used
 # by the exporter for VeeamBackupSvc. Repository: src\VeeamExporter\Private;
-# installation: VeeamExporter\Private next to deploy\.
+# installation: VeeamExporter\Private next to deploy\. Without the file (a
+# damaged installation, an update that was killed) this module still loads,
+# so that the uninstallation and a new installation can run.
 
 $script:ServiceImagePathScript = & {
     $parent = Split-Path -Parent $PSScriptRoot
@@ -64,10 +66,7 @@ $script:ServiceImagePathScript = & {
         if (Test-Path -LiteralPath $file -PathType Leaf) { return $file }
     }
 }
-if (-not $script:ServiceImagePathScript) {
-    throw ('ServiceImagePath.ps1 of the exporter module not found (expected src\VeeamExporter\Private or VeeamExporter\Private next to {0}).' -f $PSScriptRoot)
-}
-. $script:ServiceImagePathScript
+if ($script:ServiceImagePathScript) { . $script:ServiceImagePathScript }
 
 # --------------------------------------------------------- windows_exporter --
 
@@ -105,7 +104,10 @@ function Get-WindowsExporterTextfileDirectory {
 
     if (-not $directory) {
         $exe = $null
-        if ($ImagePath) {
+        if ($ImagePath -and -not $script:ServiceImagePathScript) {
+            Write-Warning ('ServiceImagePath.ps1 of the exporter module not found (expected src\VeeamExporter\Private or VeeamExporter\Private next to {0}), so the folder of windows_exporter is not read from its service. Assuming the default textfile directory.' -f $PSScriptRoot)
+        }
+        elseif ($ImagePath) {
             try { $exe = ConvertFrom-ServiceImagePath -ImagePath $ImagePath }
             catch { Write-Verbose ('windows_exporter image path not readable: {0}' -f $_.Exception.Message) }
         }
@@ -645,14 +647,13 @@ function Wait-VeeamExporterTask {
 
 # --------------------------------------------------------------------- files --
 
-function Copy-VeeamExporterFile {
+function Resolve-VeeamExporterSource {
     <#
-    Copies the exporter to InstallPath. SourceRoot is either the repository
-    (src\, deploy\) or an existing installation (re-run from InstallPath\deploy).
-    Returns the copied paths relative to InstallPath.
+    SourceRoot is either the repository (src\, deploy\) or an existing
+    installation (re-run from InstallPath\deploy). IsInstallation: the source
+    is InstallPath itself, so there is nothing to copy.
     #>
-    [CmdletBinding(SupportsShouldProcess = $true)]
-    [OutputType([string[]])]
+    [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true)][string]$SourceRoot,
         [Parameter(Mandatory = $true)][string]$InstallPath
@@ -667,10 +668,41 @@ function Copy-VeeamExporterFile {
     else {
         throw "No exporter found under $SourceRoot (expected src\Invoke-VeeamExporter.ps1)."
     }
-    $deploySource = Join-Path -Path $SourceRoot -ChildPath 'deploy'
     $fullSource = [System.IO.Path]::GetFullPath($appRoot).TrimEnd('\', '/')
     $fullTarget = [System.IO.Path]::GetFullPath($InstallPath).TrimEnd('\', '/')
-    if ($fullSource -eq $fullTarget) {
+    return [pscustomobject]@{
+        AppRoot        = $appRoot
+        DeploySource   = Join-Path -Path $SourceRoot -ChildPath 'deploy'
+        IsInstallation = ($fullSource -eq $fullTarget)
+    }
+}
+
+function Move-VeeamExporterItem {
+    # Renames a file or a folder within the installation.
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Destination
+    )
+    if ($PSCmdlet.ShouldProcess($Path, ('Move to {0}' -f $Destination))) { [System.IO.Directory]::Move($Path, $Destination) }
+}
+
+function Copy-VeeamExporterFile {
+    <#
+    Copies the exporter to InstallPath. SourceRoot is either the repository
+    (src\, deploy\) or an existing installation (re-run from InstallPath\deploy).
+    Returns the copied paths relative to InstallPath.
+    #>
+    [CmdletBinding(SupportsShouldProcess = $true)]
+    [OutputType([string[]])]
+    param(
+        [Parameter(Mandatory = $true)][string]$SourceRoot,
+        [Parameter(Mandatory = $true)][string]$InstallPath
+    )
+    $source = Resolve-VeeamExporterSource -SourceRoot $SourceRoot -InstallPath $InstallPath
+    $appRoot = $source.AppRoot
+    $deploySource = $source.DeploySource
+    if ($source.IsInstallation) {
         Write-Verbose 'Source is the installation itself, nothing to copy.'
         return [string[]]@()
     }
@@ -681,21 +713,37 @@ function Copy-VeeamExporterFile {
     # Never delete or write through a junction or symbolic link.
     $links = @(Get-VeeamExporterReparsePoint -Path $InstallPath)
     if ($links.Count -gt 0) { throw ("Refusing to copy into {0}: it contains junctions or symbolic links: {1}" -f $InstallPath, ($links -join ', ')) }
-    # Leftovers of an update that was killed half way.
-    foreach ($leftover in @(Get-ChildItem -LiteralPath $InstallPath -Directory -Force | Where-Object { $_.Name -like '.staging-*' -or $_.Name -like '.old-*' })) {
+
+    $entryNames = @('Invoke-VeeamExporter.ps1', 'Invoke-VeeamLicenseExporter.ps1')
+    $allDeployNames = @('VeeamExporterDeploy.psm1', 'Install-VeeamExporter.ps1', 'Uninstall-VeeamExporter.ps1', 'Save-VeeamExporterSystemCredential.ps1')
+    $deployNames = @($allDeployNames | Where-Object { Test-Path -LiteralPath (Join-Path -Path $deploySource -ChildPath $_) })
+    $deployTarget = Join-Path -Path $InstallPath -ChildPath 'deploy'
+    if (-not (Test-Path -LiteralPath $deployTarget)) { $null = New-Item -ItemType Directory -Path $deployTarget }
+
+    # Leftovers of an update that was killed half way. What such an update
+    # had moved aside and not replaced yet goes back first, so that a failure
+    # further down leaves a complete installation.
+    foreach ($leftover in @(Get-ChildItem -LiteralPath $InstallPath -Directory -Force | Where-Object { $_.Name -like '.staging-*' -or $_.Name -like '.old-*' } | Sort-Object -Property Name)) {
+        if ($leftover.Name -like '.old-*') {
+            foreach ($item in (@('VeeamExporter') + $entryNames + @($allDeployNames | ForEach-Object { Join-Path -Path 'deploy' -ChildPath $_ }))) {
+                $backup = Join-Path -Path $leftover.FullName -ChildPath $item
+                $target = Join-Path -Path $InstallPath -ChildPath $item
+                if ((Test-Path -LiteralPath $backup) -and -not (Test-Path -LiteralPath $target)) { Move-VeeamExporterItem -Path $backup -Destination $target -Confirm:$false }
+            }
+        }
         Remove-Item -LiteralPath $leftover.FullName -Recurse -Force
     }
 
     # Everything is copied into a staging folder first and then put in place
     # by renaming. A failed copy (full disk, a locked file) leaves the
-    # installation as it was, and the module folder is swapped in one rename,
-    # so a run never loads a half-copied module.
+    # installation as it was. Every file and the module folder are swapped by
+    # renaming, never written in place, and a failed swap is undone, so the
+    # installation is never a mix of two versions. Install-VeeamExporter
+    # keeps the tasks from starting meanwhile.
     $id = [guid]::NewGuid().ToString('N')
     $stage = Join-Path -Path $InstallPath -ChildPath ('.staging-' + $id)
     $old = Join-Path -Path $InstallPath -ChildPath ('.old-' + $id)
-    $entryNames = @('Invoke-VeeamExporter.ps1', 'Invoke-VeeamLicenseExporter.ps1')
-    $deployNames = @(@('VeeamExporterDeploy.psm1', 'Install-VeeamExporter.ps1', 'Uninstall-VeeamExporter.ps1', 'Save-VeeamExporterSystemCredential.ps1') |
-            Where-Object { Test-Path -LiteralPath (Join-Path -Path $deploySource -ChildPath $_) })
+    $keepOld = $false
     try {
         $null = New-Item -ItemType Directory -Path $stage
         foreach ($name in $entryNames) {
@@ -708,32 +756,62 @@ function Copy-VeeamExporterFile {
             Copy-Item -LiteralPath (Join-Path -Path $deploySource -ChildPath $name) -Destination (Join-Path -Path $stageDeploy -ChildPath $name)
         }
 
-        # Module folder: the old one aside, the new one in, the old one gone.
-        $moduleTarget = Join-Path -Path $InstallPath -ChildPath 'VeeamExporter'
-        if (Test-Path -LiteralPath $moduleTarget) { [System.IO.Directory]::Move($moduleTarget, $old) }
-        try { [System.IO.Directory]::Move((Join-Path -Path $stage -ChildPath 'VeeamExporter'), $moduleTarget) }
+        # The old item aside, the new one in; at the end the old ones go.
+        $null = New-Item -ItemType Directory -Path $old
+        $null = New-Item -ItemType Directory -Path (Join-Path -Path $old -ChildPath 'deploy')
+        $swaps = New-Object -TypeName System.Collections.Generic.List[object]
+        try {
+            foreach ($item in (@('VeeamExporter') + $entryNames + @($deployNames | ForEach-Object { Join-Path -Path 'deploy' -ChildPath $_ }))) {
+                $swap = [pscustomobject]@{
+                    Target    = Join-Path -Path $InstallPath -ChildPath $item
+                    Staged    = Join-Path -Path $stage -ChildPath $item
+                    Backup    = Join-Path -Path $old -ChildPath $item
+                    HadTarget = $false
+                }
+                $swap.HadTarget = Test-Path -LiteralPath $swap.Target
+                $swaps.Add($swap)
+                if ($swap.HadTarget) { Move-VeeamExporterItem -Path $swap.Target -Destination $swap.Backup -Confirm:$false }
+                Move-VeeamExporterItem -Path $swap.Staged -Destination $swap.Target -Confirm:$false
+            }
+        }
         catch {
-            if (Test-Path -LiteralPath $old) { [System.IO.Directory]::Move($old, $moduleTarget) }
+            # Undo in reverse order: the new item back to staging, the old one in.
+            for ($i = $swaps.Count - 1; $i -ge 0; $i--) {
+                $swap = $swaps[$i]
+                try {
+                    $newInPlace = (Test-Path -LiteralPath $swap.Target) -and -not (Test-Path -LiteralPath $swap.Staged)
+                    if (Test-Path -LiteralPath $swap.Backup) {
+                        if ($newInPlace) { Move-VeeamExporterItem -Path $swap.Target -Destination $swap.Staged -Confirm:$false }
+                        Move-VeeamExporterItem -Path $swap.Backup -Destination $swap.Target -Confirm:$false
+                    }
+                    elseif (-not $swap.HadTarget -and $newInPlace) { Move-VeeamExporterItem -Path $swap.Target -Destination $swap.Staged -Confirm:$false }
+                }
+                catch {
+                    # The old item stays in the .old folder; the next installation puts it back.
+                    $keepOld = $true
+                    Write-Warning ('Could not put {0} back: {1}' -f $swap.Target, $_.Exception.Message)
+                }
+            }
             throw
         }
-        foreach ($name in $entryNames) {
-            [System.IO.File]::Copy((Join-Path -Path $stage -ChildPath $name), (Join-Path -Path $InstallPath -ChildPath $name), $true)
-            $copied.Add($name)
-        }
+        foreach ($name in $entryNames) { $copied.Add($name) }
+        $moduleTarget = Join-Path -Path $InstallPath -ChildPath 'VeeamExporter'
         $moduleRoot = (Resolve-Path -LiteralPath $moduleTarget).ProviderPath
         foreach ($f in Get-ChildItem -LiteralPath $moduleTarget -Recurse -File) {
             $copied.Add('VeeamExporter' + $f.FullName.Substring($moduleRoot.Length).Replace('/', '\'))
         }
-        $deployTarget = Join-Path -Path $InstallPath -ChildPath 'deploy'
-        if (-not (Test-Path -LiteralPath $deployTarget)) { $null = New-Item -ItemType Directory -Path $deployTarget }
-        foreach ($name in $deployNames) {
-            [System.IO.File]::Copy((Join-Path -Path $stageDeploy -ChildPath $name), (Join-Path -Path $deployTarget -ChildPath $name), $true)
-            $copied.Add('deploy\' + $name)
-        }
-        if (Test-Path -LiteralPath $old) { Remove-Item -LiteralPath $old -Recurse -Force }
+        foreach ($name in $deployNames) { $copied.Add('deploy\' + $name) }
     }
     finally {
-        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
+        # The installation is complete or as before; a folder that cannot be
+        # removed now goes with the next installation.
+        foreach ($folder in @($stage, $old)) {
+            if ($folder -eq $old -and $keepOld) { continue }
+            if (Test-Path -LiteralPath $folder) {
+                try { Remove-Item -LiteralPath $folder -Recurse -Force }
+                catch { Write-Warning ('Could not remove {0}: {1}' -f $folder, $_.Exception.Message) }
+            }
+        }
     }
     # Downloaded archives carry Zone.Identifier; RemoteSigned would block them.
     $onWindows = ($PSVersionTable.PSEdition -eq 'Desktop') -or ((Test-Path -LiteralPath 'Variable:IsWindows') -and $IsWindows)
@@ -1406,16 +1484,37 @@ function Install-VeeamExporter {
     # files
     # Installation and data directory: owner and ACL first, then the files.
     Initialize-VeeamExporterSecureDirectory -Path $InstallPath -Kind Install
-    # A run that starts while the files are replaced could load a mixed
-    # module: wait until no task of the exporter runs, as long as it may run.
-    if (-not $WhatIfPreference) {
-        foreach ($task in @(Get-ScheduledTask -TaskPath $script:TaskPath -ErrorAction SilentlyContinue | Where-Object { $null -ne $_ -and $_.TaskName })) {
-            $limit = 1860
-            if ($task.TaskName -eq $script:RestTaskName) { $limit = 660 }
-            Wait-VeeamExporterTaskIdle -TaskPath $script:TaskPath -TaskName $task.TaskName -TimeoutSeconds $limit
+    # A run that starts while the files are replaced could load a mix of two
+    # versions. Disable the tasks first, so that no trigger starts one, then
+    # wait until none runs, as long as it may run. A task that is disabled
+    # while it runs finishes its run (lab, Windows Server 2025). Nothing of
+    # this when there is nothing to copy.
+    $tasksToEnable = New-Object -TypeName System.Collections.Generic.List[string]
+    try {
+        if (-not $WhatIfPreference -and -not (Resolve-VeeamExporterSource -SourceRoot $SourceRoot -InstallPath $InstallPath).IsInstallation) {
+            $installedTasks = @(Get-ScheduledTask -TaskPath $script:TaskPath -ErrorAction SilentlyContinue | Where-Object { $null -ne $_ -and $_.TaskName })
+            foreach ($task in $installedTasks) {
+                # A task the administrator disabled stays disabled.
+                $enabled = ([string]$task.State -ne 'Disabled')
+                if ($task.PSObject.Properties['Settings'] -and $null -ne $task.Settings) { $enabled = [bool]$task.Settings.Enabled }
+                if (-not $enabled) { continue }
+                $tasksToEnable.Add($task.TaskName)
+                $null = Disable-ScheduledTask -TaskPath $script:TaskPath -TaskName $task.TaskName
+            }
+            foreach ($task in $installedTasks) {
+                $limit = 1860
+                if ($task.TaskName -eq $script:RestTaskName) { $limit = 660 }
+                Wait-VeeamExporterTaskIdle -TaskPath $script:TaskPath -TaskName $task.TaskName -TimeoutSeconds $limit
+            }
+        }
+        $null = Copy-VeeamExporterFile -SourceRoot $SourceRoot -InstallPath $InstallPath
+    }
+    finally {
+        foreach ($name in $tasksToEnable) {
+            try { $null = Enable-ScheduledTask -TaskPath $script:TaskPath -TaskName $name }
+            catch { Write-Warning ("Could not enable the task {0} again: {1} Enable it with: Enable-ScheduledTask -TaskPath '{2}' -TaskName '{0}'" -f $name, $_.Exception.Message, $script:TaskPath) }
         }
     }
-    $null = Copy-VeeamExporterFile -SourceRoot $SourceRoot -InstallPath $InstallPath
     if (-not $WhatIfPreference) { Assert-VeeamExporterDirectorySecure -Path $InstallPath -Kind Install }
     Initialize-VeeamExporterDataDirectory -Path $DataPath
 
