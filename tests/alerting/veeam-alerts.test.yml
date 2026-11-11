@@ -277,13 +277,19 @@ tests:
       # One failed phase of 16 minutes (one run) and one that lasts.
       - series: 'veeam_exporter_collector_success{collector="jobs",instance="vbr02:9182",job="windows"}'
         values: '1x10 0x15 1x10 0x60'
+      # The license collector runs once a day: a single failed run stays 0
+      # for a day and must not fire with the REST collectors.
+      - series: 'veeam_exporter_collector_success{collector="license",instance="vbr02:9182",job="windows"}'
+        values: '1x10 0x170'
       - series: 'veeam_license_valid{instance="vbr02:9182",job="windows"}'
         values: '0x90'
-      # Support ends after 20 days (vbr02) and after 40 days (vbr03).
+      # Support ends after 20 days (vbr02) and after 40 days (vbr03); on vbr04 it ended before the test starts.
       - series: 'veeam_license_support_expiration_timestamp_seconds{instance="vbr02:9182",job="windows"}'
         values: '1728000x90'
       - series: 'veeam_license_support_expiration_timestamp_seconds{instance="vbr03:9182",job="windows"}'
         values: '3456000x90'
+      - series: 'veeam_license_support_expiration_timestamp_seconds{instance="vbr04:9182",job="windows"}'
+        values: '-864000x90'
     alert_rule_test:
       - eval_time: 79m
         alertname: VeeamExporterMissing
@@ -309,6 +315,9 @@ tests:
         alertname: VeeamExporterCollectorFailed
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, collector: jobs}
+      - eval_time: 170m
+        alertname: VeeamExporterLicenseCollectorFailed
+        exp_alerts: []
       - eval_time: 59m
         alertname: VeeamLicenseInvalid
         exp_alerts: []
@@ -320,3 +329,44 @@ tests:
         alertname: VeeamSupportExpiring
         exp_alerts:
           - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows}
+          - exp_labels: {severity: warning, instance: 'vbr04:9182', job: windows}
+
+  - name: a silent server and the daily license collector over several days
+    interval: 15m
+    input_series:
+      # vbr01 delivered data for an hour and has been silent since.
+      - series: 'veeam_exporter_info{instance="vbr01:9182",job="windows",script_version="0.3.0",api_version="1.3-rev2",vbr_version="13.1.2.57"}'
+        values: '1x4 _x800'
+      # vbr02: the license collector succeeds on day one and fails from then
+      # on (0 from 24h15m, so the second failed run is at 48h15m).
+      - series: 'veeam_exporter_collector_success{collector="license",instance="vbr02:9182",job="windows"}'
+        values: '1x96 0x700'
+      # vbr03: the license collector never succeeded.
+      - series: 'veeam_exporter_collector_success{collector="license",instance="vbr03:9182",job="windows"}'
+        values: '0x800'
+    alert_rule_test:
+      # Still firing after a long weekend, gone after the 7 days.
+      - eval_time: 3d
+        alertname: VeeamExporterMissing
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182'}
+      - eval_time: 6d23h
+        alertname: VeeamExporterMissing
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182'}
+      - eval_time: 7d2h
+        alertname: VeeamExporterMissing
+        exp_alerts: []
+      # One failed run passes, the second one fires; never succeeded fires at once.
+      - eval_time: 48h
+        alertname: VeeamExporterLicenseCollectorFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr03:9182', job: windows, collector: license}
+      - eval_time: 49h15m
+        alertname: VeeamExporterLicenseCollectorFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, instance: 'vbr02:9182', job: windows, collector: license}
+          - exp_labels: {severity: warning, instance: 'vbr03:9182', job: windows, collector: license}
+      - eval_time: 49h15m
+        alertname: VeeamExporterCollectorFailed
+        exp_alerts: []

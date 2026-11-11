@@ -162,7 +162,7 @@ Values for `collector`: jobs, objects, repositories, license. The textfile colle
 
 ## Example Alerts
 
-Fifteen Grafana-managed alert rules cover the minimum requirements, the exporter itself and its data source. The thresholds are proposals. They are implemented in [`alerting/veeam-alerts.json`](../alerting/veeam-alerts.json), a Grafana alerting provisioning file (folder `Veeam`, group `veeam`, evaluated every minute). The file is a template: nothing loads it automatically, users pick the rules they need (README, "Alert rules").
+Sixteen Grafana-managed alert rules cover the minimum requirements, the exporter itself and its data source. The thresholds are proposals. They are implemented in [`alerting/veeam-alerts.json`](../alerting/veeam-alerts.json), a Grafana alerting provisioning file (folder `Veeam`, group `veeam`, evaluated every minute). The file is a template: nothing loads it automatically, users pick the rules they need (README, "Alert rules").
 
 Every rule has two steps: query `A` is an instant Prometheus query that returns the measured value per series, and the condition `B` is a threshold on `A`. The rule fires for each series of `A` that meets the threshold for the time given in `for`. Grafana shows the value of `A` in the alert and in `$values.A.Value` for the `summary` annotation, which every rule has.
 
@@ -170,10 +170,11 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
 - `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand. Jobs that never ran have no last run timestamp and do not fire here. Exporters older than the `schedule` label alert for all enabled jobs.
 - `VeeamJobNeverRun` covers those jobs (OP-10): enabled, with a schedule or chained, and no last run at all. `A` counts the quarter hours of the last 28 hours in which the job was in that state; at 104 (26 hours) the rule fires. 26 hours give a new daily job time for its first run. A reboot or another gap in the data only leaves out a few quarter hours (up to 2 hours in total), while a `for: 26h` would start the wait again after every gap (lab: a reboot of the VBR server). Jobs without a schedule and disabled jobs are left out as in `VeeamJobNotRun`; a job that ran with an unknown result (-1, OP-8) has a last run timestamp and does not fire.
 - The fill level comes from free space and capacity, never from `veeam_repository_backup_bytes`, which counts backup files only.
-- `VeeamLicenseExpiring` also fires once the license has expired; `A` is negative then. A perpetual license has no expiration date and therefore no series here; `VeeamLicenseInvalid` covers every status other than `Valid`, and `VeeamSupportExpiring` the end of the support contract.
+- `VeeamLicenseExpiring` also fires once the license has expired; `A` is negative then. A perpetual license has no expiration date and therefore no series here; `VeeamLicenseInvalid` covers every status other than `Valid`, and `VeeamSupportExpiring` the end of the support contract; it keeps firing after the support has ended, with `A` negative. With a subscription license both dates are the same and both rules fire: pick one.
 - A collector replaces its file only on success, so an old file means failed or missing runs. The REST task runs every 15 minutes, the license task once a day; `VeeamExporterLicenseStale` therefore allows 48 hours instead of 1.
-- `VeeamExporterCollectorFailed` reports a failing collector directly (`veeam_exporter_collector_success` 0), for example after a certificate renewal or with a credential that cannot be read. 30 minutes let one failed run pass: after a reboot, VBR answers HTTP 502 for several minutes, so the first run fails (lab, VBR 13.1).
-- The rules above only see data that arrives. `VeeamExporterMissing` fires when a server delivered Veeam data within the last 24 hours and does not any more: windows_exporter stopped, its port blocked, the textfile collector switched off or the files deleted. After a planned uninstallation it fires for up to a day; silence it for that server.
+- `VeeamExporterCollectorFailed` reports a failing collector of the REST task directly (`veeam_exporter_collector_success` 0), for example after a certificate renewal or with a credential that cannot be read. 30 minutes let one failed run pass: after a reboot, VBR answers HTTP 502 for several minutes, so the first run fails (lab, VBR 13.1).
+- The license collector runs once a day, so after one failed run its value stays 0 for a day. `VeeamExporterLicenseCollectorFailed` therefore takes the best value of the last 25 hours: one failed run passes, the second one fires. It also fires when the collector never succeeded, where `VeeamExporterLicenseStale` has no file to look at.
+- The rules above only see data that arrives. `VeeamExporterMissing` fires when a server delivered Veeam data within the last 7 days and does not any more: windows_exporter stopped, its port blocked, the textfile collector switched off or the files deleted. It resolves by itself once the 7 days are over, which is long enough for a long weekend. After a planned uninstallation it fires for up to a week; silence it for that server.
 - `VeeamExporterTextfileError` uses `windows_exporter_collector_success` of windows_exporter itself, the series with `collector="textfile"`. It drops to 0 when windows_exporter rejects a file in the textfile directory: a file that is not valid, or a second file with the same series, such as a copy of an exporter file. windows_exporter 0.32.1 then keeps one of the two files (lab: the copy, which sorts first) and drops the other, so the data can be old without `VeeamExporterStale` noticing. Only servers that deliver Veeam data are watched.
 - `noDataState` is `OK`: a query without series (no license file yet, no repositories) is not an alert. Data that disappears is covered by `VeeamExporterMissing`. `execErrState` is `Error`, so a failing query shows up as a `DatasourceError` alert.
 - The data source of `A` is `${VEEAM_PROMETHEUS_DATASOURCE_UID}`; Grafana replaces it with the environment variable of that name when it loads the file.
@@ -241,23 +242,28 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
   for: 0s
   severity: warning
 - alert: VeeamExporterCollectorFailed
-  query: veeam_exporter_collector_success
+  query: veeam_exporter_collector_success{collector!="license"}
   condition: A == 0
   for: 30m
   severity: warning
+- alert: VeeamExporterLicenseCollectorFailed
+  query: max_over_time(veeam_exporter_collector_success{collector="license"}[25h])
+  condition: A == 0
+  for: 0s
+  severity: warning
 - alert: VeeamExporterMissing
-  query: max by (instance) (max_over_time(veeam_exporter_info[1d])) unless on(instance) veeam_exporter_info
+  query: max by (instance) (max_over_time(veeam_exporter_info[7d])) unless on(instance) veeam_exporter_info
   condition: A > 0
   for: 15m
   severity: critical
 - alert: VeeamExporterTextfileError
-  query: windows_exporter_collector_success{collector="textfile"} and on(instance) max by (instance) (max_over_time(veeam_exporter_info[1d]))
+  query: windows_exporter_collector_success{collector="textfile"} and on(instance) max by (instance) (max_over_time(veeam_exporter_info[7d]))
   condition: A == 0
   for: 15m
   severity: warning
 ```
 
-Units of `A`: result codes for the first three rules (0 Success, 1 Warning, 2 Failed, -1 None), quarter hours for `VeeamJobNeverRun`, hours for `VeeamJobNotRun` and the two stale rules, a fraction from 0 to 1 for `VeeamRepositoryFull`, days for `VeeamLicenseExpiring` and `VeeamSupportExpiring`, 1 or 0 for `VeeamRepositoryOffline`, `VeeamLicenseInvalid`, `VeeamExporterCollectorFailed` and `VeeamExporterTextfileError`, always 1 for `VeeamExporterMissing`.
+Units of `A`: result codes for the first three rules (0 Success, 1 Warning, 2 Failed, -1 None), quarter hours for `VeeamJobNeverRun`, hours for `VeeamJobNotRun` and the two stale rules, a fraction from 0 to 1 for `VeeamRepositoryFull`, days for `VeeamLicenseExpiring` and `VeeamSupportExpiring`, 1 or 0 for `VeeamRepositoryOffline`, `VeeamLicenseInvalid`, `VeeamExporterCollectorFailed`, `VeeamExporterLicenseCollectorFailed` and `VeeamExporterTextfileError`, always 1 for `VeeamExporterMissing`.
 
 ## Open Points & Next Steps
 
