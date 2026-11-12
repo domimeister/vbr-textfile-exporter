@@ -51,7 +51,7 @@
           "for": "45m",
           "isPaused": false,
           "labels": {
-            "severity": "critical"
+            "severity": "warning"
           },
           "annotations": {
             "summary": "Job {{ $labels.job_name }} on {{ $labels.instance }} failed"
@@ -155,6 +155,106 @@
           },
           "annotations": {
             "summary": "{{ $labels.object }} in {{ $labels.job_name }} on {{ $labels.instance }} not backed up"
+          }
+        },
+        {
+          "uid": "veeam-object-backup-too-old",
+          "title": "VeeamObjectBackupTooOld",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "(time() - veeam_object_last_success_timestamp_seconds) / 3600",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        26
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "0s",
+          "isPaused": false,
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "Last backup of {{ $labels.object }} in {{ $labels.job_name }} on {{ $labels.instance }} is {{ printf \"%.0f\" $values.A.Value }} hours old"
+          }
+        },
+        {
+          "uid": "veeam-object-no-backup",
+          "title": "VeeamObjectNoBackup",
+          "condition": "B",
+          "data": [
+            {
+              "refId": "A",
+              "relativeTimeRange": {
+                "from": 600,
+                "to": 0
+              },
+              "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
+              "model": {
+                "refId": "A",
+                "expr": "veeam_object_last_result unless on(instance, job_name, object) veeam_object_last_success_timestamp_seconds",
+                "instant": true,
+                "range": false
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "__expr__",
+              "model": {
+                "refId": "B",
+                "type": "threshold",
+                "expression": "A",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "eq",
+                      "params": [
+                        2
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "OK",
+          "execErrState": "Error",
+          "for": "45m",
+          "isPaused": false,
+          "labels": {
+            "severity": "critical"
+          },
+          "annotations": {
+            "summary": "{{ $labels.object }} in {{ $labels.job_name }} on {{ $labels.instance }} failed and has no backup within the lookback of the exporter"
           }
         },
         {

@@ -72,26 +72,40 @@ All metrics are gauges.
 
 ## Unprotected VMs (per object)
 
-For each job and object, the most recent task run counts. A successful retry thus overrides the previous failure automatically. Output goes to `veeam_objects.prom`.
+For each job and object, the most recent task run counts, together with the most recent run that left a backup. A successful retry thus overrides the previous failure automatically. Output goes to `veeam_objects.prom`.
+
+The result of a job is not enough: one failed object sets the whole session to Failed (seen on a Proxmox VE job: 17 of 18 VMs fine, session Failed), and after the cause is fixed the job stays Failed until its next regular run. The signal to alert on is the age of the last backup per object (`veeam_object_last_success_timestamp_seconds`), for the objects the job currently processes.
 
 1. `GET /api/v1/jobs/states`: map jobId → job name, so that `job_name` matches the value in `veeam_jobs.prom` exactly (also after a job is renamed).
 2. `GET /api/v1/sessions` with `typeFilter=<type>` and `createdAfterFilter=<now − lookback − 1 day>`, one request per session type: map sessionId → jobId. The extra day catches sessions that started before the boundary but whose tasks started after it.
 3. `GET /api/v1/taskSessions` with `createdAfterFilter=<now − lookback>`, once, paged via `skip`/`limit`: one entry per object and run with name, result, sessionId, creationTime, endTime, progress. Only tasks whose `sessionId` belongs to a session from step 2 are kept. No `sessionTypeFilter`: on VBR 13.1 `sessionTypeFilter=BackupJob` matches no file share tasks, although they report `"sessionType": "BackupJob"` (lab test, #21).
-4. For each job and object, keep the entry with the newest creationTime. The job name comes from step 1; if the jobId is missing there (deleted job, type not in `jobs/states`), the name of the newest session of that job is used.
+4. For each job and object, keep the entry with the newest creationTime, and the newest entry whose result is Success or Warning (both leave a restore point). The job name comes from step 1; if the jobId is missing there (deleted job, type not in `jobs/states`), the name of the newest session of that job is used.
+5. Leave out the objects that are not in the current scope of their job, see below.
 
-Session types: `BackupJob` and `ReplicaJob` by default, extensible via parameter. One `sessions` request per type (1.3 also accepts arrays, but a single value per request keeps the queries simple). File share jobs run under `sessionType=BackupJob` (confirmed in the lab with VBR 13.1); their task is named after the file server, not the share path.
+**Scope of a job.** A job on a container (a Proxmox VE pool, a folder, a tag) has no fixed list of objects, and an object taken out of a job must not alert for the rest of the lookback. The scope is therefore what the newest run of the job processed:
 
-Both endpoints are available to Veeam Backup Viewer (claims `ViewSessions`, `ViewTaskSessions`) and are in the reference from 1.2-rev0 on ([Sessions reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/Sessions#operation/GetAllTaskSessions)). Proposed lookback: 8 days, so weekly jobs do not drop out. Objects removed from a job disappear once the lookback has passed.
+- The sessions of a job form runs. An automatic retry is a session of its own that processes only the objects that failed (seen on a Proxmox VE job; the last session therefore never shows all objects). It belongs to the run it retries.
+- A session continues the run before it if its `originalSessionId` is the first session of that run (lab, VBR 13.1 with a file share job: retries carry it, together with `retryInfo`; OP-16 for other job types), or if every object it processes failed in the run so far. The second rule needs no retry marker; PowerShell showed none for the Proxmox VE retries (`IsRetryMode` false).
+- Any other session starts a new run: the next scheduled run, or a manual start of the whole job.
+- The scope is the set of objects in the newest run. While the first session of that run is still running, has no result or was cancelled, the objects of the run before count as well, so a run in progress does not hide the objects it has not reached yet.
+- A session without task sessions (the job failed before it processed anything) never changes the scope. The objects stay, and their last backup gets older.
+- If the sessions of a job cannot be put in order (creation time not readable), all its objects stay.
+
+Consequences: an object excluded or removed from a job disappears with the next regular run that does not process it, not only when the lookback has passed. A job with several objects of which only the failed ones are left after an edit looks like a retry until one of them succeeds; the removed objects stay that long.
+
+Session types: `BackupJob`, `ReplicaJob` and `PlatformBackupJob` by default, extensible via parameter. `PlatformBackupJob` is the type of Proxmox VE jobs in PowerShell (`Get-VBRSession -Type PlatformBackupJob`, seen on a production server) and is in the session type enum of REST 1.3-rev2; that their REST sessions and task sessions carry it is OP-16. A server that does not know a type answers HTTP 400 (lab, VBR 13.1); the collector then skips that type with a warning and fails only if it accepts none. One `sessions` request per type (1.3 also accepts arrays, but a single value per request keeps the queries simple). File share jobs run under `sessionType=BackupJob` (confirmed in the lab with VBR 13.1); their task is named after the file server, not the share path.
+
+Both endpoints are available to Veeam Backup Viewer (claims `ViewSessions`, `ViewTaskSessions`) and are in the reference from 1.2-rev0 on ([Sessions reference](https://helpcenter.veeam.com/references/vbr/13/rest/1.3-rev0/tag/Sessions#operation/GetAllTaskSessions)). Proposed lookback: 8 days, so weekly jobs do not drop out. The lookback is also how far back a last backup can be found: an object without a Success or Warning in that time has no `veeam_object_last_success_timestamp_seconds`.
 
 | Metric | Labels | Value | API field |
 | --- | --- | --- | --- |
 | `veeam_object_last_result` | job_name, object | 0 Success, 1 Warning, 2 Failed, -1 None | result.result |
 | `veeam_object_last_run_timestamp_seconds` | job_name, object | Unix time | endTime, creationTime while running |
+| `veeam_object_last_success_timestamp_seconds` | job_name, object | Unix time, missing if there is none in the lookback | endTime (creationTime as fallback) of the newest task with result Success or Warning |
 | `veeam_object_last_processed_bytes` | job_name, object | bytes | progress.processedSize |
-| `veeam_object_last_failure_info` | job_name, object, message | 1, only for Warning or Failed | result.message |
 
 - **Label `object` instead of `vm`:** task sessions also contain agents and file shares, e.g. `winsrv88:/C:\shares\nfs_share` in the Veeam example.
-- **`message` is free text:** replace line breaks and tabs with a space, collapse multiple spaces, truncate to 200 characters, then escape `\` and `"`. Only for Warning and Failed, so the number of series stays small.
+- **No message:** the text of a failed task is not exported. A free text as a label value makes a new series with every change of the text, and the reason of the task session was empty for the failed VM of a Proxmox VE job anyway. The text is in the Veeam console.
 - **Running tasks:** during a run (including a retry), the most recent entry is the running task with result None (-1). A previous failure is then invisible until the run ends; `VeeamObjectFailed` restarts its `for` afterwards.
 - **Cardinality:** one series per job, object and metric.
 
@@ -100,7 +114,10 @@ Both endpoints are available to Veeam Backup Viewer (claims `ViewSessions`, `Vie
 # TYPE veeam_object_last_result gauge
 veeam_object_last_result{job_name="Backup Job 1",object="linbase01"} 0
 veeam_object_last_result{job_name="Backup Job 1",object="winsrv88"} 2
-veeam_object_last_failure_info{job_name="Backup Job 1",object="winsrv88",message="<result.message, truncated>"} 1
+# HELP veeam_object_last_success_timestamp_seconds End of the last task run that ended with Success or Warning, as Unix time; missing if there is none in the lookback
+# TYPE veeam_object_last_success_timestamp_seconds gauge
+veeam_object_last_success_timestamp_seconds{job_name="Backup Job 1",object="linbase01"} 1731517322
+veeam_object_last_success_timestamp_seconds{job_name="Backup Job 1",object="winsrv88"} 1731430922
 ```
 
 ## Repositories
@@ -162,11 +179,14 @@ Values for `collector`: jobs, objects, repositories, license. The textfile colle
 
 ## Example Alerts
 
-Sixteen Grafana-managed alert rules cover the minimum requirements, the exporter itself and its data source. The thresholds are proposals. They are implemented in [`alerting/veeam-alerts.json`](../alerting/veeam-alerts.json), a Grafana alerting provisioning file (folder `Veeam`, group `veeam`, evaluated every minute). The file is a template: nothing loads it automatically, users pick the rules they need (README, "Alert rules").
+Eighteen Grafana-managed alert rules cover the minimum requirements, the exporter itself and its data source. The thresholds are proposals. They are implemented in [`alerting/veeam-alerts.json`](../alerting/veeam-alerts.json), a Grafana alerting provisioning file (folder `Veeam`, group `veeam`, evaluated every minute). The file is a template: nothing loads it automatically, users pick the rules they need (README, "Alert rules").
 
 Every rule has two steps: query `A` is an instant Prometheus query that returns the measured value per series, and the condition `B` is a threshold on `A`. The rule fires for each series of `A` that meets the threshold for the time given in `for`. Grafana shows the value of `A` in the alert and in `$values.A.Value` for the `summary` annotation, which every rule has.
 
 - `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval.
+- `VeeamObjectBackupTooOld` is the main alert for unprotected objects: the last backup of an object in the scope of its job is older than 26 hours, whatever the job or the last task reported. 26 hours fit daily jobs: one missed night fires about two hours after the run should have ended. For jobs that run less often, raise the threshold or add a rule per job (`job_name` is a label). It needs no `for`: retries and a running task do not change the time of the last backup.
+- `VeeamObjectNoBackup` covers what `VeeamObjectBackupTooOld` cannot see: an object whose last task failed and that has no backup at all within the lookback of the exporter (a new object that never succeeded, or one failing for longer than the lookback).
+- `VeeamJobFailed` is additional information only (`warning`): a single failed object fails the whole job, and after a fix the job stays Failed until its next regular run. `VeeamObjectFailed` reports the failed object right after the retries, a day before its backup is too old.
 - `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand. Jobs that never ran have no last run timestamp and do not fire here. Exporters older than the `schedule` label alert for all enabled jobs.
 - `VeeamJobNeverRun` covers those jobs (OP-10): enabled, with a schedule or chained, and no last run at all. `A` counts the quarter hours of the last 28 hours in which the job was in that state; at 104 (26 hours) the rule fires. 26 hours give a new daily job time for its first run. A reboot or another gap in the data only leaves out a few quarter hours (up to 2 hours in total), while a `for: 26h` would start the wait again after every gap (lab: a reboot of the VBR server). Jobs without a schedule and disabled jobs are left out as in `VeeamJobNotRun`; a job that ran with an unknown result (-1, OP-8) has a last run timestamp and does not fire.
 - The fill level comes from free space and capacity, never from `veeam_repository_backup_bytes`, which counts backup files only.
@@ -185,7 +205,7 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
   query: veeam_job_last_result and on(instance, job_name) veeam_job_running == 0
   condition: A == 2
   for: 45m
-  severity: critical
+  severity: warning
 - alert: VeeamJobWarning
   query: veeam_job_last_result
   condition: A == 1
@@ -193,6 +213,16 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
   severity: warning
 - alert: VeeamObjectFailed
   query: veeam_object_last_result
+  condition: A == 2
+  for: 45m
+  severity: critical
+- alert: VeeamObjectBackupTooOld
+  query: (time() - veeam_object_last_success_timestamp_seconds) / 3600
+  condition: A > 26
+  for: 0s
+  severity: critical
+- alert: VeeamObjectNoBackup
+  query: veeam_object_last_result unless on(instance, job_name, object) veeam_object_last_success_timestamp_seconds
   condition: A == 2
   for: 45m
   severity: critical
@@ -263,7 +293,7 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
   severity: warning
 ```
 
-Units of `A`: result codes for the first three rules (0 Success, 1 Warning, 2 Failed, -1 None), quarter hours for `VeeamJobNeverRun`, hours for `VeeamJobNotRun` and the two stale rules, a fraction from 0 to 1 for `VeeamRepositoryFull`, days for `VeeamLicenseExpiring` and `VeeamSupportExpiring`, 1 or 0 for `VeeamRepositoryOffline`, `VeeamLicenseInvalid`, `VeeamExporterCollectorFailed`, `VeeamExporterLicenseCollectorFailed` and `VeeamExporterTextfileError`, always 1 for `VeeamExporterMissing`.
+Units of `A`: result codes for the first three rules and `VeeamObjectNoBackup` (0 Success, 1 Warning, 2 Failed, -1 None), quarter hours for `VeeamJobNeverRun`, hours for `VeeamJobNotRun`, `VeeamObjectBackupTooOld` and the two stale rules, a fraction from 0 to 1 for `VeeamRepositoryFull`, days for `VeeamLicenseExpiring` and `VeeamSupportExpiring`, 1 or 0 for `VeeamRepositoryOffline`, `VeeamLicenseInvalid`, `VeeamExporterCollectorFailed`, `VeeamExporterLicenseCollectorFailed` and `VeeamExporterTextfileError`, always 1 for `VeeamExporterMissing`.
 
 ## Open Points & Next Steps
 
@@ -283,6 +313,7 @@ These points can only be settled in the lab; they change details, not the archit
 - [x] **OP-12** Does a SOBR itself appear as a row in `repositories/states` (type `ExtendableRepository` in the enum)? Then sums over all repositories count the extents twice; build sums over `sobr=""` plus extents, or exclude the SOBR row. For now the exporter outputs the row unchanged. Lab test with VBR 13.1 (November 2026): no. Only the two extents appear, each with the `sobr` label; a sum over all rows counts every extent once.
 - [x] **OP-13** According to the reference, `GET /api/v1/serverInfo` is only available to Backup Administrator. With the viewer account, `vbr_version` in `veeam_exporter_info` stays empty (HTTP 403, no warning). Alternative: read the version locally from the installation. Lab test with VBR 13.1 (November 2026): confirmed, HTTP 403 for Backup Viewer. Settled: the exporter runs on the VBR server and reads the version locally, as the file version of the binary of the service `VeeamBackupSvc` (`ImagePath` in `HKLM:\SYSTEM\CurrentControlSet\Services\VeeamBackupSvc`). In the lab `Veeam.Backup.Service.exe` has file version 13.1.2.57, the same as `buildVersion` from `serverInfo` with a Backup Administrator account and the `DisplayVersion` of "Veeam Backup & Replication Server". The exporter no longer calls `serverInfo`. Patches: see OP-15.
 - [ ] **OP-14** Socket licenses: `SocketLicenseSummary` (`LicensedSocketsNumber`, `UsedSocketsNumber` per platform) is not exported yet. Only needed if socket licenses are still in use.
+- [ ] **OP-16** Proxmox VE jobs and retries in REST. Known from PowerShell on a production server (November 2026): the job type is `VmbApiPolicyTempJob`, its sessions are `Get-VBRSession -Type PlatformBackupJob`, a retry is a session of its own with only the failed VMs, `IsRetryMode` is false, and `Info.Reason` of the failed task was empty. Known from the lab (VBR 13.1, file share job with two retries): REST marks a retry with `originalSessionId` (the first session of the run) and `retryInfo` (`isRecheckRetry`, `retryNumber`), and the session type enum of 1.3-rev2 has `PlatformBackupJob`, the job type enum `ProxmoxBackupJob`. Assumptions to check on a server with a Proxmox VE job: the job is in `jobs/states`; its sessions come with `typeFilter=PlatformBackupJob`; `taskSessions` has one entry per VM with name and result; retries carry `originalSessionId`. If the task sessions are missing in REST, the objects of these jobs need the PowerShell path (as SYSTEM, like the license task).
 - [ ] **OP-15** Patches and the local VBR version (OP-13): does the file version of the backup service binary still equal `serverInfo.buildVersion` after a patch? According to [KB2680](https://www.veeam.com/kb2680) some patches get a build number of their own (13.0.1 P1 = 13.0.1.1071), others keep the build number of the release (12.0.0.1420 P20230718); `serverInfo` lists those separately under `patches`, which the exporter never exported. Assumption: the binary has the build number of the release or patch, like `buildVersion`. Check with the next VBR 13.1 patch in the lab (compare with `serverInfo` read by a Backup Administrator). The version is read on every run, so an update or a moved installation (path from the service registration) shows up with the next run; while the binary is missing during an update, `vbr_version` stays empty for that run, with a warning.
 
 1. Script skeleton: auth, version probe, atomic writing, jobs collector. Done.

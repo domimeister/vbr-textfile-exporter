@@ -65,7 +65,7 @@ tests:
       - eval_time: 46m
         alertname: VeeamJobFailed
         exp_alerts:
-          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: Failed Job, job_type: VSphereBackup}
+          - exp_labels: {severity: warning, instance: 'vbr01:9182', job: windows, job_name: Failed Job, job_type: VSphereBackup}
       - eval_time: 46m
         alertname: VeeamJobWarning
         exp_alerts:
@@ -370,3 +370,62 @@ tests:
       - eval_time: 49h15m
         alertname: VeeamExporterCollectorFailed
         exp_alerts: []
+
+  - name: age of the last backup per object
+    interval: 5m
+    input_series:
+      # A nightly job on a pool. Test time 0 is the end of the last good night.
+      # pve-stale: last backup at 0, then the VM fails every night.
+      - series: 'veeam_object_last_success_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-stale"}'
+        values: '0x900'
+      - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-stale"}'
+        values: '0x287 2x613'
+      # pve-fresh: backed up again after 24 hours.
+      - series: 'veeam_object_last_success_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-fresh"}'
+        values: '0x287 86400x613'
+      - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-fresh"}'
+        values: '0x900'
+      # pve-excluded: failed in the night after 0, was taken out of the job,
+      # and the run after 48 hours no longer processes it: its series end.
+      - series: 'veeam_object_last_success_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-excluded"}'
+        values: '0x575 _x325'
+      - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-excluded"}'
+        values: '0x287 2x288 _x325'
+      # pve-new: added to the pool, never backed up, fails from hour 24 on.
+      - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-new"}'
+        values: '_x287 2x613'
+      # pve-first: added to the pool, first backup still running (None).
+      - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-first"}'
+        values: '_x287 -1x613'
+    alert_rule_test:
+      # 26 hours after the last backup: one missed night.
+      - eval_time: 25h45m
+        alertname: VeeamObjectBackupTooOld
+        exp_alerts: []
+      - eval_time: 26h15m
+        alertname: VeeamObjectBackupTooOld
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-stale}
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-excluded}
+      # After the next regular run the excluded VM is gone and no longer alerts.
+      - eval_time: 49h
+        alertname: VeeamObjectBackupTooOld
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-stale}
+      - eval_time: 49h
+        alertname: VeeamObjectFailed
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-stale}
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-new}
+      # No backup at all: only the object that failed, not the one whose first backup runs.
+      - eval_time: 24h30m
+        alertname: VeeamObjectNoBackup
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: VeeamObjectNoBackup
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-new}
+      - eval_time: 49h
+        alertname: VeeamObjectNoBackup
+        exp_alerts:
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-new}

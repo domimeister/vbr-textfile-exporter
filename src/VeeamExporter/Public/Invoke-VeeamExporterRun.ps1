@@ -25,7 +25,7 @@ function Invoke-VeeamExporterRun {
         # 1 to 90. Checked by the run (no ValidateRange), so a value out of
         # range is a configuration error and veeam_exporter.prom is written.
         [int]$ObjectLookbackDays = 8,
-        [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
+        [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob', 'PlatformBackupJob'),
         # Per HTTP request, 1 to 600 seconds; checked by the run like ObjectLookbackDays.
         [int]$TimeoutSec = 60
     )

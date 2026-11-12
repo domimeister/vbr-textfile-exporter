@@ -48,16 +48,13 @@ Describe 'Objects collector: output' {
         Assert-PromText -Actual (ConvertTo-PromText -Metric $metrics) -Expected (Get-ExpectedText -Name 'veeam_objects_edgecases.prom')
     }
 
-    It 'writes failure_info only for Warning and Failed' {
-        $text = Get-ExpectedText -Name 'veeam_objects_edgecases.prom'
+    It 'has no free text of Veeam in a label' {
         $metrics = Get-VeeamObjectMetric -JobState (Get-FixtureData -Name 'objects-edge-jobs-states.json') `
             -JobSession (Get-FixtureData -Name 'objects-edge-sessions.json') `
             -TaskSession (Get-FixtureData -Name 'objects-edge-taskSessions.json')
-        $failure = $metrics | Where-Object Name -EQ 'veeam_object_last_failure_info'
-        $result = $metrics | Where-Object Name -EQ 'veeam_object_last_result'
-        $expectedObjects = @($result.Samples | Where-Object { $_.Value -eq 1 -or $_.Value -eq 2 } | ForEach-Object { $_.Labels['object'] }) -join ','
-        (@($failure.Samples | ForEach-Object { $_.Labels['object'] }) -join ',') | Should -BeExactly $expectedObjects
-        $text | Should -Not -Match 'object="vm01",message='
+        (@($metrics | ForEach-Object { $_.Name }) -join ',') | Should -BeExactly 'veeam_object_last_result,veeam_object_last_run_timestamp_seconds,veeam_object_last_success_timestamp_seconds,veeam_object_last_processed_bytes'
+        foreach ($sample in @($metrics | ForEach-Object { $_.Samples })) { (@($sample.Labels.Keys) -join ',') | Should -BeExactly 'job_name,object' }
+        ConvertTo-PromText -Metric $metrics | Should -Not -Match 'Snapshot failed|timed out|Low disk space'
     }
 
     It 'returns empty text without task sessions' {
@@ -90,7 +87,8 @@ Describe 'Objects collector: REST queries' {
 
     It 'queries sessions per type and task sessions once without a type filter' {
         $null = Get-VeeamObjectMetric -Session (New-TestSession)
-        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 2 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 3 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' }
+        Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' -and $Query['typeFilter'] -eq 'PlatformBackupJob' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' -and $Query['typeFilter'] -eq 'BackupJob' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/sessions' -and $Query['typeFilter'] -eq 'ReplicaJob' }
         Should -Invoke -ModuleName VeeamExporter Invoke-VeeamHttpRequest -Times 1 -Exactly -ParameterFilter { $Path -eq '/api/v1/taskSessions' }
