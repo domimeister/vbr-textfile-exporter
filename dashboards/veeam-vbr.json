@@ -1084,7 +1084,7 @@
       "id": 12,
       "type": "stat",
       "title": "Objects by last result",
-      "description": "Most recent task run per job and object within the exporter's lookback (8 days).",
+      "description": "Most recent task run per job and object, for the objects the newest run of each job processed (within the exporter's lookback of 8 days).",
       "gridPos": {
         "x": 0,
         "y": 17,
@@ -1254,7 +1254,7 @@
       "id": 13,
       "type": "table",
       "title": "Objects with warning or failure",
-      "description": "Objects whose most recent task run ended with Warning or Failed. A successful retry removes the row.",
+      "description": "Objects whose most recent task run ended with Warning or Failed, with the end of their last run that left a backup (Success or Warning; empty if there is none within the lookback of the exporter). A successful retry removes the row. Only objects that the newest run of their job processed are listed.",
       "gridPos": {
         "x": 5,
         "y": 17,
@@ -1308,7 +1308,7 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "max by (instance, job_name, object, message) (veeam_object_last_failure_info{instance=~\"$instance\"})",
+          "expr": "max by (instance, job_name, object) (veeam_object_last_success_timestamp_seconds{instance=~\"$instance\"} and on (instance, job_name, object) veeam_object_last_result{instance=~\"$instance\"} >= 1) * 1000",
           "legendFormat": "__auto",
           "instant": true,
           "range": false,
@@ -1324,8 +1324,7 @@
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "Value #D": true
+              "Time": true
             },
             "indexByName": {
               "instance": 0,
@@ -1333,8 +1332,8 @@
               "object": 2,
               "Value #A": 3,
               "Value #B": 4,
-              "Value #C": 5,
-              "message": 6
+              "Value #D": 5,
+              "Value #C": 6
             },
             "renameByName": {
               "instance": "Server",
@@ -1343,7 +1342,7 @@
               "Value #A": "Last result",
               "Value #B": "Last run",
               "Value #C": "Processed",
-              "message": "Message"
+              "Value #D": "Last backup"
             }
           }
         }
@@ -1451,12 +1450,20 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "Message"
+              "options": "Last backup"
             },
             "properties": [
               {
-                "id": "custom.inspect",
-                "value": true
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              },
+              {
+                "id": "custom.width",
+                "value": 160
+              },
+              {
+                "id": "noValue",
+                "value": "none in lookback"
               }
             ]
           }
