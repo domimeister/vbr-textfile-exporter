@@ -184,7 +184,7 @@ Eighteen Grafana-managed alert rules cover the minimum requirements, the exporte
 Every rule has two steps: query `A` is an instant Prometheus query that returns the measured value per series, and the condition `B` is a threshold on `A`. The rule fires for each series of `A` that meets the threshold for the time given in `for`. Grafana shows the value of `A` in the alert and in `$values.A.Value` for the `summary` annotation, which every rule has.
 
 - `for: 45m` covers the retry window (3 × 10 minutes) plus one script interval.
-- `VeeamObjectBackupTooOld` is the main alert for unprotected objects: the last backup of an object in the scope of its job is older than 26 hours, whatever the job or the last task reported. 26 hours fit daily jobs: one missed night fires about two hours after the run should have ended. For jobs that run less often, raise the threshold or add a rule per job (`job_name` is a label). It needs no `for`: retries and a running task do not change the time of the last backup.
+- `VeeamObjectBackupTooOld` is the main alert for unprotected objects: the last backup of an object in the scope of its job is older than 26 hours, whatever the job or the last task reported. 26 hours fit daily jobs: one missed night fires about two hours after the run should have ended. For jobs that run less often, raise the threshold or add a rule per job (`job_name` is a label). It needs no `for`: retries and a running task do not change the time of the last backup. Objects of jobs without a schedule (started by hand) and of disabled jobs are left out, as in `VeeamJobNotRun`; an object whose job is not in `veeam_jobs.prom` stays in.
 - `VeeamObjectNoBackup` covers what `VeeamObjectBackupTooOld` cannot see: an object whose last task failed and that has no backup at all within the lookback of the exporter (a new object that never succeeded, or one failing for longer than the lookback).
 - `VeeamJobFailed` is additional information only (`warning`): a single failed object fails the whole job, and after a fix the job stays Failed until its next regular run. `VeeamObjectFailed` reports the failed object right after the retries, a day before its backup is too old.
 - `VeeamJobNotRun` assumes daily jobs and skips jobs without a schedule (`schedule="none"`), which are started by hand. Jobs that never ran have no last run timestamp and do not fire here. Exporters older than the `schedule` label alert for all enabled jobs.
@@ -217,7 +217,7 @@ Every rule has two steps: query `A` is an instant Prometheus query that returns 
   for: 45m
   severity: critical
 - alert: VeeamObjectBackupTooOld
-  query: (time() - veeam_object_last_success_timestamp_seconds) / 3600
+  query: (time() - veeam_object_last_success_timestamp_seconds) / 3600 unless on(instance, job_name) veeam_job_info{schedule="none"} unless on(instance, job_name) veeam_job_enabled == 0
   condition: A > 26
   for: 0s
   severity: critical

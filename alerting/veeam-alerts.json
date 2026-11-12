@@ -171,7 +171,7 @@
               "datasourceUid": "${VEEAM_PROMETHEUS_DATASOURCE_UID}",
               "model": {
                 "refId": "A",
-                "expr": "(time() - veeam_object_last_success_timestamp_seconds) / 3600",
+                "expr": "(time() - veeam_object_last_success_timestamp_seconds) / 3600 unless on(instance, job_name) veeam_job_info{schedule=\"none\"} unless on(instance, job_name) veeam_job_enabled == 0",
                 "instant": true,
                 "range": false
               }

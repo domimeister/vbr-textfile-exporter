@@ -391,6 +391,26 @@ tests:
         values: '0x575 _x325'
       - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-excluded"}'
         values: '0x287 2x288 _x325'
+      # Jobs started by hand and disabled jobs: an old backup is no alert. A job
+      # that is not in veeam_jobs.prom (PVE Pool here) is not left out.
+      - series: 'veeam_object_last_success_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Manual",object="vm-manual"}'
+        values: '0x900'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Manual",job_type="VSphereBackup",schedule="none"}'
+        values: '1x900'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Manual"}'
+        values: '1x900'
+      - series: 'veeam_object_last_success_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Disabled",object="vm-disabled"}'
+        values: '0x900'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Disabled",job_type="VSphereBackup",schedule="scheduled"}'
+        values: '1x900'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Disabled"}'
+        values: '0x900'
+      - series: 'veeam_object_last_success_timestamp_seconds{instance="vbr01:9182",job="windows",job_name="Nightly",object="vm-nightly"}'
+        values: '0x900'
+      - series: 'veeam_job_info{instance="vbr01:9182",job="windows",job_name="Nightly",job_type="VSphereBackup",schedule="scheduled"}'
+        values: '1x900'
+      - series: 'veeam_job_enabled{instance="vbr01:9182",job="windows",job_name="Nightly"}'
+        values: '1x900'
       # pve-new: added to the pool, never backed up, fails from hour 24 on.
       - series: 'veeam_object_last_result{instance="vbr01:9182",job="windows",job_name="PVE Pool",object="pve-new"}'
         values: '_x287 2x613'
@@ -407,11 +427,13 @@ tests:
         exp_alerts:
           - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-stale}
           - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-excluded}
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: Nightly, object: vm-nightly}
       # After the next regular run the excluded VM is gone and no longer alerts.
       - eval_time: 49h
         alertname: VeeamObjectBackupTooOld
         exp_alerts:
           - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: PVE Pool, object: pve-stale}
+          - exp_labels: {severity: critical, instance: 'vbr01:9182', job: windows, job_name: Nightly, object: vm-nightly}
       - eval_time: 49h
         alertname: VeeamObjectFailed
         exp_alerts:
