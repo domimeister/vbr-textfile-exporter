@@ -99,7 +99,11 @@ function Get-VeeamObjectMetric {
         Add-PromSample -Metric $processed -Labels $labels -Value $size
 
         # The last backup that exists: newest task with Success or Warning.
-        if ($null -ne $entry.LastSuccess) {
+        if ($null -ne $entry.LastSuccess -and [object]::ReferenceEquals($entry.LastSuccess, $task)) {
+            # The last run is the last backup: same time, no second conversion.
+            Add-PromSample -Metric $lastSuccess -Labels $labels -Value $runTime
+        }
+        elseif ($null -ne $entry.LastSuccess) {
             $good = $entry.LastSuccess
             $goodCreated = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $good -Name 'creationTime') -Field 'creationTime' -Item $item -Conversion $toUnix
             $goodEnded = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $good -Name 'endTime') -Field 'endTime' -Item $item -Conversion $toUnix

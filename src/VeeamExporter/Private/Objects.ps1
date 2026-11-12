@@ -149,48 +149,64 @@ function Select-VeeamLatestObjectTask {
             }
         }
 
-        # What the session processed, with the state of the newest task per object.
-        if (-not $sessionObjects.ContainsKey($sid)) {
-            $sessionObjects[$sid] = New-OrdinalDictionary
-            $sessionObjectOrder[$sid] = New-OrdinalDictionary
+        # What the session processed, with the state of the newest task per
+        # object. A session normally has one task per object, so the order is
+        # only compared when an object comes a second time.
+        if ($sessionObjects.ContainsKey($sid)) {
+            $flags = $sessionObjects[$sid]
+            $order = $sessionObjectOrder[$sid]
         }
-        $order = $sessionObjectOrder[$sid]
-        $replace = -not $order.ContainsKey($object)
-        if (-not $replace) {
+        else {
+            $flags = New-Object -TypeName 'System.Collections.Generic.Dictionary[string,object]' -ArgumentList ([System.StringComparer]::Ordinal)
+            $order = New-Object -TypeName 'System.Collections.Generic.Dictionary[string,object]' -ArgumentList ([System.StringComparer]::Ordinal)
+            $sessionObjects[$sid] = $flags
+            $sessionObjectOrder[$sid] = $order
+        }
+        $replace = $true
+        if ($order.ContainsKey($object)) {
             $known = $order[$object]
-            if ($null -eq $known.Created) { $replace = ($null -ne $created) -or ($usn -gt $known.Usn) }
-            elseif ($null -ne $created) { $replace = ($created -gt $known.Created) -or ($created -eq $known.Created -and $usn -gt $known.Usn) }
+            if ($null -eq $known[0]) { $replace = ($null -ne $created) -or ($usn -gt $known[1]) }
+            elseif ($null -ne $created) { $replace = ($created -gt $known[0]) -or ($created -eq $known[0] -and $usn -gt $known[1]) }
+            else { $replace = $false }
         }
         if ($replace) {
-            $order[$object] = [pscustomobject]@{ Created = $created; Usn = $usn }
-            $sessionObjects[$sid][$object] = (-not $good)
+            $order[$object] = @($created, $usn)
+            $flags[$object] = (-not $good)
         }
 
+        # Newest task per job and object, and newest one that left a backup.
+        # Written out twice instead of in a loop: this is the hot path.
         $key = $jobName + [char]0 + $object
         $entry = $null
-        foreach ($target in @($latest, $latestSuccess)) {
-            if ([object]::ReferenceEquals($target, $latestSuccess) -and -not $good) { continue }
-            if ($target.ContainsKey($key)) {
-                $current = $target[$key]
+        $newer = $true
+        if ($latest.ContainsKey($key)) {
+            $current = $latest[$key]
+            $newer = $false
+            if ($null -eq $current.Created) { $newer = ($null -ne $created) -or ($usn -gt $current.Usn) }
+            elseif ($null -ne $created) {
+                if ($created -gt $current.Created) { $newer = $true }
+                elseif ($created -eq $current.Created -and $usn -gt $current.Usn) { $newer = $true }
+            }
+        }
+        if ($newer) {
+            $entry = [pscustomobject]@{ JobName = $jobName; Object = $object; Created = $created; Usn = $usn; Task = $task }
+            $latest[$key] = $entry
+        }
+        if ($good) {
+            $newer = $true
+            if ($latestSuccess.ContainsKey($key)) {
+                $current = $latestSuccess[$key]
                 $newer = $false
                 if ($null -eq $current.Created) { $newer = ($null -ne $created) -or ($usn -gt $current.Usn) }
                 elseif ($null -ne $created) {
                     if ($created -gt $current.Created) { $newer = $true }
                     elseif ($created -eq $current.Created -and $usn -gt $current.Usn) { $newer = $true }
                 }
-                if (-not $newer) { continue }
             }
-            if ($null -eq $entry) {
-                $entry = [pscustomobject]@{
-                    JobName     = $jobName
-                    Object      = $object
-                    Created     = $created
-                    Usn         = $usn
-                    Task        = $task
-                    LastSuccess = $null
-                }
+            if ($newer) {
+                if ($null -eq $entry) { $entry = [pscustomobject]@{ JobName = $jobName; Object = $object; Created = $created; Usn = $usn; Task = $task } }
+                $latestSuccess[$key] = $entry
             }
-            $target[$key] = $entry
         }
     }
     if ($skipped -gt 0) { Write-Verbose "Objects: skipped $skipped task sessions without known session, job or object name." }
