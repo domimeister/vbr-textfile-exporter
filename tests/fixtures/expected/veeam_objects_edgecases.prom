@@ -8,7 +8,7 @@ veeam_object_last_result{job_name="Prod VMs",object="vm01"} 0
 veeam_object_last_result{job_name="Prod VMs",object="vm02"} 2
 veeam_object_last_result{job_name="Prod VMs",object="vm03"} -1
 veeam_object_last_result{job_name="Prod VMs",object="vm04"} 0
-veeam_object_last_result{job_name="Prod VMs",object="vm06"} 0
+veeam_object_last_result{job_name="Prod VMs",object="vm06"} 2
 # HELP veeam_object_last_run_timestamp_seconds End of the last task run as Unix time (start while it is running)
 # TYPE veeam_object_last_run_timestamp_seconds gauge
 veeam_object_last_run_timestamp_seconds{job_name="Alter Job neu",object="old01"} 1705431660
@@ -19,7 +19,7 @@ veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm01"} 17055
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm02"} 1705527960
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm03"} 1705611630
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm04"} 1705527780
-veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm06"} 1705527750
+veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm06"} 1705527720
 # HELP veeam_object_last_success_timestamp_seconds End of the last task run that ended with Success or Warning, as Unix time; missing if there is none in the lookback
 # TYPE veeam_object_last_success_timestamp_seconds gauge
 veeam_object_last_success_timestamp_seconds{job_name="Alter Job neu",object="old01"} 1705431660
@@ -29,7 +29,6 @@ veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="VM04"} 1
 veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm01"} 1705527900
 veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm03"} 1705525800
 veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm04"} 1705527780
-veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm06"} 1705527750
 # HELP veeam_object_last_processed_bytes Bytes processed in the last task run
 # TYPE veeam_object_last_processed_bytes gauge
 veeam_object_last_processed_bytes{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share"} 5368709120

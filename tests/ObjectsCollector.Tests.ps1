@@ -63,10 +63,13 @@ Describe 'Objects collector: output' {
     }
 
     It 'uses the time zone of the server for timestamps as strings (Windows PowerShell 5.1)' {
-        $sessions = @([pscustomobject]@{ id = 'S1'; jobId = 'J1'; name = 'Job A'; creationTime = '2024-11-13T21:59:00' })
+        $sessions = @(
+            [pscustomobject]@{ id = 'S1'; jobId = 'J1'; name = 'Job A'; creationTime = '2024-11-13T21:59:00' }
+            [pscustomobject]@{ id = 'S2'; jobId = 'J1'; name = 'Job A'; creationTime = '2024-11-13T22:00:00.6' }
+        )
         $tasks = @(
             [pscustomobject]@{ sessionId = 'S1'; name = 'vm1'; creationTime = '2024-11-13T22:00:00.5'; endTime = '2024-11-13T22:10:00'; result = [pscustomobject]@{ result = 'Failed'; message = 'x' } }
-            [pscustomobject]@{ sessionId = 'S1'; name = 'vm1'; creationTime = '2024-11-13T22:00:00.75'; endTime = '2024-11-13T22:20:00'; result = [pscustomobject]@{ result = 'Success'; message = '' } }
+            [pscustomobject]@{ sessionId = 'S2'; name = 'vm1'; creationTime = '2024-11-13T22:00:00.75'; endTime = '2024-11-13T22:20:00'; result = [pscustomobject]@{ result = 'Success'; message = '' } }
         )
         $text = ConvertTo-PromText -Metric (Get-VeeamObjectMetric -JobState @() -JobSession $sessions -TaskSession $tasks)
         # 22:20 at +01:00 = 21:20Z
