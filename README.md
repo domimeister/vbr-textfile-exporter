@@ -9,7 +9,7 @@ PowerShell exporter for Veeam Backup & Replication 13. Runs as a scheduled task 
 Make the Veeam backup state visible in Prometheus and Grafana without an additional service or port on the backup server:
 
 - **Jobs:** last result (Success/Warning/Failed), enabled/running, last and next run, number of objects.
-- **Objects:** last result, last run, processed data and last error message per VM or protected object, to find VMs that are not backed up.
+- **Objects:** last result, last run, last successful backup and processed data per VM or protected object, to find VMs that are not backed up. Only the objects a job currently processes are reported, so a VM taken out of a job stops alerting with its next run.
 - **Repositories:** capacity, free space, space used by backups, online and out-of-date status, SOBR membership.
 - **License:** validity, license and support expiration, licensed and used instances.
 - **Exporter health:** success and duration of each collector, so a stalled export gets noticed.
@@ -47,7 +47,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 | Health → `veeam_exporter.prom` | implemented | works; `vbr_version` read locally from the backup service binary (OP-13) |
 | License task → `veeam_license.prom`, health → `veeam_exporter_license.prom` | implemented | works as SYSTEM with PowerShell 7 (trial license) |
 | Deploy: install script, tasks, credential for SYSTEM, uninstall | implemented | install, update and credential handover work; ACLs as documented; textfile collector check asks the running windows_exporter; uninstallation removes tasks, `veeam_*.prom` files, installation and data; a data directory created beforehand by a normal user aborts the installation; under an `AllSigned` policy the scripts do not run (see [`deploy/README.md`](deploy/README.md#to-verify-in-the-lab)) |
-| Grafana dashboard (`dashboards/`) | implemented | works in Grafana 13.3: every panel shows the lab data; status tiles, jobs with result, schedule (scheduled, chained, manual) and next run, the failed object with its message, repositories including the SOBR extents, license and exporter health |
+| Grafana dashboard (`dashboards/`) | implemented | works in Grafana 13.3: every panel shows the lab data; status tiles, jobs with result, schedule (scheduled, chained, manual) and next run, the failed object, repositories including the SOBR extents, license and exporter health |
 | Grafana alert rules (`alerting/`) | implemented, logic unit-tested with promtool | works in Grafana 13.3: all rules evaluate without errors; the failed job and object (after 45 minutes) and the expiring trial license alert; `VeeamJobNotRun` leaves out jobs without a schedule (also one whose schedule is disabled) and a job that never ran; a test webhook got the notifications. Disabled jobs only in the promtool tests (no disabled job in the lab at the time) |
 | Test suite on the VBR server | - | passes under Windows PowerShell 5.1 and PowerShell 7 with VBR 13.1 and its PowerShell module installed: 341 passed, 0 failed; skipped are the tests that need promtool or openssl and the edition-specific certificate test of the other edition |
 
@@ -57,7 +57,7 @@ Details in [`deploy/README.md`](deploy/README.md#prerequisites).
 
 - status tiles: failed jobs and objects, jobs with warnings, offline and nearly full repositories, days until the license expires, failing collectors, textfile read errors
 - jobs: last result, enabled, running, time since the last run (yellow after 26 h, like `VeeamJobNotRun`), next run
-- objects whose last task run ended with Warning or Failed, with the error message
+- objects whose last task run ended with Warning or Failed, with the time of their last backup
 - repositories: fill level (`1 - free / capacity`) now and over time, online and out-of-date status, sizes
 - license and exporter health: validity, expiration, instance usage, success, duration and data age per collector
 
@@ -93,7 +93,7 @@ The credential is encrypted for SYSTEM; when run by hand, `Invoke-VeeamExporter.
 | --- | --- | --- |
 | `-Collector` | `jobs,objects,repositories` | Which collectors run (also as a comma-separated list). The case does not matter; each collector runs once, and file names and labels are always lower case. |
 | `-ObjectLookbackDays` | `8` | How far back `objects` reads task sessions. |
-| `-ObjectSessionType` | `BackupJob,ReplicaJob` | Session types for `objects` (see OP-11 in `docs/metrics.md`). |
+| `-ObjectSessionType` | `BackupJob,ReplicaJob,PlatformBackupJob` | Session types for `objects` (see OP-11 and OP-16 in `docs/metrics.md`). `PlatformBackupJob` covers Proxmox VE jobs. |
 | `-ApiVersion` | probe | Fixed `x-api-version`, skips the version probe. |
 | `-TimeoutSec` | `60` | Timeout per HTTP request, 1 to 600 seconds. |
 | `-LogPath` | – | Transcript of the run (overwritten every time). |
@@ -102,7 +102,7 @@ The license task runs as SYSTEM without a stored password and reads the license 
 
 ## Alert rules
 
-`alerting/veeam-alerts.json` holds sixteen Grafana alert rules, specified in [`docs/metrics.md`](docs/metrics.md#example-alerts): failed jobs and objects, jobs with warnings, jobs not run for 26 hours, scheduled jobs that never ran, full and offline repositories, an expiring or invalid license and ending support, stale exporter files, failing collectors, and a data source that went silent or whose files windows_exporter rejects. They are a template: neither the exporter nor the install script touches Grafana, and nothing is imported automatically. Pick the rules you need. The thresholds are proposals; `for: 45m` on the job and object rules covers the Veeam retry window.
+`alerting/veeam-alerts.json` holds eighteen Grafana alert rules, specified in [`docs/metrics.md`](docs/metrics.md#example-alerts): objects whose last backup is too old or that have none, failed jobs and objects, jobs with warnings, jobs not run for 26 hours, scheduled jobs that never ran, full and offline repositories, an expiring or invalid license and ending support, stale exporter files, failing collectors, and a data source that went silent or whose files windows_exporter rejects. They are a template: neither the exporter nor the install script touches Grafana, and nothing is imported automatically. Pick the rules you need. The thresholds are proposals; `for: 45m` on the job and object rules covers the Veeam retry window.
 
 Each rule queries Prometheus (`A`, an instant query that returns the value, e.g. hours since the last run) and fires when the threshold `B` is met. Rules come with the label `severity` (`critical` or `warning`) and a `summary` annotation. Contact points and notification policies stay with you: route by `severity`.
 

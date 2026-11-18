@@ -15,7 +15,9 @@ Optional: transcript of the last run (overwritten each run). Contains no secrets
 .PARAMETER ObjectLookbackDays
 How far back the objects collector reads task sessions (default 8 days, 1 to 90).
 .PARAMETER ObjectSessionType
-Session types for the objects collector (default BackupJob, ReplicaJob).
+Session types for the objects collector (default BackupJob, ReplicaJob,
+PlatformBackupJob; the last one is what Proxmox VE and other platform jobs
+run under).
 .PARAMETER TimeoutSec
 Timeout per HTTP request in seconds (default 60, 1 to 600).
 .PARAMETER CertificateThumbprint
@@ -38,7 +40,7 @@ param(
     # The ranges of ObjectLookbackDays and TimeoutSec are checked by the run,
     # so a bad task argument still writes veeam_exporter.prom.
     [int]$ObjectLookbackDays = 8,
-    [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob'),
+    [string[]]$ObjectSessionType = @('BackupJob', 'ReplicaJob', 'PlatformBackupJob'),
     [int]$TimeoutSec = 60,
     [string]$LogPath
 )

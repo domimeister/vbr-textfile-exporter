@@ -20,6 +20,16 @@ veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm02"} 17055
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm03"} 1705611630
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm04"} 1705527780
 veeam_object_last_run_timestamp_seconds{job_name="Prod VMs",object="vm06"} 1705527750
+# HELP veeam_object_last_success_timestamp_seconds End of the last task run that ended with Success or Warning, as Unix time; missing if there is none in the lookback
+# TYPE veeam_object_last_success_timestamp_seconds gauge
+veeam_object_last_success_timestamp_seconds{job_name="Alter Job neu",object="old01"} 1705431660
+veeam_object_last_success_timestamp_seconds{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share"} 1705540800
+veeam_object_last_success_timestamp_seconds{job_name="Backup \"DC\" \\\\fs01",object="vm05"} 1705539606
+veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="VM04"} 1705527720
+veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm01"} 1705527900
+veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm03"} 1705525800
+veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm04"} 1705527780
+veeam_object_last_success_timestamp_seconds{job_name="Prod VMs",object="vm06"} 1705527750
 # HELP veeam_object_last_processed_bytes Bytes processed in the last task run
 # TYPE veeam_object_last_processed_bytes gauge
 veeam_object_last_processed_bytes{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share"} 5368709120
@@ -30,8 +40,3 @@ veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm02"} 0
 veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm03"} 1073741824
 veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm04"} 2
 veeam_object_last_processed_bytes{job_name="Prod VMs",object="vm06"} 3
-# HELP veeam_object_last_failure_info Message of the last task run on Warning or Failed (value always 1)
-# TYPE veeam_object_last_failure_info gauge
-veeam_object_last_failure_info{job_name="Alter Job neu",object="old01",message="Low disk space"} 1
-veeam_object_last_failure_info{job_name="Backup \"DC\" \\\\fs01",object="srv \"x\"\\share",message="Changed block tracking \"disabled\" for disk C:\\"} 1
-veeam_object_last_failure_info{job_name="Prod VMs",object="vm02",message="Processing vm02 Error: The operation timed out. Retrying in 10 minutes. Details: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"} 1

@@ -95,11 +95,13 @@ Describe 'Faulty values: objects collector' {
         $text | Should -Match 'veeam_object_last_result\{job_name="Job 1",object="vm01"\} 2'
         $text | Should -Match 'veeam_object_last_run_timestamp_seconds\{job_name="Job 1",object="vm01"\} \d+'
         $text | Should -Not -Match 'veeam_object_last_processed_bytes\{job_name="Job 1",object="vm01"\}'
-        $text | Should -Match 'veeam_object_last_failure_info\{job_name="Job 1",object="vm01",message="disk full"\} 1'
+        $text | Should -Not -Match 'veeam_object_last_success_timestamp_seconds\{job_name="Job 1",object="vm01"\}'
+        $text | Should -Not -Match 'disk full'
         # vm02: creation time and usn broken, end time readable.
         $text | Should -Match 'veeam_object_last_result\{job_name="Job 1",object="vm02"\} 0'
         $text | Should -Match 'veeam_object_last_run_timestamp_seconds\{job_name="Job 1",object="vm02"\} \d+'
         $text | Should -Match 'veeam_object_last_processed_bytes\{job_name="Job 1",object="vm02"\} 1024'
+        $text | Should -Match 'veeam_object_last_success_timestamp_seconds\{job_name="Job 1",object="vm02"\} \d+'
         $warnings | Should -Match "Session aaaaaaaa-0000-0000-0000-000000000001: field creationTime skipped"
         $warnings | Should -Match "Object 'vm01' in job 'Job 1': field endTime skipped"
         $warnings | Should -Match "Object 'vm01' in job 'Job 1': field processedSize skipped"

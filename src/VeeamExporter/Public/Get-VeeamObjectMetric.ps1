@@ -6,7 +6,8 @@ function Get-VeeamObjectMetric {
     Follows docs/metrics.md, section "Unprotected VMs (per object)":
     jobs/states for the job names, sessions per session type (one request per
     type), task sessions once for the lookback and filtered by their sessionId,
-    all pages.
+    all pages. Only objects in the current scope of their job are returned
+    (Select-VeeamLatestObjectTask).
     Pass -JobState, -JobSession and -TaskSession to build the metrics from
     already loaded data (tests).
     #>
@@ -15,7 +16,7 @@ function Get-VeeamObjectMetric {
     param(
         [Parameter(Mandatory = $true, ParameterSetName = 'Session')][object]$Session,
         [Parameter(ParameterSetName = 'Session')][ValidateRange(1, 90)][int]$LookbackDays = 8,
-        [Parameter(ParameterSetName = 'Session')][ValidateNotNullOrEmpty()][string[]]$SessionType = @('BackupJob', 'ReplicaJob'),
+        [Parameter(ParameterSetName = 'Session')][ValidateNotNullOrEmpty()][string[]]$SessionType = @('BackupJob', 'ReplicaJob', 'PlatformBackupJob'),
         [Parameter(Mandatory = $true, ParameterSetName = 'Data')][AllowEmptyCollection()][object[]]$JobState,
         [Parameter(Mandatory = $true, ParameterSetName = 'Data')][AllowEmptyCollection()][object[]]$JobSession,
         [Parameter(Mandatory = $true, ParameterSetName = 'Data')][AllowEmptyCollection()][object[]]$TaskSession
@@ -28,17 +29,30 @@ function Get-VeeamObjectMetric {
         $JobState = @(Get-VeeamJobState -Session $Session)
         $sessions = New-Object -TypeName System.Collections.Generic.List[object]
         $sessionIds = New-OrdinalDictionary
+        $rejected = New-Object -TypeName System.Collections.Generic.List[string]
         foreach ($type in $SessionType) {
             $sessionQuery = [ordered]@{
                 typeFilter         = $type
                 createdAfterFilter = (ConvertTo-VeeamFilterTimestamp -Value $sessionCutoff)
             }
-            foreach ($item in @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/sessions' -Query $sessionQuery)) {
+            try { $items = @(Get-VeeamPagedItem -Session $Session -Path '/api/v1/sessions' -Query $sessionQuery) }
+            catch {
+                # A session type this server does not know is answered with
+                # HTTP 400 (lab, VBR 13.1). PlatformBackupJob is in the
+                # default list and only exists from REST 1.3-rev2 on, so one
+                # unknown type must not stop the collector.
+                if ($_.Exception.Message -notmatch 'HTTP 400') { throw }
+                $rejected.Add($type)
+                Write-Warning ("Objects: the server does not accept the session type '{0}' (HTTP 400), skipped." -f $type)
+                continue
+            }
+            foreach ($item in $items) {
                 $sessions.Add($item)
                 $sid = Get-VeeamGuidKey -Value (Get-VeeamField -InputObject $item -Name 'id')
                 if ($sid) { $sessionIds[$sid] = $true }
             }
         }
+        if ($rejected.Count -eq @($SessionType).Count) { throw ('The server accepts none of the session types: {0}.' -f ($rejected -join ', ')) }
 
         # Task sessions once, without sessionTypeFilter: on VBR 13.1 the filter
         # matches no file share tasks, although they report sessionType BackupJob
@@ -61,7 +75,7 @@ function Get-VeeamObjectMetric {
     $lastResult = New-PromMetric -Name 'veeam_object_last_result' -Help 'Last task run: 0 Success, 1 Warning, 2 Failed, -1 None'
     $lastRun = New-PromMetric -Name 'veeam_object_last_run_timestamp_seconds' -Help 'End of the last task run as Unix time (start while it is running)'
     $processed = New-PromMetric -Name 'veeam_object_last_processed_bytes' -Help 'Bytes processed in the last task run'
-    $failure = New-PromMetric -Name 'veeam_object_last_failure_info' -Help 'Message of the last task run on Warning or Failed (value always 1)'
+    $lastSuccess = New-PromMetric -Name 'veeam_object_last_success_timestamp_seconds' -Help 'End of the last task run that ended with Success or Warning, as Unix time; missing if there is none in the lookback'
 
     $selected = @(Select-VeeamLatestObjectTask -JobState @($JobState) -JobSession @($JobSession) -TaskSession @($TaskSession))
     foreach ($entry in $selected) {
@@ -84,15 +98,20 @@ function Get-VeeamObjectMetric {
             -Field 'processedSize' -Item $item -Conversion { param($v) if ($null -ne $v) { [int64]$v } }
         Add-PromSample -Metric $processed -Labels $labels -Value $size
 
-        if ($code -eq 1 -or $code -eq 2) {
-            $message = Format-VeeamResultMessage -Message (Get-VeeamField -InputObject $result -Name 'message')
-            Add-PromSample -Metric $failure -Value 1 -Labels ([ordered]@{
-                    job_name = $entry.JobName
-                    object   = $entry.Object
-                    message  = $message
-                })
+        # The last backup that exists: newest task with Success or Warning.
+        if ($null -ne $entry.LastSuccess -and [object]::ReferenceEquals($entry.LastSuccess, $task)) {
+            # The last run is the last backup: same time, no second conversion.
+            Add-PromSample -Metric $lastSuccess -Labels $labels -Value $runTime
+        }
+        elseif ($null -ne $entry.LastSuccess) {
+            $good = $entry.LastSuccess
+            $goodCreated = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $good -Name 'creationTime') -Field 'creationTime' -Item $item -Conversion $toUnix
+            $goodEnded = ConvertTo-VeeamFieldValue -Value (Get-VeeamField -InputObject $good -Name 'endTime') -Field 'endTime' -Item $item -Conversion $toUnix
+            $goodTime = $goodEnded
+            if ($null -eq $goodEnded -or ($null -ne $goodCreated -and $goodEnded -lt $goodCreated)) { $goodTime = $goodCreated }
+            Add-PromSample -Metric $lastSuccess -Labels $labels -Value $goodTime
         }
     }
 
-    return @($lastResult, $lastRun, $processed, $failure)
+    return @($lastResult, $lastRun, $lastSuccess, $processed)
 }
