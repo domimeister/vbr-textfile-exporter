@@ -184,6 +184,98 @@ Describe 'Objects: last success per object and the scope of a job' {
     }
 }
 
+Describe 'Objects: a Proxmox VE job as seen on a production server (names anonymized)' {
+    BeforeAll {
+        $script:Vms = @(1..18 | ForEach-Object { 'vm{0:d2}' -f $_ })
+        function New-Night {
+            param([string]$Id, [string]$At, [string[]]$Vms, [string[]]$Failed = @())
+            $tasks = @{}
+            foreach ($vm in $Vms) { $tasks[$vm] = $(if ($Failed -contains $vm) { 'Failed' } else { 'Success' }) }
+            # REST: originalSessionId equals id for every session, retries included.
+            return @{ Id = $Id; At = $At; Tasks = $tasks; Original = $Id }
+        }
+        $script:Nights = @(
+            New-Night -Id 'n15' -At '15 21:00' -Vms $script:Vms -Failed 'vm01'
+            New-Night -Id 'n15r1' -At '15 22:33' -Vms 'vm01' -Failed 'vm01'
+            @{ Id = 'n15r2'; At = '15 22:50'; Tasks = @{}; Result = 'Failed'; Original = 'n15r2' }
+            New-Night -Id 'n15r3' -At '15 23:05' -Vms 'vm01' -Failed 'vm01'
+            New-Night -Id 'n16' -At '16 21:00' -Vms $script:Vms -Failed 'vm01'
+            New-Night -Id 'n16r1' -At '16 21:52' -Vms 'vm01' -Failed 'vm01'
+            New-Night -Id 'n16r2' -At '16 22:08' -Vms 'vm01' -Failed 'vm01'
+            New-Night -Id 'n16r3' -At '16 22:34' -Vms 'vm01' -Failed 'vm01'
+        )
+    }
+
+    It 'keeps all 18 VMs while vm01 fails night after night, retries included' {
+        $state = Get-TestObject -Session $script:Nights
+        $state | Should -Match '(^| )vm01=2/- '
+        ([regex]::Matches($state, '=')).Count | Should -Be 18
+        $state | Should -Match 'vm18=0/16 21:20'
+    }
+
+    It 'drops vm01 once the next regular run no longer processes it' {
+        $state = Get-TestObject -Session ($script:Nights + @(New-Night -Id 'n17' -At '17 21:00' -Vms ($script:Vms | Select-Object -Skip 1)))
+        $state | Should -Not -Match 'vm01='
+        ([regex]::Matches($state, '=')).Count | Should -Be 17
+    }
+}
+
+Describe 'Objects: two objects of the same name in one session' {
+    BeforeAll {
+        $script:Jid = '33333333-3333-4333-8333-333333333333'
+        $script:TwinJobs = @([pscustomobject]@{ id = $script:Jid; name = 'PVE Twins' })
+        function New-TwinSession {
+            param([string]$Id, [string]$At, [string]$Result)
+            [pscustomobject]@{ id = $Id; jobId = $script:Jid; name = 'PVE Twins'; state = 'Stopped'; usn = 1; originalSessionId = $Id; creationTime = $At; result = [pscustomobject]@{ result = $Result; isCanceled = $false } }
+        }
+        function New-TwinTask {
+            param([string]$Session, [string]$Name, [string]$Start, [string]$End, [string]$Result, [int]$Usn)
+            [pscustomobject]@{ sessionId = $Session; name = $Name; usn = $Usn; creationTime = $Start; endTime = $End; result = [pscustomobject]@{ result = $Result } }
+        }
+        function Get-TwinText {
+            param([object[]]$Sessions, [object[]]$Tasks)
+            ConvertTo-PromText -Metric (Get-VeeamObjectMetric -JobState $script:TwinJobs -JobSession $Sessions -TaskSession $Tasks -WarningVariable script:TwinWarnings -WarningAction SilentlyContinue)
+        }
+        $script:Night1 = @(
+            New-TwinTask -Session 'd1' -Name 'mgt01' -Start '2026-11-16T01:05:00+01:00' -End '2026-11-16T01:30:00+01:00' -Result 'Success' -Usn 2
+            New-TwinTask -Session 'd1' -Name 'mgt01' -Start '2026-11-16T01:10:00+01:00' -End '2026-11-16T01:40:00+01:00' -Result 'Success' -Usn 3
+        )
+        # Night 2: the first twin fails, the second, started later, succeeds.
+        $script:Night2 = @(
+            New-TwinTask -Session 'd2' -Name 'mgt01' -Start '2026-11-17T01:05:00+01:00' -End '2026-11-17T01:30:00+01:00' -Result 'Failed' -Usn 5
+            New-TwinTask -Session 'd2' -Name 'mgt01' -Start '2026-11-17T01:10:00+01:00' -End '2026-11-17T01:40:00+01:00' -Result 'Success' -Usn 6
+        )
+    }
+
+    It 'reports the worst result of the session and keeps the backup of the session before' {
+        $sessions = @((New-TwinSession -Id 'd1' -At '2026-11-16T01:00:00+01:00' -Result 'Success'), (New-TwinSession -Id 'd2' -At '2026-11-17T01:00:00+01:00' -Result 'Failed'))
+        $text = Get-TwinText -Sessions $sessions -Tasks ($script:Night1 + $script:Night2)
+        $text | Should -Match 'veeam_object_last_result\{job_name="PVE Twins",object="mgt01"\} 2'
+        # 2026-11-16 01:40 +01:00
+        $text | Should -Match 'veeam_object_last_success_timestamp_seconds\{job_name="PVE Twins",object="mgt01"\} 1794789600'
+        @($script:TwinWarnings | Where-Object { "$_" -like "*job 'PVE Twins' processed several objects named 'mgt01' in one session*" }).Count | Should -Be 1
+    }
+
+    It 'takes the retry that backs up the failed twin as the new backup' {
+        $sessions = @(
+            (New-TwinSession -Id 'd1' -At '2026-11-16T01:00:00+01:00' -Result 'Success')
+            (New-TwinSession -Id 'd2' -At '2026-11-17T01:00:00+01:00' -Result 'Failed')
+            (New-TwinSession -Id 'd2r' -At '2026-11-17T02:00:00+01:00' -Result 'Success')
+        )
+        $retry = @(New-TwinTask -Session 'd2r' -Name 'mgt01' -Start '2026-11-17T02:01:00+01:00' -End '2026-11-17T02:20:00+01:00' -Result 'Success' -Usn 8)
+        $text = Get-TwinText -Sessions $sessions -Tasks ($script:Night1 + $script:Night2 + $retry)
+        $text | Should -Match 'veeam_object_last_result\{job_name="PVE Twins",object="mgt01"\} 0'
+        # 2026-11-17 02:20 +01:00
+        $text | Should -Match 'veeam_object_last_success_timestamp_seconds\{job_name="PVE Twins",object="mgt01"\} 1794878400'
+    }
+
+    It 'does not warn when every name comes once per session' {
+        $sessions = @(New-TwinSession -Id 'd1' -At '2026-11-16T01:00:00+01:00' -Result 'Success')
+        $null = Get-TwinText -Sessions $sessions -Tasks @($script:Night1[0])
+        @($script:TwinWarnings).Count | Should -Be 0
+    }
+}
+
 Describe 'Objects: session types' {
     BeforeEach {
         $script:Empty = '{"data":[],"pagination":{"total":0,"count":0,"skip":0,"limit":200}}'
