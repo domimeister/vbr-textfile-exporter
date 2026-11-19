@@ -317,9 +317,9 @@ These points can only be settled in the lab; they change details, not the archit
   - Proxmox VE jobs are in `jobs/states` with `type` `ProxmoxBackupJob` and `workload` `Vm`. `objectsCount` is 1 for jobs of 18 and 35 VMs, so it counts the pool, not the VMs.
   - Their sessions come with `typeFilter=PlatformBackupJob`. `originalSessionId` equals the id of the session, also for retries, and `retryInfo` is missing.
   - `taskSessions` has one entry per VM with its name and result. A retry session has the failed VMs only; one retry session had no task session at all. A VM taken out of the job is missing from the next regular run.
-  - Two task sessions with the same name in every run of one job (two VMs of the same name, or one VM twice: not known).
+  - Two task sessions with the same name in every run of one job: two VMs with the same name in Proxmox VE (confirmed in Proxmox VE).
   - `restorePointId` is empty in the list of task sessions, also for Success.
-  - Still open: whether a task with Warning left a restore point (no Warning seen yet), and whether the two task sessions of the same name are two VMs.
+  - Still open: whether a task with Warning left a restore point (no Warning seen yet).
 - [ ] **OP-15** Patches and the local VBR version (OP-13): does the file version of the backup service binary still equal `serverInfo.buildVersion` after a patch? According to [KB2680](https://www.veeam.com/kb2680) some patches get a build number of their own (13.0.1 P1 = 13.0.1.1071), others keep the build number of the release (12.0.0.1420 P20230718); `serverInfo` lists those separately under `patches`, which the exporter never exported. Assumption: the binary has the build number of the release or patch, like `buildVersion`. Check with the next VBR 13.1 patch in the lab (compare with `serverInfo` read by a Backup Administrator). The version is read on every run, so an update or a moved installation (path from the service registration) shows up with the next run; while the binary is missing during an update, `vbr_version` stays empty for that run, with a warning.
 
 1. Script skeleton: auth, version probe, atomic writing, jobs collector. Done.
